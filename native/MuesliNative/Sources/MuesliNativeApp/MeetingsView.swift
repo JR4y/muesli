@@ -4,14 +4,14 @@ import MuesliCore
 enum MeetingBrowserFilter: Hashable {
     case all, last2Days, lastWeek, last2Weeks, lastMonth, last3Months
 
-    var label: String {
+    func label(config: AppConfig) -> String {
         switch self {
-        case .all: return "All time"
-        case .last2Days: return "Last 2 days"
-        case .lastWeek: return "Last week"
-        case .last2Weeks: return "Last 2 weeks"
-        case .lastMonth: return "Last month"
-        case .last3Months: return "Last 3 months"
+        case .all: return L10n.text(.meetingsFilterAllTime, config: config)
+        case .last2Days: return L10n.text(.meetingsFilterLast2Days, config: config)
+        case .lastWeek: return L10n.text(.meetingsFilterLastWeek, config: config)
+        case .last2Weeks: return L10n.text(.meetingsFilterLast2Weeks, config: config)
+        case .lastMonth: return L10n.text(.meetingsFilterLastMonth, config: config)
+        case .last3Months: return L10n.text(.meetingsFilterLast3Months, config: config)
         }
     }
 }
@@ -20,10 +20,10 @@ enum MeetingBrowserSort: Hashable {
     case newestFirst
     case oldestFirst
 
-    var label: String {
+    func label(config: AppConfig) -> String {
         switch self {
-        case .newestFirst: return "Newest first"
-        case .oldestFirst: return "Oldest first"
+        case .newestFirst: return L10n.text(.meetingsSortNewestFirst, config: config)
+        case .oldestFirst: return L10n.text(.meetingsSortOldestFirst, config: config)
         }
     }
 }
@@ -149,8 +149,8 @@ struct MeetingsView: View {
     }
 
     private var currentFolderName: String {
-        guard let folderID = appState.selectedFolderID else { return "All Meetings" }
-        return appState.folders.first(where: { $0.id == folderID })?.name ?? "All Meetings"
+        guard let folderID = appState.selectedFolderID else { return L10n.text(.sidebarAllMeetings, config: appState.config) }
+        return appState.folders.first(where: { $0.id == folderID })?.name ?? L10n.text(.sidebarAllMeetings, config: appState.config)
     }
 
     private var currentDocumentMeeting: MeetingRecord? {
@@ -168,7 +168,8 @@ struct MeetingsView: View {
                     meeting: meeting,
                     controller: controller,
                     appState: appState,
-                    onBack: { controller.showMeetingsHome(folderID: appState.selectedFolderID) }
+                    onBack: { controller.showMeetingsHome(folderID: appState.selectedFolderID) },
+                    backLabel: L10n.text(.meetingBackToMeetings, config: appState.config)
                 )
                 .id(meeting.id)
             } else {
@@ -208,6 +209,7 @@ struct MeetingsView: View {
                         ForEach(filteredMeetings) { meeting in
                             MeetingListItemView(
                                 record: meeting,
+                                config: appState.config,
                                 isSelected: appState.selectedMeetingID == meeting.id,
                                 folders: appState.folders,
                                 onSelect: { controller.showMeetingDocument(id: meeting.id) },
@@ -270,9 +272,9 @@ struct MeetingsView: View {
             let isTomorrow = calendar.date(byAdding: .day, value: 1, to: today).map { calendar.isDate(date, inSameDayAs: $0) } ?? false
             let dayLabel: String
             if isToday {
-                dayLabel = "Today"
+                dayLabel = L10n.text(.meetingsToday, config: appState.config)
             } else if isTomorrow {
-                dayLabel = "Tomorrow"
+                dayLabel = L10n.text(.meetingsTomorrow, config: appState.config)
             } else {
                 dayLabel = monthFormatter.string(from: date)
             }
@@ -292,7 +294,7 @@ struct MeetingsView: View {
     private var comingUpSection: some View {
         VStack(alignment: .leading, spacing: MuesliTheme.spacing16) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Coming Up")
+                Text(L10n.text(.meetingsComingUp, config: appState.config))
                     .font(.custom("Cormorant Garamond", size: 22).weight(.medium))
                     .foregroundStyle(MuesliTheme.textPrimary)
 
@@ -305,7 +307,7 @@ struct MeetingsView: View {
                         HStack(spacing: 4) {
                             Image(systemName: "arrow.triangle.2.circlepath")
                                 .font(.system(size: 9))
-                            Text("Add Google to macOS Calendar for real-time sync")
+                            Text(L10n.text(.meetingsCalendarSyncHint, config: appState.config))
                                 .font(.system(size: 11))
                         }
                         .foregroundStyle(MuesliTheme.accent)
@@ -338,18 +340,36 @@ struct MeetingsView: View {
                         ForEach(group.events) { event in
                             HStack(spacing: 8) {
                                 RoundedRectangle(cornerRadius: 1.5)
-                                    .fill(group.isToday ? MuesliTheme.accent : MuesliTheme.textSecondary.opacity(0.4))
+                                    .fill(eventCalendarColor(event, fallback: group.isToday ? MuesliTheme.accent : MuesliTheme.textSecondary.opacity(0.4)))
                                     .frame(width: 3, height: 36)
 
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(event.title)
-                                        .font(.system(size: 13, weight: .medium))
-                                        .foregroundStyle(MuesliTheme.textPrimary)
-                                        .lineLimit(1)
+                                    HStack(spacing: 6) {
+                                        Circle()
+                                            .fill(eventCalendarColor(event, fallback: MuesliTheme.textSecondary.opacity(0.35)))
+                                            .frame(width: 7, height: 7)
 
-                                    Text(formatTimeRange(event))
-                                        .font(.system(size: 11))
-                                        .foregroundStyle(MuesliTheme.textSecondary)
+                                        Text(event.title)
+                                            .font(.system(size: 13, weight: .medium))
+                                            .foregroundStyle(MuesliTheme.textPrimary)
+                                            .lineLimit(1)
+                                    }
+
+                                    HStack(spacing: 6) {
+                                        Text(formatTimeRange(event))
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(MuesliTheme.textSecondary)
+
+                                        if let calendarLabel = eventCalendarLabel(event) {
+                                            Text("·")
+                                                .font(.system(size: 11))
+                                                .foregroundStyle(MuesliTheme.textTertiary)
+                                            Text(calendarLabel)
+                                                .font(.system(size: 10))
+                                                .foregroundStyle(MuesliTheme.textTertiary)
+                                                .lineLimit(1)
+                                        }
+                                    }
                                 }
 
                                 Spacer()
@@ -361,7 +381,7 @@ struct MeetingsView: View {
                                         HStack(spacing: 4) {
                                             Image(systemName: "video.fill")
                                                 .font(.system(size: 9))
-                                            Text("Join & Record")
+                                            Text(L10n.text(.meetingsJoinAndRecord, config: appState.config))
                                                 .font(.system(size: 10, weight: .medium))
                                         }
                                         .foregroundStyle(.white)
@@ -374,7 +394,7 @@ struct MeetingsView: View {
                                 }
 
                                 Menu {
-                                    Button("All Meetings") {
+                                    Button(L10n.text(.sidebarAllMeetings, config: appState.config)) {
                                         controller.createMeetingFromCalendarEvent(event, folderID: nil)
                                     }
                                     Divider()
@@ -384,7 +404,7 @@ struct MeetingsView: View {
                                         }
                                     }
                                 } label: {
-                                    Text("Add to folder")
+                                    Text(L10n.text(.meetingsAddToFolder, config: appState.config))
                                         .font(.system(size: 10, weight: .medium))
                                         .foregroundStyle(MuesliTheme.textSecondary)
                                         .padding(.horizontal, 8)
@@ -429,6 +449,38 @@ struct MeetingsView: View {
         return "\(f.string(from: event.startDate)) – \(f.string(from: event.endDate))"
     }
 
+    private func eventCalendarLabel(_ event: UnifiedCalendarEvent) -> String? {
+        if let name = event.calendarName, !name.isEmpty {
+            return name
+        }
+        if let sourceTitle = event.calendarSourceTitle, !sourceTitle.isEmpty {
+            return sourceTitle
+        }
+        return nil
+    }
+
+    private func eventCalendarColor(_ event: UnifiedCalendarEvent, fallback: Color) -> Color {
+        colorFromHex(event.calendarColorHex) ?? fallback
+    }
+
+    private func colorFromHex(_ hex: String?) -> Color? {
+        guard var hex else { return nil }
+        hex = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        if hex.hasPrefix("#") {
+            hex.removeFirst()
+        }
+        guard hex.count == 6, let value = UInt64(hex, radix: 16) else {
+            return nil
+        }
+        return Color(
+            .sRGB,
+            red: Double((value >> 16) & 0xFF) / 255.0,
+            green: Double((value >> 8) & 0xFF) / 255.0,
+            blue: Double(value & 0xFF) / 255.0,
+            opacity: 1
+        )
+    }
+
     private func hideEventButton(_ event: UnifiedCalendarEvent) -> some View {
         Button {
             withAnimation(.easeOut(duration: 0.2)) {
@@ -441,7 +493,7 @@ struct MeetingsView: View {
                 .frame(width: 20, height: 20)
         }
         .buttonStyle(.plain)
-        .help("Hide from Coming Up")
+        .help(L10n.text(.meetingsHideFromComingUp, config: appState.config))
     }
 
     @ViewBuilder
@@ -478,7 +530,7 @@ struct MeetingsView: View {
     @ViewBuilder
     private var browserHeaderMeta: some View {
         HStack(spacing: MuesliTheme.spacing8) {
-            Text("\(filteredMeetings.count) meeting\(filteredMeetings.count == 1 ? "" : "s")")
+            Text(L10n.text(.meetingsCount(count: filteredMeetings.count), config: appState.config))
                 .font(MuesliTheme.callout())
                 .foregroundStyle(MuesliTheme.textSecondary)
                 .fixedSize()
@@ -488,7 +540,7 @@ struct MeetingsView: View {
                 .foregroundStyle(MuesliTheme.textTertiary)
                 .fixedSize()
 
-            Text("Open a meeting to review notes, transcript, and template-driven summaries")
+            Text(L10n.text(.meetingsHeaderHint, config: appState.config))
                 .font(MuesliTheme.callout())
                 .foregroundStyle(MuesliTheme.textTertiary)
         }
@@ -507,7 +559,7 @@ struct MeetingsView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "square.and.pencil")
                         .font(.system(size: 11, weight: .medium))
-                    Text("Manage Templates")
+                    Text(L10n.text(.meetingsManageTemplates, config: appState.config))
                         .font(.system(size: 12, weight: .semibold))
                         .lineLimit(1)
                 }
@@ -535,7 +587,7 @@ struct MeetingsView: View {
                     selectedSort = option
                 } label: {
                     HStack {
-                        Text(option.label)
+                        Text(option.label(config: appState.config))
                         if selectedSort == option {
                             Image(systemName: "checkmark")
                         }
@@ -546,7 +598,7 @@ struct MeetingsView: View {
             HStack(spacing: 4) {
                 Image(systemName: "arrow.up.arrow.down")
                     .font(.system(size: 11))
-                Text(selectedSort.label)
+                Text(selectedSort.label(config: appState.config))
                     .font(.system(size: 11))
             }
             .foregroundStyle(selectedSort != .newestFirst ? MuesliTheme.accent : MuesliTheme.textSecondary)
@@ -567,7 +619,7 @@ struct MeetingsView: View {
                     selectedFilter = filter
                 } label: {
                     HStack {
-                        Text(filter.label)
+                        Text(filter.label(config: appState.config))
                         if selectedFilter == filter {
                             Image(systemName: "checkmark")
                         }
@@ -579,7 +631,7 @@ struct MeetingsView: View {
                 Image(systemName: "line.3.horizontal.decrease")
                     .font(.system(size: 11))
                 if selectedFilter != .all {
-                    Text(selectedFilter.label)
+                    Text(selectedFilter.label(config: appState.config))
                         .font(.system(size: 11))
                 }
             }
@@ -604,14 +656,14 @@ struct MeetingsView: View {
                 .font(.system(size: 30, weight: .thin))
                 .foregroundStyle(MuesliTheme.textTertiary)
 
-            Text(appState.selectedFolderID == nil ? "No meetings yet" : "No meetings in this folder")
+            Text(appState.selectedFolderID == nil ? L10n.text(.meetingsEmptyTitle, config: appState.config) : L10n.text(.meetingsEmptyFolderTitle, config: appState.config))
                 .font(MuesliTheme.title3())
                 .foregroundStyle(MuesliTheme.textSecondary)
 
             Text(
                 appState.selectedFolderID == nil
-                    ? "Start a recording from the menu bar to create your first meeting note."
-                    : "Choose another folder or move a meeting here from the browser."
+                    ? L10n.text(.meetingsEmptyMessage, config: appState.config)
+                    : L10n.text(.meetingsEmptyFolderMessage, config: appState.config)
             )
             .font(MuesliTheme.callout())
             .foregroundStyle(MuesliTheme.textTertiary)

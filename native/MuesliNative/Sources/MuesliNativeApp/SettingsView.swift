@@ -7,30 +7,30 @@ struct SettingsView: View {
         case dictations
         case meetings
 
-        var title: String {
+        func title(config: AppConfig) -> String {
             switch self {
             case .dictations:
-                return "Clear dictation history?"
+                return "\(L10n.text(.settingsClearDictationHistory, config: config))?"
             case .meetings:
-                return "Clear meeting history?"
+                return "\(L10n.text(.settingsClearMeetingHistory, config: config))?"
             }
         }
 
-        var message: String {
+        func message(config: AppConfig) -> String {
             switch self {
             case .dictations:
-                return "This will permanently remove all saved dictations. This cannot be undone."
+                return L10n.text(.dictationsDeleteMessage, config: config)
             case .meetings:
-                return "This will permanently remove all saved meetings, notes, transcripts, and retained audio recordings. This cannot be undone."
+                return L10n.text(.settingsClearMeetingHistoryMessage, config: config)
             }
         }
 
-        var confirmLabel: String {
+        func confirmLabel(config: AppConfig) -> String {
             switch self {
             case .dictations:
-                return "Clear Dictations"
+                return L10n.text(.settingsClearDictationHistory, config: config)
             case .meetings:
-                return "Clear Meetings"
+                return L10n.text(.settingsClearMeetingHistory, config: config)
             }
         }
     }
@@ -42,15 +42,6 @@ struct SettingsView: View {
         case appearance
 
         var id: String { rawValue }
-
-        var title: String {
-            switch self {
-            case .general: return "General"
-            case .dictation: return "Dictation"
-            case .meetings: return "Meetings"
-            case .appearance: return "Appearance"
-            }
-        }
     }
 
     let appState: AppState
@@ -91,7 +82,7 @@ struct SettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: MuesliTheme.spacing24) {
-                Text("Settings")
+                Text(L10n.text(.settingsTitle, config: appState.config))
                     .font(MuesliTheme.title1())
                     .foregroundStyle(MuesliTheme.textPrimary)
 
@@ -123,16 +114,19 @@ struct SettingsView: View {
             refreshDownloadedModelOptions()
         }
         .alert(
-            pendingDataDestruction?.title ?? "Confirm Destructive Action",
+            pendingDataDestruction?.title(config: appState.config) ?? L10n.text(.settingsConfirmDestructiveAction, config: appState.config),
             isPresented: Binding(
                 get: { pendingDataDestruction != nil },
                 set: { if !$0 { pendingDataDestruction = nil } }
             )
         ) {
-            Button("Cancel", role: .cancel) {
+            Button(L10n.text(.sidebarCancel, config: appState.config), role: .cancel) {
                 pendingDataDestruction = nil
             }
-            Button(pendingDataDestruction?.confirmLabel ?? "Delete", role: .destructive) {
+            Button(
+                pendingDataDestruction?.confirmLabel(config: appState.config) ?? L10n.text(.sidebarDelete, config: appState.config),
+                role: .destructive
+            ) {
                 switch pendingDataDestruction {
                 case .dictations:
                     controller.clearDictationHistory()
@@ -144,7 +138,7 @@ struct SettingsView: View {
                 pendingDataDestruction = nil
             }
         } message: {
-            Text(pendingDataDestruction?.message ?? "")
+            Text(pendingDataDestruction?.message(config: appState.config) ?? "")
         }
     }
 
@@ -171,22 +165,39 @@ struct SettingsView: View {
         ("1e1e2e", "Dark"),
     ]
 
-    private let sharedContextDescription =
-        "Uses nearby app text for dictation cleanup and meeting summaries, plus OCR context for meetings when available. All processing stays on-device."
-    private let customIndicatorPositionLabel = "Custom (drag to reposition)"
+    private var sharedContextDescription: String {
+        L10n.text(.settingsSharedContextDescription, config: appState.config)
+    }
+
+    private var customIndicatorPositionLabel: String {
+        L10n.text(.settingsCustomIndicatorPosition, config: appState.config)
+    }
 
     private var settingsPanePicker: some View {
         HStack {
             Spacer()
             Picker("", selection: $selectedPane) {
                 ForEach(SettingsPane.allCases) { pane in
-                    Text(pane.title).tag(pane)
+                    Text(paneTitle(pane)).tag(pane)
                 }
             }
             .labelsHidden()
             .pickerStyle(.segmented)
             .frame(width: 560)
             Spacer()
+        }
+    }
+
+    private func paneTitle(_ pane: SettingsPane) -> String {
+        switch pane {
+        case .general:
+            return L10n.text(.settingsPaneGeneral, config: appState.config)
+        case .dictation:
+            return L10n.text(.settingsPaneDictation, config: appState.config)
+        case .meetings:
+            return L10n.text(.settingsPaneMeetings, config: appState.config)
+        case .appearance:
+            return L10n.text(.settingsPaneAppearance, config: appState.config)
         }
     }
 
@@ -206,14 +217,24 @@ struct SettingsView: View {
 
     private var generalSettingsPane: some View {
         VStack(alignment: .leading, spacing: MuesliTheme.spacing24) {
-            settingsSection("General") {
-                settingsRow("Launch at login") {
+            settingsSection(L10n.text(.settingsGeneralSection, config: appState.config)) {
+                settingsRow(L10n.text(.settingsLanguage, config: appState.config)) {
+                    settingsMenu(
+                        selection: appState.config.resolvedAppLanguage.settingsLabel,
+                        options: AppLanguage.allCases.map(\.settingsLabel)
+                    ) { label in
+                        guard let language = AppLanguage.allCases.first(where: { $0.settingsLabel == label }) else { return }
+                        controller.updateConfig { $0.appLanguage = language.rawValue }
+                    }
+                }
+                Divider().background(MuesliTheme.surfaceBorder)
+                settingsRow(L10n.text(.settingsLaunchAtLogin, config: appState.config)) {
                     settingsSwitch(isOn: appState.config.launchAtLogin) { newValue in
                         controller.updateConfig { $0.launchAtLogin = newValue }
                     }
                 }
                 Divider().background(MuesliTheme.surfaceBorder)
-                settingsRow("Open dashboard on launch") {
+                settingsRow(L10n.text(.settingsOpenDashboardOnLaunch, config: appState.config)) {
                     settingsSwitch(isOn: appState.config.openDashboardOnLaunch) { newValue in
                         controller.updateConfig { $0.openDashboardOnLaunch = newValue }
                     }
@@ -222,16 +243,16 @@ struct SettingsView: View {
 
             permissionsSection
 
-            settingsSection("Data") {
+            settingsSection(L10n.text(.settingsDataSection, config: appState.config)) {
                 HStack(spacing: MuesliTheme.spacing12) {
-                    actionButton("Clear dictation history", role: .destructive) {
+                    actionButton(L10n.text(.settingsClearDictationHistory, config: appState.config), role: .destructive) {
                         pendingDataDestruction = .dictations
                     }
-                    actionButton("Clear meeting history", role: .destructive) {
+                    actionButton(L10n.text(.settingsClearMeetingHistory, config: appState.config), role: .destructive) {
                         pendingDataDestruction = .meetings
                     }
                     .disabled(controller.isMeetingRecording())
-                    .help("Stop the current meeting recording before clearing meeting history.")
+                    .help(L10n.text(.settingsStopRecordingBeforeClearing, config: appState.config))
                 }
             }
         }
@@ -239,8 +260,8 @@ struct SettingsView: View {
 
     private var dictationSettingsPane: some View {
         VStack(alignment: .leading, spacing: MuesliTheme.spacing24) {
-            settingsSection("Transcription") {
-                settingsRow("Dictation model") {
+            settingsSection(L10n.text(.settingsTranscriptionSection, config: appState.config)) {
+                settingsRow(L10n.text(.settingsDictationModel, config: appState.config)) {
                     settingsMenu(
                         selection: appState.selectedBackend.label,
                         options: dictationBackendOptions.map(\.label)
@@ -252,7 +273,7 @@ struct SettingsView: View {
                 }
                 if appState.selectedBackend.backend == BackendOption.cohereTranscribe.backend {
                     Divider().background(MuesliTheme.surfaceBorder)
-                    settingsRow("Cohere language") {
+                    settingsRow(L10n.text(.settingsCohereLanguage, config: appState.config)) {
                         settingsMenu(
                             selection: selectedCohereLanguage.label,
                             options: CohereTranscribeLanguage.allCases.map(\.label)
@@ -263,14 +284,14 @@ struct SettingsView: View {
                     }
                 }
                 Divider().background(MuesliTheme.surfaceBorder)
-                settingsRow("AI transcript cleanup") {
+                settingsRow(L10n.text(.settingsAiTranscriptCleanup, config: appState.config)) {
                     settingsSwitch(isOn: appState.config.enablePostProcessor) { newValue in
                         controller.setPostProcessorEnabled(newValue)
                     }
                 }
                 if appState.config.enablePostProcessor && !downloadedPostProcOptions.isEmpty {
                     Divider().background(MuesliTheme.surfaceBorder)
-                    settingsRow("Cleanup model") {
+                    settingsRow(L10n.text(.settingsCleanupModel, config: appState.config)) {
                         let selection = downloadedPostProcOptions.contains(where: { $0.id == appState.activePostProcessor.id })
                             ? appState.activePostProcessor.label
                             : (downloadedPostProcOptions.first?.label ?? "")
@@ -285,8 +306,8 @@ struct SettingsView: View {
                     }
                 } else if appState.config.enablePostProcessor {
                     Divider().background(MuesliTheme.surfaceBorder)
-                    settingsRow("Cleanup model") {
-                        Text("Download a cleanup model in Models")
+                    settingsRow(L10n.text(.settingsCleanupModel, config: appState.config)) {
+                        Text(L10n.text(.settingsDownloadCleanupModelHint, config: appState.config))
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(MuesliTheme.textTertiary)
                             .multilineTextAlignment(.trailing)
@@ -294,7 +315,7 @@ struct SettingsView: View {
                     }
                 }
                 Divider().background(MuesliTheme.surfaceBorder)
-                settingsRow("App context") {
+                settingsRow(L10n.text(.settingsAppContext, config: appState.config)) {
                     settingsSwitch(isOn: appState.config.enableScreenContext) { newValue in
                         controller.updateConfig { $0.enableScreenContext = newValue }
                     }
@@ -309,8 +330,8 @@ struct SettingsView: View {
 
     private var meetingsSettingsPane: some View {
         VStack(alignment: .leading, spacing: MuesliTheme.spacing24) {
-            settingsSection("Meeting Transcription") {
-                settingsRow("Meeting model") {
+            settingsSection(L10n.text(.settingsMeetingTranscriptionSection, config: appState.config)) {
+                settingsRow(L10n.text(.settingsMeetingModel, config: appState.config)) {
                     settingsMenu(
                         selection: appState.selectedMeetingTranscriptionBackend.label,
                         options: meetingBackendOptions.map(\.label)
@@ -322,7 +343,7 @@ struct SettingsView: View {
                 }
                 if appState.selectedMeetingTranscriptionBackend.backend == BackendOption.cohereTranscribe.backend {
                     Divider().background(MuesliTheme.surfaceBorder)
-                    settingsRow("Cohere language") {
+                    settingsRow(L10n.text(.settingsCohereLanguage, config: appState.config)) {
                         settingsMenu(
                             selection: selectedCohereLanguage.label,
                             options: CohereTranscribeLanguage.allCases.map(\.label)
@@ -333,7 +354,7 @@ struct SettingsView: View {
                     }
                 }
                 Divider().background(MuesliTheme.surfaceBorder)
-                settingsRow("Meeting context") {
+                settingsRow(L10n.text(.settingsMeetingContext, config: appState.config)) {
                     settingsSwitch(isOn: appState.config.enableScreenContext) { newValue in
                         controller.updateConfig { $0.enableScreenContext = newValue }
                     }
@@ -344,8 +365,8 @@ struct SettingsView: View {
                     .padding(.horizontal, MuesliTheme.spacing16)
             }
 
-            settingsSection("Meeting Summaries") {
-                settingsRow("Summary backend") {
+            settingsSection(L10n.text(.settingsMeetingSummariesSection, config: appState.config)) {
+                settingsRow(L10n.text(.settingsSummaryBackend, config: appState.config)) {
                     settingsMenu(
                         selection: appState.selectedMeetingSummaryBackend.label,
                         options: MeetingSummaryBackendOption.all.map(\.label)
@@ -358,18 +379,18 @@ struct SettingsView: View {
                 Divider().background(MuesliTheme.surfaceBorder)
 
                 if appState.selectedMeetingSummaryBackend == .chatGPT {
-                    settingsRow("Account") {
+                    settingsRow(L10n.text(.settingsAccount, config: appState.config)) {
                         chatGPTAccountControl
                     }
                     Divider().background(MuesliTheme.surfaceBorder)
-                    settingsRow("Model") {
+                    settingsRow(L10n.text(.settingsModel, config: appState.config)) {
                         settingsModelMenu(
                             currentModel: appState.config.chatGPTModel,
                             presets: SummaryModelPreset.chatGPTModels
                         ) { val in controller.updateConfig { $0.chatGPTModel = val } }
                     }
                 } else if appState.selectedMeetingSummaryBackend == .openAI {
-                    settingsRow("API Key") {
+                    settingsRow(L10n.text(.settingsApiKey, config: appState.config)) {
                         PastableSecureField(
                             text: appState.config.openAIAPIKey,
                             placeholder: "sk-...",
@@ -378,7 +399,7 @@ struct SettingsView: View {
                         .frame(height: 22)
                     }
                     Divider().background(MuesliTheme.surfaceBorder)
-                    settingsRow("Model") {
+                    settingsRow(L10n.text(.settingsModel, config: appState.config)) {
                         settingsModelMenu(
                             currentModel: appState.config.openAIModel,
                             presets: SummaryModelPreset.openAIModels
@@ -386,7 +407,7 @@ struct SettingsView: View {
                     }
                     keyStatusRow(key: appState.config.openAIAPIKey)
                 } else {
-                    settingsRow("API Key") {
+                    settingsRow(L10n.text(.settingsApiKey, config: appState.config)) {
                         PastableSecureField(
                             text: appState.config.openRouterAPIKey,
                             placeholder: "sk-or-...",
@@ -395,7 +416,7 @@ struct SettingsView: View {
                         .frame(height: 22)
                     }
                     Divider().background(MuesliTheme.surfaceBorder)
-                    settingsRow("Model") {
+                    settingsRow(L10n.text(.settingsModel, config: appState.config)) {
                         settingsModelMenu(
                             currentModel: appState.config.openRouterModel,
                             presets: SummaryModelPreset.openRouterModels
@@ -405,33 +426,33 @@ struct SettingsView: View {
                 }
 
                 Divider().background(MuesliTheme.surfaceBorder)
-                settingsRow("Default template") {
+                settingsRow(L10n.text(.settingsDefaultTemplate, config: appState.config)) {
                     meetingTemplateMenu(selectionID: appState.config.defaultMeetingTemplateID) { id in
                         controller.updateDefaultMeetingTemplate(id: id)
                     }
                 }
                 Divider().background(MuesliTheme.surfaceBorder)
-                settingsRow("Templates") {
-                    actionButton("Manage Templates…") {
+                settingsRow(L10n.text(.settingsTemplates, config: appState.config)) {
+                    actionButton(L10n.text(.meetingsManageTemplates, config: appState.config)) {
                         controller.showMeetingTemplatesManager()
                     }
                 }
             }
 
-            settingsSection("Recording") {
-                settingsRow("Auto-record calendar meetings") {
+            settingsSection(L10n.text(.settingsRecordingSection, config: appState.config)) {
+                settingsRow(L10n.text(.settingsAutoRecordCalendarMeetings, config: appState.config)) {
                     settingsSwitch(isOn: appState.config.autoRecordMeetings) { newValue in
                         controller.updateConfig { $0.autoRecordMeetings = newValue }
                     }
                 }
                 Divider().background(MuesliTheme.surfaceBorder)
-                settingsRow("Notify when meeting detected") {
+                settingsRow(L10n.text(.settingsNotifyWhenMeetingDetected, config: appState.config)) {
                     settingsSwitch(isOn: appState.config.showMeetingDetectionNotification) { newValue in
                         controller.updateConfig { $0.showMeetingDetectionNotification = newValue }
                     }
                 }
                 Divider().background(MuesliTheme.surfaceBorder)
-                settingsRow("Save meeting recording") {
+                settingsRow(L10n.text(.settingsSaveMeetingRecording, config: appState.config)) {
                     settingsMenu(
                         selection: recordingSaveLabel(for: appState.config.meetingRecordingSavePolicy),
                         options: MeetingRecordingSavePolicy.allCases.map(recordingSaveLabel(for:))
@@ -442,18 +463,18 @@ struct SettingsView: View {
                 }
             }
 
-            settingsSection("Advanced") {
-                settingsRow("Enable post-meeting hook") {
+            settingsSection(L10n.text(.settingsAdvancedSection, config: appState.config)) {
+                settingsRow(L10n.text(.settingsEnablePostMeetingHook, config: appState.config)) {
                     settingsSwitch(isOn: appState.config.meetingHookEnabled) { newValue in
                         controller.updateConfig { $0.meetingHookEnabled = newValue }
                     }
                 }
                 Divider().background(MuesliTheme.surfaceBorder)
-                settingsRow("Hook script") {
+                settingsRow(L10n.text(.settingsHookScript, config: appState.config)) {
                     meetingHookPathPicker
                 }
                 Divider().background(MuesliTheme.surfaceBorder)
-                settingsRow("Timeout") {
+                settingsRow(L10n.text(.settingsTimeout, config: appState.config)) {
                     Stepper(
                         value: Binding(
                             get: { max(appState.config.meetingHookTimeoutSeconds, 1) },
@@ -463,22 +484,24 @@ struct SettingsView: View {
                         ),
                         in: 1...600
                     ) {
-                        Text("\(max(appState.config.meetingHookTimeoutSeconds, 1)) seconds")
+                        Text(L10n.text(.settingsSeconds(count: max(appState.config.meetingHookTimeoutSeconds, 1)), config: appState.config))
                             .font(MuesliTheme.body())
                             .foregroundStyle(MuesliTheme.textPrimary)
                     }
                 }
-                Text("Advanced: runs a user-supplied executable after each completed meeting. The executable receives JSON on stdin and must already be runnable on its own.")
+                Text(L10n.text(.settingsAdvancedHookDescription, config: appState.config))
                     .font(MuesliTheme.caption())
                     .foregroundStyle(MuesliTheme.textTertiary)
                     .padding(.horizontal, MuesliTheme.spacing16)
             }
 
-            if appState.isGoogleCalendarAvailable {
-                settingsSection("Calendar") {
-                    settingsRow("Google Calendar") {
-                        googleCalendarControl
-                    }
+            settingsSection(L10n.text(.settingsCalendarSection, config: appState.config)) {
+                localCalendarsControl
+
+                Divider().background(MuesliTheme.surfaceBorder)
+                    .padding(.top, MuesliTheme.spacing12)
+                settingsRow(L10n.text(.settingsGoogleCalendar, config: appState.config)) {
+                    googleCalendarControl
                 }
             }
         }
@@ -486,15 +509,15 @@ struct SettingsView: View {
 
     private var appearanceSettingsPane: some View {
         VStack(alignment: .leading, spacing: MuesliTheme.spacing24) {
-            settingsSection("Floating Indicator") {
-                settingsRow("Show floating indicator") {
+            settingsSection(L10n.text(.settingsFloatingIndicatorSection, config: appState.config)) {
+                settingsRow(L10n.text(.settingsShowFloatingIndicator, config: appState.config)) {
                     settingsSwitch(isOn: appState.config.showFloatingIndicator) { newValue in
                         controller.updateConfig { $0.showFloatingIndicator = newValue }
                         controller.refreshIndicatorVisibility()
                     }
                 }
                 Divider().background(MuesliTheme.surfaceBorder)
-                settingsRow("Indicator position") {
+                settingsRow(L10n.text(.settingsIndicatorPosition, config: appState.config)) {
                     let isCustom = appState.config.indicatorAnchor == .custom
                     let selection = isCustom ? customIndicatorPositionLabel : appState.config.indicatorAnchor.label
                     let options = (isCustom ? [customIndicatorPositionLabel] : [])
@@ -511,28 +534,32 @@ struct SettingsView: View {
                 }
             }
 
-            settingsSection("Appearance") {
-                settingsRow("Dark mode") {
+            settingsSection(L10n.text(.settingsAppearanceSection, config: appState.config)) {
+                settingsRow(L10n.text(.settingsTheme, config: appState.config)) {
+                    themePresetPicker
+                }
+                Divider().background(MuesliTheme.surfaceBorder)
+                settingsRow(L10n.text(.settingsDarkMode, config: appState.config)) {
                     settingsSwitch(isOn: appState.config.darkMode) { newValue in
                         controller.updateConfig { $0.darkMode = newValue }
                     }
                 }
                 Divider().background(MuesliTheme.surfaceBorder)
-                settingsRow("Menu bar icon") {
+                settingsRow(L10n.text(.settingsMenuBarIcon, config: appState.config)) {
                     menuBarIconPicker
                 }
                 Divider().background(MuesliTheme.surfaceBorder)
-                settingsRow("Accent color") {
+                settingsRow(L10n.text(.settingsAccentColor, config: appState.config)) {
                     glassTintPicker
                 }
                 Divider().background(MuesliTheme.surfaceBorder)
-                settingsRow("Play sound effects") {
+                settingsRow(L10n.text(.settingsPlaySoundEffects, config: appState.config)) {
                     settingsSwitch(isOn: appState.config.soundEnabled) { newValue in
                         controller.updateConfig { $0.soundEnabled = newValue }
                     }
                 }
                 Divider().background(MuesliTheme.surfaceBorder)
-                settingsRow("Show next meeting in menu bar") {
+                settingsRow(L10n.text(.settingsShowNextMeetingInMenuBar, config: appState.config)) {
                     settingsSwitch(isOn: appState.config.showNextMeetingInMenuBar) { newValue in
                         controller.updateConfig { $0.showNextMeetingInMenuBar = newValue }
                     }
@@ -540,8 +567,8 @@ struct SettingsView: View {
             }
 
             if appState.config.maraudersMapUnlocked {
-                settingsSection("Marauder\u{2019}s Map") {
-                    settingsRow("Meeting countdown audio") {
+                settingsSection(L10n.text(.settingsMaraudersMapSection, config: appState.config)) {
+                    settingsRow(L10n.text(.settingsMeetingCountdownAudio, config: appState.config)) {
                         maraudersMapControl
                     }
                     Divider().background(MuesliTheme.surfaceBorder)
@@ -551,7 +578,7 @@ struct SettingsView: View {
                             isPreviewingClip = false
                             controller.resetMaraudersMap()
                         } label: {
-                            Text("Mischief Managed")
+                            Text(L10n.text(.settingsMischiefManaged, config: appState.config))
                                 .font(.system(size: 11))
                                 .foregroundColor(MuesliTheme.textSecondary)
                         }
@@ -582,6 +609,63 @@ struct SettingsView: View {
                 .buttonStyle(.plain)
                 .help(preset.name)
             }
+        }
+    }
+
+    private var themePresetPicker: some View {
+        HStack(spacing: 8) {
+            ForEach(ThemePreset.allCases, id: \.self) { preset in
+                let isSelected = appState.config.resolvedThemePreset == preset
+                Button {
+                    controller.updateConfig { $0.themePreset = preset.rawValue }
+                } label: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        themePreviewStrip(for: preset)
+                        Text(themePresetLabel(preset))
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(isSelected ? MuesliTheme.textPrimary : MuesliTheme.textSecondary)
+                            .lineLimit(1)
+                    }
+                    .padding(6)
+                    .frame(width: 66, alignment: .leading)
+                    .background(isSelected ? MuesliTheme.surfaceSelected.opacity(0.65) : MuesliTheme.surfacePrimary.opacity(0.6))
+                    .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
+                            .strokeBorder(
+                                isSelected ? MuesliTheme.accent.opacity(0.45) : MuesliTheme.surfaceBorder,
+                                lineWidth: 1
+                            )
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func themePreviewStrip(for preset: ThemePreset) -> some View {
+        let palette = MuesliTheme.palette(for: preset)
+        return HStack(spacing: 4) {
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color(hex: palette.backgroundBase.light))
+                .frame(width: 14, height: 18)
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color(hex: palette.backgroundRaised.light))
+                .frame(width: 14, height: 18)
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color(hex: palette.surfacePrimary.light))
+                .frame(width: 14, height: 18)
+        }
+    }
+
+    private func themePresetLabel(_ preset: ThemePreset) -> String {
+        switch preset {
+        case .warm:
+            return L10n.text(.settingsThemeWarm, config: appState.config)
+        case .neutral:
+            return L10n.text(.settingsThemeNeutral, config: appState.config)
+        case .graphite:
+            return L10n.text(.settingsThemeGraphite, config: appState.config)
         }
     }
 
@@ -633,7 +717,7 @@ struct SettingsView: View {
                     OpenAILogoShape()
                         .fill(.white)
                         .frame(width: 10, height: 10)
-                    Text("Signed in · Sign Out")
+                    Text(L10n.text(.settingsSignedInSignOut, config: appState.config))
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.white)
                         .lineLimit(1)
@@ -649,7 +733,7 @@ struct SettingsView: View {
             HStack(spacing: 6) {
                 ProgressView()
                     .controlSize(.small)
-                Text("Signing in...")
+                Text(L10n.text(.settingsSigningIn, config: appState.config))
                     .font(.system(size: 11))
                     .foregroundStyle(MuesliTheme.textSecondary)
             }
@@ -668,7 +752,7 @@ struct SettingsView: View {
                         OpenAILogoShape()
                             .fill(.white)
                             .frame(width: 10, height: 10)
-                        Text("Sign in with ChatGPT")
+                        Text(L10n.text(.settingsSignInWithChatGPT, config: appState.config))
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.white)
                             .lineLimit(1)
@@ -692,6 +776,83 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
+    private var localCalendarsControl: some View {
+        VStack(alignment: .leading, spacing: MuesliTheme.spacing12) {
+            Text(L10n.text(.settingsLocalCalendars, config: appState.config))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(MuesliTheme.textSecondary)
+            Text(L10n.text(.settingsLocalCalendarsHint, config: appState.config))
+                .font(MuesliTheme.caption())
+                .foregroundStyle(MuesliTheme.textTertiary)
+
+            if appState.availableLocalCalendars.isEmpty {
+                Text(L10n.text(.settingsNoLocalCalendarsFound, config: appState.config))
+                    .font(MuesliTheme.body())
+                    .foregroundStyle(MuesliTheme.textSecondary)
+                    .padding(.vertical, 2)
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(appState.availableLocalCalendars.enumerated()), id: \.element.id) { index, calendar in
+                        localCalendarRow(calendar)
+                        if index < appState.availableLocalCalendars.count - 1 {
+                            Divider().background(MuesliTheme.surfaceBorder)
+                                .padding(.vertical, 8)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func localCalendarRow(_ calendar: LocalCalendarInfo) -> some View {
+        let isEnabled = !appState.config.hiddenLocalCalendarIDs.contains(calendar.id)
+        HStack(alignment: .center, spacing: MuesliTheme.spacing12) {
+            HStack(alignment: .center, spacing: 10) {
+                Circle()
+                    .fill(calendarSwatchColor(calendar.colorHex))
+                    .frame(width: 10, height: 10)
+                    .overlay(
+                        Circle()
+                            .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 0.5)
+                    )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(calendar.title)
+                        .font(MuesliTheme.body())
+                        .foregroundStyle(MuesliTheme.textPrimary)
+                    if let sourceTitle = calendar.sourceTitle, !sourceTitle.isEmpty {
+                        Text(sourceTitle)
+                            .font(MuesliTheme.caption())
+                            .foregroundStyle(MuesliTheme.textTertiary)
+                    }
+                }
+            }
+
+            Spacer(minLength: 12)
+
+            Toggle(
+                "",
+                isOn: Binding(
+                    get: { isEnabled },
+                    set: { controller.setLocalCalendarEnabled(calendar.id, isEnabled: $0) }
+                )
+            )
+            .toggleStyle(.switch)
+            .tint(MuesliTheme.accent)
+            .labelsHidden()
+        }
+        .frame(minHeight: 34)
+    }
+
+    private func calendarSwatchColor(_ hex: String?) -> Color {
+        guard let hex, !hex.isEmpty else {
+            return MuesliTheme.textTertiary.opacity(0.35)
+        }
+        return Color(hex: hex)
+    }
+
+    @ViewBuilder
     private var googleCalendarControl: some View {
         if appState.isGoogleCalendarAuthenticated {
             Button {
@@ -701,7 +862,7 @@ struct SettingsView: View {
                     Image(systemName: "calendar")
                         .font(.system(size: 10))
                         .foregroundStyle(.white)
-                    Text("Connected · Disconnect")
+                    Text(L10n.text(.settingsConnectedDisconnect, config: appState.config))
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.white)
                         .lineLimit(1)
@@ -717,7 +878,7 @@ struct SettingsView: View {
             HStack(spacing: 6) {
                 ProgressView()
                     .controlSize(.small)
-                Text("Connecting...")
+                Text(L10n.text(.settingsConnecting, config: appState.config))
                     .font(.system(size: 11))
                     .foregroundStyle(MuesliTheme.textSecondary)
             }
@@ -727,7 +888,7 @@ struct SettingsView: View {
                     Image(systemName: "calendar.badge.plus")
                         .font(.system(size: 10))
                         .foregroundStyle(.white.opacity(0.4))
-                    Text("Connect Google Calendar")
+                    Text(L10n.text(.settingsConnectGoogleCalendar, config: appState.config))
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.white.opacity(0.4))
                         .lineLimit(1)
@@ -738,7 +899,28 @@ struct SettingsView: View {
                 .background(MuesliTheme.textTertiary.opacity(0.3))
                 .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
 
-                Text("Google OAuth verification pending")
+                Text(L10n.text(.settingsGoogleOAuthPending, config: appState.config))
+                    .font(.system(size: 10))
+                    .foregroundStyle(MuesliTheme.textTertiary)
+            }
+        } else if !appState.isGoogleCalendarAvailable {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 5) {
+                    Image(systemName: "calendar.badge.exclamationmark")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.white.opacity(0.4))
+                    Text(L10n.text(.settingsConnectGoogleCalendar, config: appState.config))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.4))
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(MuesliTheme.textTertiary.opacity(0.3))
+                .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
+
+                Text(L10n.text(.settingsGoogleCalendarUnavailable, config: appState.config))
                     .font(.system(size: 10))
                     .foregroundStyle(MuesliTheme.textTertiary)
             }
@@ -757,7 +939,7 @@ struct SettingsView: View {
                         Image(systemName: "calendar.badge.plus")
                             .font(.system(size: 10))
                             .foregroundStyle(.white)
-                        Text("Connect Google Calendar")
+                    Text(L10n.text(.settingsConnectGoogleCalendar, config: appState.config))
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.white)
                             .lineLimit(1)
@@ -830,7 +1012,7 @@ struct SettingsView: View {
 
     private func pickCustomAudioFile() {
         let panel = NSOpenPanel()
-        panel.title = "Choose an audio clip"
+        panel.title = L10n.text(.settingsChooseAudioClip, config: appState.config)
         panel.allowedContentTypes = [.mp3, .mpeg4Audio, .wav, .aiff]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
@@ -858,8 +1040,8 @@ struct SettingsView: View {
 
     private func pickMeetingHookFile() {
         let panel = NSOpenPanel()
-        panel.title = "Choose a hook script"
-        panel.prompt = "Choose Script"
+        panel.title = L10n.text(.settingsChooseHookScriptTitle, config: appState.config)
+        panel.prompt = L10n.text(.settingsChooseScriptPrompt, config: appState.config)
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
@@ -900,16 +1082,16 @@ struct SettingsView: View {
     // MARK: - Permissions
 
     private var permissionsSection: some View {
-        settingsSection("Permissions") {
+        settingsSection(L10n.text(.settingsPermissionsSection, config: appState.config)) {
             permissionStatusRow(
-                "Microphone",
+                L10n.text(.settingsPermissionMicrophone, config: appState.config),
                 granted: micGranted,
                 action: { AVCaptureDevice.requestAccess(for: .audio) { _ in } },
                 pane: "Privacy_Microphone"
             )
             Divider().background(MuesliTheme.surfaceBorder)
             permissionStatusRow(
-                "Accessibility",
+                L10n.text(.settingsPermissionAccessibility, config: appState.config),
                 granted: accessibilityGranted,
                 action: {
                     let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
@@ -919,7 +1101,7 @@ struct SettingsView: View {
             )
             Divider().background(MuesliTheme.surfaceBorder)
             permissionStatusRow(
-                "Input Monitoring",
+                L10n.text(.settingsPermissionInputMonitoring, config: appState.config),
                 granted: inputMonitoringGranted,
                 action: {
                     if !CGRequestListenEventAccess() {
@@ -930,7 +1112,7 @@ struct SettingsView: View {
             )
             Divider().background(MuesliTheme.surfaceBorder)
             permissionStatusRow(
-                "Screen Recording",
+                L10n.text(.settingsPermissionScreenRecording, config: appState.config),
                 granted: screenRecordingGranted,
                 action: { CGRequestScreenCaptureAccess() },
                 pane: "Privacy_ScreenCapture"
@@ -938,7 +1120,7 @@ struct SettingsView: View {
             if appState.config.useCoreAudioTap {
                 Divider().background(MuesliTheme.surfaceBorder)
                 permissionStatusRow(
-                    "System Audio",
+                    L10n.text(.settingsPermissionSystemAudio, config: appState.config),
                     granted: systemAudioGranted,
                     action: {
                         Task { await CoreAudioSystemRecorder.requestSystemAudioAccess() }
@@ -962,11 +1144,11 @@ struct SettingsView: View {
             }
             Spacer()
             if granted {
-                Text("Granted")
+                Text(L10n.text(.settingsGranted, config: appState.config))
                     .font(.system(size: 11))
                     .foregroundStyle(MuesliTheme.success)
             } else {
-                Button("Grant") {
+                Button(L10n.text(.settingsGrant, config: appState.config)) {
                     action()
                 }
                 .buttonStyle(.plain)
@@ -985,7 +1167,7 @@ struct SettingsView: View {
                     .foregroundStyle(MuesliTheme.textTertiary)
             }
             .buttonStyle(.plain)
-            .help("Open in System Settings")
+            .help(L10n.text(.settingsOpenInSystemSettings, config: appState.config))
         }
         .frame(minHeight: 32)
     }
@@ -1106,7 +1288,7 @@ struct SettingsView: View {
                     .foregroundStyle(MuesliTheme.textTertiary)
 
                 if appState.config.meetingHookPath.isEmpty {
-                    Text("Choose a script…")
+                    Text(L10n.text(.settingsChooseScriptEllipsis, config: appState.config))
                         .font(.system(size: 12))
                         .foregroundStyle(MuesliTheme.textTertiary)
                         .lineLimit(1)
@@ -1128,7 +1310,7 @@ struct SettingsView: View {
                 RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
                     .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
             )
-            .help(appState.config.meetingHookPath.isEmpty ? "No hook script selected" : appState.config.meetingHookPath)
+            .help(appState.config.meetingHookPath.isEmpty ? L10n.text(.settingsNoHookScriptSelected, config: appState.config) : appState.config.meetingHookPath)
 
             if !appState.config.meetingHookPath.isEmpty {
                 Button {
@@ -1146,7 +1328,7 @@ struct SettingsView: View {
                         )
                 }
                 .buttonStyle(.plain)
-                .help("Clear hook script")
+                .help(L10n.text(.settingsClearHookScript, config: appState.config))
             }
 
             Button {
@@ -1164,19 +1346,19 @@ struct SettingsView: View {
                     )
             }
             .buttonStyle(.plain)
-            .help("Choose hook script")
+            .help(L10n.text(.settingsChooseHookScript, config: appState.config))
         }
     }
 
     @ViewBuilder
     private func meetingTemplateMenu(selectionID: String, onChange: @escaping (String) -> Void) -> some View {
         let allItems: [(id: String, label: String)] = {
-            var items: [(String, String)] = [(MeetingTemplates.autoID, MeetingTemplates.auto.title)]
+            var items: [(String, String)] = [(MeetingTemplates.autoID, L10n.text(.settingsDefaultTemplateAuto, config: appState.config))]
             items += controller.builtInMeetingTemplates().map { ($0.id, $0.title) }
             items += controller.customMeetingTemplates().map { ($0.id, $0.name) }
             return items
         }()
-        let selectedLabel = allItems.first(where: { $0.id == selectionID })?.label ?? "Auto"
+        let selectedLabel = allItems.first(where: { $0.id == selectionID })?.label ?? L10n.text(.settingsDefaultTemplateAuto, config: appState.config)
         FixedWidthPopUp(
             selection: selectedLabel,
             options: allItems.map(\.label),
@@ -1211,7 +1393,11 @@ struct SettingsView: View {
             Circle()
                 .fill(key.isEmpty ? MuesliTheme.textTertiary : MuesliTheme.success)
                 .frame(width: 6, height: 6)
-            Text(key.isEmpty ? "No API key configured" : "Key configured")
+            Text(
+                key.isEmpty
+                    ? L10n.text(.settingsNoApiKeyConfigured, config: appState.config)
+                    : L10n.text(.settingsApiKeyConfigured, config: appState.config)
+            )
                 .font(.system(size: 11))
                 .foregroundStyle(key.isEmpty ? MuesliTheme.textTertiary : MuesliTheme.success)
         }
@@ -1244,11 +1430,11 @@ struct SettingsView: View {
     private func recordingSaveLabel(for policy: MeetingRecordingSavePolicy) -> String {
         switch policy {
         case .never:
-            return "Never"
+            return L10n.text(.settingsRecordingSaveNever, config: appState.config)
         case .prompt:
-            return "Ask every time"
+            return L10n.text(.settingsRecordingSavePrompt, config: appState.config)
         case .always:
-            return "Always"
+            return L10n.text(.settingsRecordingSaveAlways, config: appState.config)
         }
     }
 

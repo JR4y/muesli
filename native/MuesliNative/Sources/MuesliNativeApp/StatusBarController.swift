@@ -8,7 +8,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     private let runtime: RuntimePaths
     private let statusItem: NSStatusItem
     private let menu = NSMenu()
-    private let statusLabel = NSMenuItem(title: "Status: Idle", action: nil, keyEquivalent: "")
+    private let statusLabel = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private var countdownOverride: String?
 
     init(controller: MuesliController, runtime: RuntimePaths) {
@@ -17,11 +17,12 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
         menu.delegate = self
+        statusLabel.title = L10n.text(.statusLabel(text: L10n.text(.statusIdle, config: controller.appState.config)), config: controller.appState.config)
         build()
     }
 
     func setStatus(_ text: String) {
-        statusLabel.title = "Status: \(text)"
+        statusLabel.title = L10n.text(.statusLabel(text: text), config: controller.appState.config)
     }
 
     func refresh() {
@@ -101,19 +102,21 @@ final class StatusBarController: NSObject, NSMenuDelegate {
             menu.addItem(.separator())
         }
 
-        menu.addItem(actionItem(title: "Open \(AppIdentity.displayName)", action: #selector(MuesliController.openHistoryWindow as (MuesliController) -> () -> Void)))
-        let meetingTitle = controller.isMeetingRecording() ? "Stop Meeting Recording" : "Start Meeting Recording"
+        menu.addItem(actionItem(title: L10n.text(.statusOpenApp(name: AppIdentity.displayName), config: controller.appState.config), action: #selector(MuesliController.openHistoryWindow as (MuesliController) -> () -> Void)))
+        let meetingTitle = controller.isMeetingRecording()
+            ? L10n.text(.statusStopMeetingRecording, config: controller.appState.config)
+            : L10n.text(.statusStartMeetingRecording, config: controller.appState.config)
         menu.addItem(actionItem(title: meetingTitle, action: #selector(MuesliController.toggleMeetingRecording)))
         if controller.isMeetingRecording() {
-            menu.addItem(actionItem(title: "Discard Meeting Recording...", action: #selector(MuesliController.discardMeetingWithConfirmation)))
+            menu.addItem(actionItem(title: L10n.text(.statusDiscardMeetingRecording, config: controller.appState.config), action: #selector(MuesliController.discardMeetingWithConfirmation)))
         }
         menu.addItem(.separator())
 
-        let recentItem = NSMenuItem(title: "Recent Dictations", action: nil, keyEquivalent: "")
+        let recentItem = NSMenuItem(title: L10n.text(.statusRecentDictations, config: controller.appState.config), action: nil, keyEquivalent: "")
         let recentMenu = NSMenu()
         let recentRows = controller.recentDictations()
         if recentRows.isEmpty {
-            let empty = NSMenuItem(title: "No dictations yet", action: nil, keyEquivalent: "")
+            let empty = NSMenuItem(title: L10n.text(.statusNoDictationsYet, config: controller.appState.config), action: nil, keyEquivalent: "")
             empty.isEnabled = false
             recentMenu.addItem(empty)
         } else {
@@ -127,7 +130,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         menu.setSubmenu(recentMenu, for: recentItem)
         menu.addItem(recentItem)
 
-        let backendItem = NSMenuItem(title: "Transcription Backend", action: nil, keyEquivalent: "")
+        let backendItem = NSMenuItem(title: L10n.text(.statusTranscriptionBackend, config: controller.appState.config), action: nil, keyEquivalent: "")
         let backendMenu = NSMenu()
         for option in BackendOption.downloaded {
             let prefix = controller.selectedBackend == option ? "✓ " : ""
@@ -139,7 +142,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         menu.setSubmenu(backendMenu, for: backendItem)
         menu.addItem(backendItem)
 
-        let meetingBackendItem = NSMenuItem(title: "Meetings Backend", action: nil, keyEquivalent: "")
+        let meetingBackendItem = NSMenuItem(title: L10n.text(.statusMeetingsBackend, config: controller.appState.config), action: nil, keyEquivalent: "")
         let meetingBackendMenu = NSMenu()
         for option in MeetingSummaryBackendOption.all {
             let prefix = controller.selectedMeetingSummaryBackend == option ? "✓ " : ""
@@ -156,12 +159,12 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         menu.addItem(meetingBackendItem)
 
         menu.addItem(.separator())
-        menu.addItem(actionItem(title: "Settings…", action: #selector(MuesliController.openSettingsTab)))
-        menu.addItem(actionItem(title: "Check for Updates…", action: #selector(MuesliController.checkForUpdates)))
+        menu.addItem(actionItem(title: L10n.text(.statusSettings, config: controller.appState.config), action: #selector(MuesliController.openSettingsTab)))
+        menu.addItem(actionItem(title: L10n.text(.statusCheckForUpdates, config: controller.appState.config), action: #selector(MuesliController.checkForUpdates)))
         statusLabel.isEnabled = false
         menu.addItem(statusLabel)
         menu.addItem(.separator())
-        menu.addItem(actionItem(title: "Quit", action: #selector(MuesliController.quitApp)))
+        menu.addItem(actionItem(title: L10n.text(.statusQuit, config: controller.appState.config), action: #selector(MuesliController.quitApp)))
     }
 
     private func addUpcomingEventsSection(_ events: [UnifiedCalendarEvent]) {
@@ -188,13 +191,14 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         if !nextUpEvents.isEmpty {
             let firstEvent = nextUpEvents[0]
             let minutesUntil = Int(ceil(firstEvent.startDate.timeIntervalSince(now) / 60))
-            let header = NSMenuItem(title: "Starts in \(formatTimeUntil(minutesUntil))", action: nil, keyEquivalent: "")
+            let headerTitle = L10n.text(.statusStartsIn(value: formatTimeUntil(minutesUntil)), config: controller.appState.config)
+            let header = NSMenuItem(title: headerTitle, action: nil, keyEquivalent: "")
             header.isEnabled = false
             let headerAttrs: [NSAttributedString.Key: Any] = [
                 .font: NSFont.systemFont(ofSize: 11, weight: .medium),
                 .foregroundColor: NSColor.secondaryLabelColor,
             ]
-            header.attributedTitle = NSAttributedString(string: "Starts in \(formatTimeUntil(minutesUntil))", attributes: headerAttrs)
+            header.attributedTitle = NSAttributedString(string: headerTitle, attributes: headerAttrs)
             menu.addItem(header)
 
             for event in nextUpEvents {
@@ -223,13 +227,14 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         }
 
         if !todayEvents.isEmpty {
-            let header = NSMenuItem(title: "Today", action: nil, keyEquivalent: "")
+            let todayTitle = L10n.text(.meetingsToday, config: controller.appState.config)
+            let header = NSMenuItem(title: todayTitle, action: nil, keyEquivalent: "")
             header.isEnabled = false
             let headerAttrs: [NSAttributedString.Key: Any] = [
                 .font: NSFont.systemFont(ofSize: 11, weight: .medium),
                 .foregroundColor: NSColor.secondaryLabelColor,
             ]
-            header.attributedTitle = NSAttributedString(string: "Today", attributes: headerAttrs)
+            header.attributedTitle = NSAttributedString(string: todayTitle, attributes: headerAttrs)
             menu.addItem(header)
 
             for event in todayEvents.prefix(5) {

@@ -2,6 +2,13 @@ import Foundation
 
 // MARK: - Shared Calendar Event Model
 
+struct LocalCalendarInfo: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let sourceTitle: String?
+    let colorHex: String?
+}
+
 struct UnifiedCalendarEvent: Identifiable, Equatable {
     let id: String
     let title: String
@@ -10,6 +17,10 @@ struct UnifiedCalendarEvent: Identifiable, Equatable {
     let isAllDay: Bool
     let source: CalendarSource
     var meetingURL: URL? = nil
+    let calendarID: String?
+    let calendarName: String?
+    let calendarSourceTitle: String?
+    let calendarColorHex: String?
 
     enum CalendarSource: String {
         case eventKit
@@ -208,7 +219,11 @@ final class GoogleCalendarClient {
             endDate: endDate,
             isAllDay: isAllDay,
             source: .googleCalendar,
-            meetingURL: meetingURL
+            meetingURL: meetingURL,
+            calendarID: nil,
+            calendarName: "Google Calendar",
+            calendarSourceTitle: "Google Calendar",
+            calendarColorHex: nil
         )
     }
 

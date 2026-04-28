@@ -1,43 +1,144 @@
+import AppKit
 import SwiftUI
 import MuesliCore
 
+struct ThemeColorPair {
+    let dark: Int
+    let light: Int
+}
+
+struct ThemePalette {
+    let backgroundDeep: ThemeColorPair
+    let backgroundBase: ThemeColorPair
+    let backgroundRaised: ThemeColorPair
+    let backgroundHover: ThemeColorPair
+    let surfacePrimary: ThemeColorPair
+    let surfaceSelected: ThemeColorPair
+    let surfaceBorderDarkAlpha: CGFloat
+    let surfaceBorderLightAlpha: CGFloat
+    let textPrimaryDarkAlpha: CGFloat
+    let textPrimaryLightAlpha: CGFloat
+    let textSecondaryDarkAlpha: CGFloat
+    let textSecondaryLightAlpha: CGFloat
+    let textTertiaryDarkAlpha: CGFloat
+    let textTertiaryLightAlpha: CGFloat
+}
+
 enum MuesliTheme {
+    static var currentThemePreset: ThemePreset = .warm
+
+    private static var palette: ThemePalette {
+        palette(for: currentThemePreset)
+    }
+
+    static func palette(for preset: ThemePreset) -> ThemePalette {
+        switch preset {
+        case .warm:
+            return ThemePalette(
+                backgroundDeep: ThemeColorPair(dark: 0x14110E, light: 0xECE5D5),
+                backgroundBase: ThemeColorPair(dark: 0x1B1815, light: 0xFAF7F0),
+                backgroundRaised: ThemeColorPair(dark: 0x23201C, light: 0xF3EDE1),
+                backgroundHover: ThemeColorPair(dark: 0x2B2722, light: 0xE7DECC),
+                surfacePrimary: ThemeColorPair(dark: 0x28241F, light: 0xEAE1CF),
+                surfaceSelected: ThemeColorPair(dark: 0x3C3328, light: 0xD5C4A8),
+                surfaceBorderDarkAlpha: 0.08,
+                surfaceBorderLightAlpha: 0.08,
+                textPrimaryDarkAlpha: 0.94,
+                textPrimaryLightAlpha: 0.88,
+                textSecondaryDarkAlpha: 0.66,
+                textSecondaryLightAlpha: 0.57,
+                textTertiaryDarkAlpha: 0.42,
+                textTertiaryLightAlpha: 0.34
+            )
+        case .neutral:
+            return ThemePalette(
+                backgroundDeep: ThemeColorPair(dark: 0x0F0F0E, light: 0xE8E6E1),
+                backgroundBase: ThemeColorPair(dark: 0x161615, light: 0xF6F5F1),
+                backgroundRaised: ThemeColorPair(dark: 0x1D1D1C, light: 0xEFEDE7),
+                backgroundHover: ThemeColorPair(dark: 0x252523, light: 0xE0DDD6),
+                surfacePrimary: ThemeColorPair(dark: 0x222220, light: 0xE5E2DB),
+                surfaceSelected: ThemeColorPair(dark: 0x34332F, light: 0xC8C5BD),
+                surfaceBorderDarkAlpha: 0.07,
+                surfaceBorderLightAlpha: 0.08,
+                textPrimaryDarkAlpha: 0.92,
+                textPrimaryLightAlpha: 0.88,
+                textSecondaryDarkAlpha: 0.62,
+                textSecondaryLightAlpha: 0.55,
+                textTertiaryDarkAlpha: 0.40,
+                textTertiaryLightAlpha: 0.33
+            )
+        case .graphite:
+            return ThemePalette(
+                backgroundDeep: ThemeColorPair(dark: 0x0A0D12, light: 0xDEE3EA),
+                backgroundBase: ThemeColorPair(dark: 0x11151C, light: 0xF4F6F9),
+                backgroundRaised: ThemeColorPair(dark: 0x181D26, light: 0xEAEEF3),
+                backgroundHover: ThemeColorPair(dark: 0x1F2530, light: 0xDAE1E9),
+                surfacePrimary: ThemeColorPair(dark: 0x1C2230, light: 0xE0E6EE),
+                surfaceSelected: ThemeColorPair(dark: 0x2A3344, light: 0xC2CDDA),
+                surfaceBorderDarkAlpha: 0.08,
+                surfaceBorderLightAlpha: 0.09,
+                textPrimaryDarkAlpha: 0.93,
+                textPrimaryLightAlpha: 0.87,
+                textSecondaryDarkAlpha: 0.64,
+                textSecondaryLightAlpha: 0.56,
+                textTertiaryDarkAlpha: 0.42,
+                textTertiaryLightAlpha: 0.36
+            )
+        }
+    }
+
     // MARK: - Colors — Backgrounds (layered)
 
-    static let backgroundDeep   = Color.adaptive(dark: 0x111214, light: 0xF5F5F7)
-    static let backgroundBase   = Color.adaptive(dark: 0x161719, light: 0xFFFFFF)
-    static let backgroundRaised = Color.adaptive(dark: 0x1C1D20, light: 0xF0F0F2)
-    static let backgroundHover  = Color.adaptive(dark: 0x232528, light: 0xE8E8EC)
+    static var backgroundDeep: Color { adaptive(pair: palette.backgroundDeep) }
+    static var backgroundBase: Color { adaptive(pair: palette.backgroundBase) }
+    static var backgroundRaised: Color { adaptive(pair: palette.backgroundRaised) }
+    static var backgroundHover: Color { adaptive(pair: palette.backgroundHover) }
 
     // MARK: - Surfaces (interactive elements)
 
-    static let surfacePrimary   = Color.adaptive(dark: 0x262830, light: 0xE5E5EA)
-    static let surfaceSelected  = Color.adaptive(dark: 0x2E3340, light: 0xD6DFFE)
-    static let surfaceBorder    = Color.adaptiveAlpha(
-        dark: .white, darkAlpha: 0.07,
-        light: .black, lightAlpha: 0.08
-    )
+    static var surfacePrimary: Color { adaptive(pair: palette.surfacePrimary) }
+    static var surfaceSelected: Color { adaptive(pair: palette.surfaceSelected) }
+    static var surfaceBorder: Color {
+        Color.adaptiveAlpha(
+            dark: NSColor.white,
+            darkAlpha: palette.surfaceBorderDarkAlpha,
+            light: NSColor.black,
+            lightAlpha: palette.surfaceBorderLightAlpha
+        )
+    }
 
     // MARK: - Text hierarchy
 
-    static let textPrimary = Color.adaptiveAlpha(
-        dark: .white, darkAlpha: 0.92,
-        light: .black, lightAlpha: 0.88
-    )
-    static let textSecondary = Color.adaptiveAlpha(
-        dark: .white, darkAlpha: 0.62,
-        light: .black, lightAlpha: 0.55
-    )
-    static let textTertiary = Color.adaptiveAlpha(
-        dark: .white, darkAlpha: 0.40,
-        light: .black, lightAlpha: 0.33
-    )
+    static var textPrimary: Color {
+        Color.adaptiveAlpha(
+            dark: NSColor.white,
+            darkAlpha: palette.textPrimaryDarkAlpha,
+            light: NSColor.black,
+            lightAlpha: palette.textPrimaryLightAlpha
+        )
+    }
+    static var textSecondary: Color {
+        Color.adaptiveAlpha(
+            dark: NSColor.white,
+            darkAlpha: palette.textSecondaryDarkAlpha,
+            light: NSColor.black,
+            lightAlpha: palette.textSecondaryLightAlpha
+        )
+    }
+    static var textTertiary: Color {
+        Color.adaptiveAlpha(
+            dark: NSColor.white,
+            darkAlpha: palette.textTertiaryDarkAlpha,
+            light: NSColor.black,
+            lightAlpha: palette.textTertiaryLightAlpha
+        )
+    }
 
     // MARK: - Accent
 
     static let defaultAccentDarkHex = 0x6BA3F7
     static let defaultAccentLightHex = 0x2563EB
-    static let defaultAccent    = Color.adaptive(dark: defaultAccentDarkHex, light: defaultAccentLightHex)
+    static let defaultAccent = Color.adaptive(dark: defaultAccentDarkHex, light: defaultAccentLightHex)
     static var accentOverrideHex: String?
     static var accent: Color {
         if let hex = accentOverrideHex, !hex.isEmpty,
@@ -50,9 +151,9 @@ enum MuesliTheme {
 
     // MARK: - Semantic
 
-    static let recording        = Color(hex: 0xEF4444)
-    static let transcribing     = Color(hex: 0xF59E0B)
-    static let success          = Color(hex: 0x34D399)
+    static let recording = Color(hex: 0xEF4444)
+    static let transcribing = Color(hex: 0xF59E0B)
+    static let success = Color(hex: 0x34D399)
 
     // MARK: - Typography (SF Pro via .system())
 
@@ -81,6 +182,26 @@ enum MuesliTheme {
     static let cornerMedium: CGFloat = 10
     static let cornerLarge: CGFloat = 14
     static let cornerXL: CGFloat = 20
+
+    static func nsBackgroundColor() -> NSColor {
+        adaptiveNSColor(pair: palette.backgroundBase)
+    }
+
+    private static func adaptive(pair: ThemeColorPair) -> Color {
+        Color.adaptive(dark: pair.dark, light: pair.light)
+    }
+
+    private static func adaptiveNSColor(pair: ThemeColorPair) -> NSColor {
+        NSColor(name: nil) { appearance in
+            let hex = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? pair.dark : pair.light
+            return NSColor(
+                red: CGFloat((hex >> 16) & 0xFF) / 255.0,
+                green: CGFloat((hex >> 8) & 0xFF) / 255.0,
+                blue: CGFloat(hex & 0xFF) / 255.0,
+                alpha: 1.0
+            )
+        }
+    }
 }
 
 // MARK: - Color Helpers

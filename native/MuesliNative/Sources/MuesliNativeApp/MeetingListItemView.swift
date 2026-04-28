@@ -3,6 +3,7 @@ import MuesliCore
 
 struct MeetingListItemView: View {
     let record: MeetingRecord
+    let config: AppConfig
     let isSelected: Bool
     let folders: [MeetingFolder]
     let onSelect: () -> Void
@@ -79,11 +80,11 @@ struct MeetingListItemView: View {
         .contentShape(Rectangle())
         .onTapGesture(perform: onSelect)
         .onHover { isHovering = $0 }
-        .alert("Delete Meeting", isPresented: $showDeleteConfirmation) {
-            Button("Delete", role: .destructive) { onDelete?() }
-            Button("Cancel", role: .cancel) {}
+        .alert(L10n.text(.meetingDeleteTitle, config: config), isPresented: $showDeleteConfirmation) {
+            Button(L10n.text(.sidebarDelete, config: config), role: .destructive) { onDelete?() }
+            Button(L10n.text(.sidebarCancel, config: config), role: .cancel) {}
         } message: {
-            Text("Are you sure you want to delete this meeting? Saved notes, transcript, and any retained recording will be removed.")
+            Text(L10n.text(.meetingDeleteMessage, config: config))
         }
     }
 
@@ -105,10 +106,10 @@ struct MeetingListItemView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("Move to folder")
+        .help(L10n.text(.meetingMoveToFolder, config: config))
         .popover(isPresented: $showFolderPopover, arrowEdge: .leading) {
             VStack(alignment: .leading, spacing: 0) {
-                folderPopoverRow(icon: "tray", label: "Unfiled", isActive: record.folderID == nil) {
+                folderPopoverRow(icon: "tray", label: L10n.text(.meetingUnfiled, config: config), isActive: record.folderID == nil) {
                     onMove(nil)
                     showFolderPopover = false
                 }
@@ -121,7 +122,7 @@ struct MeetingListItemView: View {
                 }
                 if onCreateFolderAndMove != nil {
                     Divider().padding(.vertical, 4)
-                    folderPopoverRow(icon: "folder.badge.plus", label: "New Folder...") {
+                    folderPopoverRow(icon: "folder.badge.plus", label: L10n.text(.meetingNewFolderEllipsis, config: config)) {
                         showFolderPopover = false
                         newFolderName = ""
                         showNewFolderPrompt = true
@@ -130,17 +131,17 @@ struct MeetingListItemView: View {
             }
             .padding(8)
         }
-        .alert("New Folder", isPresented: $showNewFolderPrompt) {
-            TextField("Folder name", text: $newFolderName)
-            Button("Create") {
+        .alert(L10n.text(.meetingNewFolderTitle, config: config), isPresented: $showNewFolderPrompt) {
+            TextField(L10n.text(.sidebarFolderName, config: config), text: $newFolderName)
+            Button(L10n.text(.meetingCreate, config: config)) {
                 let trimmed = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
                     onCreateFolderAndMove?(trimmed)
                 }
             }
-            Button("Cancel", role: .cancel) {}
+            Button(L10n.text(.sidebarCancel, config: config), role: .cancel) {}
         } message: {
-            Text("Create a new folder and move this meeting into it.")
+            Text(L10n.text(.meetingNewFolderMessage, config: config))
         }
     }
 
@@ -184,7 +185,7 @@ struct MeetingListItemView: View {
         }
         .buttonStyle(.plain)
         .opacity(isHovering ? 1 : 0)
-        .help("Delete meeting")
+        .help(L10n.text(.meetingDeleteHelp, config: config))
     }
 
     // MARK: - Formatting
@@ -196,11 +197,7 @@ struct MeetingListItemView: View {
     }
 
     private func formatTime(_ raw: String) -> String {
-        let clean = raw.replacingOccurrences(of: "T", with: " ")
-        if clean.count > 16 {
-            return String(clean.prefix(16))
-        }
-        return clean
+        MeetingDateFormatting.formatMeetingTimestamp(raw)
     }
 
     private func formatDuration(_ seconds: Double) -> String {

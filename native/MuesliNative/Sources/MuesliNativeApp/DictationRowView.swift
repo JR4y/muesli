@@ -2,6 +2,7 @@ import SwiftUI
 import MuesliCore
 
 struct DictationRowView: View {
+    let config: AppConfig
     let record: DictationRecord
     let timeOnly: String
     let onCopy: () -> Void
@@ -53,11 +54,11 @@ struct DictationRowView: View {
             }
         }
         .onTapGesture(perform: onCopy)
-        .alert("Delete Dictation", isPresented: $showDeleteConfirmation) {
-            Button("Delete", role: .destructive) { onDelete?() }
-            Button("Cancel", role: .cancel) {}
+        .alert(L10n.text(.dictationsDeleteTitle, config: config), isPresented: $showDeleteConfirmation) {
+            Button(L10n.text(.sidebarDelete, config: config), role: .destructive) { onDelete?() }
+            Button(L10n.text(.sidebarCancel, config: config), role: .cancel) {}
         } message: {
-            Text("Are you sure you want to delete this dictation? This cannot be undone.")
+            Text(L10n.text(.dictationsDeleteMessage, config: config))
         }
     }
 }

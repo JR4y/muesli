@@ -21,7 +21,10 @@ struct MeetingDetailView: View {
     @State private var titleSaveTask: DispatchWorkItem?
     @State private var notesSaveTask: DispatchWorkItem?
     @State private var summaryErrorMessage: String?
+    @State private var calendarAssociationErrorMessage: String?
     @State private var showDeleteConfirmation = false
+    @State private var isCalendarEventPickerPresented = false
+    @State private var nearbyCalendarEvents: [UnifiedCalendarEvent] = []
 
     init(
         meeting: MeetingRecord?,
@@ -62,10 +65,10 @@ struct MeetingDetailView: View {
                 }
             } else {
                 VStack(spacing: MuesliTheme.spacing12) {
-                    Text("No meeting selected")
+                    Text(L10n.text(.meetingNoSelectionTitle, config: appState.config))
                         .font(MuesliTheme.title3())
                         .foregroundStyle(MuesliTheme.textSecondary)
-                    Text("Choose a meeting from the Meetings browser to open it here.")
+                    Text(L10n.text(.meetingNoSelectionMessage, config: appState.config))
                         .font(MuesliTheme.callout())
                         .foregroundStyle(MuesliTheme.textTertiary)
                 }
@@ -73,22 +76,34 @@ struct MeetingDetailView: View {
                 .background(MuesliTheme.backgroundBase)
             }
         }
-        .alert("Couldn't Save Summary", isPresented: summaryErrorBinding) {
-            Button("OK", role: .cancel) {
+        .alert(L10n.text(.meetingSummarySaveErrorTitle, config: appState.config), isPresented: summaryErrorBinding) {
+            Button(L10n.text(.commonOK, config: appState.config), role: .cancel) {
                 summaryErrorMessage = nil
             }
         } message: {
-            Text(summaryErrorMessage ?? "The updated meeting notes could not be saved.")
+            Text(summaryErrorMessage ?? L10n.text(.meetingSummarySaveErrorMessage, config: appState.config))
         }
-        .alert("Delete Meeting", isPresented: $showDeleteConfirmation) {
-            Button("Delete", role: .destructive) {
+        .alert(L10n.text(.meetingCalendarAssociationFailedTitle, config: appState.config), isPresented: calendarAssociationErrorBinding) {
+            Button(L10n.text(.commonOK, config: appState.config), role: .cancel) {
+                calendarAssociationErrorMessage = nil
+            }
+        } message: {
+            Text(calendarAssociationErrorMessage ?? L10n.text(.meetingCalendarAssociationFailedMessage, config: appState.config))
+        }
+        .alert(L10n.text(.meetingDeleteTitle, config: appState.config), isPresented: $showDeleteConfirmation) {
+            Button(L10n.text(.sidebarDelete, config: appState.config), role: .destructive) {
                 if let meeting {
                     controller.deleteMeeting(id: meeting.id)
                 }
             }
-            Button("Cancel", role: .cancel) {}
+            Button(L10n.text(.sidebarCancel, config: appState.config), role: .cancel) {}
         } message: {
-            Text("Are you sure you want to delete this meeting? Saved notes, transcript, and any retained recording will be removed.")
+            Text(L10n.text(.meetingDeleteMessage, config: appState.config))
+        }
+        .sheet(isPresented: $isCalendarEventPickerPresented) {
+            if let meeting {
+                calendarEventPickerSheet(for: meeting)
+            }
         }
     }
 
@@ -111,7 +126,7 @@ struct MeetingDetailView: View {
 
             HStack(alignment: .top, spacing: MuesliTheme.spacing24) {
                 VStack(alignment: .leading, spacing: MuesliTheme.spacing8) {
-                    TextField("Meeting Title", text: $editableTitle)
+                    TextField(L10n.text(.meetingTitlePlaceholder, config: appState.config), text: $editableTitle)
                         .font(.system(size: 30, weight: .bold))
                         .foregroundStyle(MuesliTheme.textPrimary)
                         .textFieldStyle(.plain)
@@ -126,6 +141,7 @@ struct MeetingDetailView: View {
                         Text(formatMeta(meeting))
                             .font(MuesliTheme.callout())
                             .foregroundStyle(MuesliTheme.textSecondary)
+                        calendarAssociationControl(for: meeting)
                         templateChip(for: appliedTemplate)
                     }
                 }
@@ -215,8 +231,8 @@ struct MeetingDetailView: View {
 
     private var documentModePicker: some View {
         Picker("", selection: $documentMode) {
-            Text("Notes").tag(MeetingDocumentMode.notes)
-            Text("Transcript").tag(MeetingDocumentMode.transcript)
+            Text(L10n.text(.meetingNotes, config: appState.config)).tag(MeetingDocumentMode.notes)
+            Text(L10n.text(.meetingTranscript, config: appState.config)).tag(MeetingDocumentMode.transcript)
         }
         .pickerStyle(.segmented)
         .tint(MuesliTheme.accent)
@@ -230,7 +246,7 @@ struct MeetingDetailView: View {
             HStack(spacing: 6) {
                 ProgressView()
                     .controlSize(.small)
-                Text("Summarizing...")
+                Text(L10n.text(.meetingSummarizing, config: appState.config))
                     .font(.system(size: 11))
                     .foregroundStyle(MuesliTheme.textTertiary)
             }
@@ -265,7 +281,7 @@ struct MeetingDetailView: View {
     private func editButton(for meeting: MeetingRecord) -> some View {
         iconButton(
             isEditingNotes ? "checkmark.circle" : "pencil",
-            label: isEditingNotes ? "Done" : "Edit"
+            label: isEditingNotes ? L10n.text(.meetingDone, config: appState.config) : L10n.text(.meetingEdit, config: appState.config)
         ) {
             if isEditingNotes {
                 notesSaveTask?.cancel()
@@ -279,9 +295,48 @@ struct MeetingDetailView: View {
     }
 
     @ViewBuilder
+    private func calendarAssociationControl(for meeting: MeetingRecord) -> some View {
+        if meeting.calendarEventID == nil {
+            Button {
+                nearbyCalendarEvents = controller.suggestedCalendarEvents(for: meeting)
+                isCalendarEventPickerPresented = true
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "calendar.badge.plus")
+                        .font(.system(size: 10))
+                    Text(L10n.text(.meetingAssociateEvent, config: appState.config))
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .foregroundStyle(MuesliTheme.textSecondary)
+                .padding(.horizontal, MuesliTheme.spacing8)
+                .padding(.vertical, 4)
+                .background(MuesliTheme.surfacePrimary)
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule()
+                        .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+        } else {
+            HStack(spacing: 5) {
+                Image(systemName: "calendar.badge.checkmark")
+                    .font(.system(size: 10))
+                Text(L10n.text(.meetingCalendarLinked, config: appState.config))
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .foregroundStyle(MuesliTheme.success)
+            .padding(.horizontal, MuesliTheme.spacing8)
+            .padding(.vertical, 4)
+            .background(MuesliTheme.success.opacity(0.12))
+            .clipShape(Capsule())
+        }
+    }
+
+    @ViewBuilder
     private func recordingAction(for meeting: MeetingRecord) -> some View {
         if let savedRecordingPath = meeting.savedRecordingPath {
-            iconButton("folder", label: "Show Recording") {
+            iconButton("folder", label: L10n.text(.meetingShowRecording, config: appState.config)) {
                 controller.revealMeetingRecordingInFinder(path: savedRecordingPath)
             }
         }
@@ -300,7 +355,7 @@ struct MeetingDetailView: View {
                 )
             }
 
-            Section("Built-in Templates") {
+            Section(L10n.text(.meetingBuiltInTemplates, config: appState.config)) {
                 ForEach(controller.builtInMeetingTemplates()) { template in
                     Button {
                         pendingTemplateID = template.id
@@ -315,7 +370,7 @@ struct MeetingDetailView: View {
             }
 
             if !controller.customMeetingTemplates().isEmpty {
-                Section("Custom Templates") {
+                Section(L10n.text(.meetingCustomTemplates, config: appState.config)) {
                     ForEach(controller.customMeetingTemplates()) { template in
                         Button {
                             pendingTemplateID = template.id
@@ -333,7 +388,7 @@ struct MeetingDetailView: View {
 
             Divider()
 
-            Button("Manage Templates…") {
+            Button(L10n.text(.meetingManageTemplates, config: appState.config)) {
                 controller.showMeetingTemplatesManager()
             }
         } label: {
@@ -395,7 +450,7 @@ struct MeetingDetailView: View {
     @ViewBuilder
     private func exportMenu(for meeting: MeetingRecord) -> some View {
         let currentContent: MeetingExportContent = documentMode == .transcript ? .transcript : .notes
-        let currentLabel = documentMode == .transcript ? "Export Transcript" : "Export Notes"
+        let currentLabel = documentMode == .transcript ? L10n.text(.meetingExportTranscript, config: appState.config) : L10n.text(.meetingExportNotes, config: appState.config)
         Menu {
             Button {
                 MeetingExporter.export(meeting: meeting, content: currentContent)
@@ -405,13 +460,13 @@ struct MeetingDetailView: View {
             Button {
                 MeetingExporter.export(meeting: meeting, content: .fullMeeting)
             } label: {
-                Label("Export Full Meeting", systemImage: "doc.on.doc")
+                Label(L10n.text(.meetingExportFull, config: appState.config), systemImage: "doc.on.doc")
             }
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "square.and.arrow.up")
                     .font(.system(size: 10, weight: .semibold))
-                Text("Export")
+                Text(L10n.text(.meetingExport, config: appState.config))
                     .font(.system(size: 12, weight: .semibold))
             }
             .foregroundStyle(MuesliTheme.textPrimary)
@@ -462,7 +517,7 @@ struct MeetingDetailView: View {
     }
 
     private var deleteButton: some View {
-        iconButton("trash", label: "Delete") {
+        iconButton("trash", label: L10n.text(.sidebarDelete, config: appState.config)) {
             showDeleteConfirmation = true
         }
     }
@@ -487,17 +542,17 @@ struct MeetingDetailView: View {
             if hasApiKey {
                 Image(systemName: "sparkles")
                     .foregroundStyle(MuesliTheme.accent)
-                Text("Use \(primarySummaryActionLabel) to turn this raw transcript into AI meeting notes and a cleaned-up title.")
+                Text(L10n.text(.meetingTranscriptCallout(action: primarySummaryActionLabel), config: appState.config))
                     .font(MuesliTheme.callout())
                     .foregroundStyle(MuesliTheme.textSecondary)
             } else {
                 Image(systemName: "key.fill")
                     .foregroundStyle(MuesliTheme.accent)
-                Text("Add your API key in Settings to generate meeting notes")
+                Text(L10n.text(.meetingAddApiKey, config: appState.config))
                     .font(MuesliTheme.callout())
                     .foregroundStyle(MuesliTheme.textSecondary)
                 Spacer()
-                Button("Open Settings") {
+                Button(L10n.text(.meetingOpenSettings, config: appState.config)) {
                     controller.openHistoryWindow(tab: .settings)
                 }
                 .font(.system(size: 12, weight: .medium))
@@ -522,16 +577,16 @@ struct MeetingDetailView: View {
     }
 
     private var primarySummaryActionLabel: String {
-        guard let meeting else { return "Re-summarize" }
+        guard let meeting else { return L10n.text(.meetingResummarize, config: appState.config) }
         return primarySummaryActionLabel(for: meeting)
     }
 
     private var copyButtonLabel: String {
-        "Copy"
+        L10n.text(.meetingCopy, config: appState.config)
     }
 
     private func primarySummaryActionLabel(for meeting: MeetingRecord) -> String {
-        hasPendingTemplateChange(for: meeting) ? "Apply Template" : "Re-summarize"
+        hasPendingTemplateChange(for: meeting) ? L10n.text(.meetingApplyTemplate, config: appState.config) : L10n.text(.meetingResummarize, config: appState.config)
     }
 
     private func activeCopyText(for meeting: MeetingRecord) -> String {
@@ -617,6 +672,17 @@ struct MeetingDetailView: View {
         )
     }
 
+    private var calendarAssociationErrorBinding: Binding<Bool> {
+        Binding(
+            get: { calendarAssociationErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    calendarAssociationErrorMessage = nil
+                }
+            }
+        )
+    }
+
     private func resolvedPendingTemplateDefinition(for meeting: MeetingRecord) -> MeetingTemplateDefinition {
         if let resolved = MeetingTemplates.resolveExactDefinition(
             id: pendingTemplateID,
@@ -628,6 +694,91 @@ struct MeetingDetailView: View {
             id: controller.meetingTemplateSnapshot(for: meeting).id,
             customTemplates: appState.config.customMeetingTemplates
         )
+    }
+
+    private func calendarEventPickerSheet(for meeting: MeetingRecord) -> some View {
+        VStack(alignment: .leading, spacing: MuesliTheme.spacing16) {
+            Text(L10n.text(.meetingSelectCalendarEvent, config: appState.config))
+                .font(MuesliTheme.title3())
+                .foregroundStyle(MuesliTheme.textPrimary)
+
+            Text(L10n.text(.meetingSelectCalendarEventHint, config: appState.config))
+                .font(MuesliTheme.callout())
+                .foregroundStyle(MuesliTheme.textSecondary)
+
+            if nearbyCalendarEvents.isEmpty {
+                Text(L10n.text(.meetingNoNearbyCalendarEvents, config: appState.config))
+                    .font(MuesliTheme.body())
+                    .foregroundStyle(MuesliTheme.textSecondary)
+                    .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
+                    .background(MuesliTheme.backgroundRaised)
+                    .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerMedium))
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: MuesliTheme.spacing12) {
+                        ForEach(nearbyCalendarEvents) { event in
+                            Button {
+                                do {
+                                    try controller.associateMeeting(id: meeting.id, with: event)
+                                    if let updated = controller.meeting(id: meeting.id) {
+                                        syncLocalState(with: updated)
+                                    }
+                                    isCalendarEventPickerPresented = false
+                                } catch {
+                                    calendarAssociationErrorMessage = error.localizedDescription
+                                }
+                            } label: {
+                                HStack(alignment: .center, spacing: MuesliTheme.spacing12) {
+                                    Circle()
+                                        .fill(calendarEventColor(event))
+                                        .frame(width: 10, height: 10)
+                                        .overlay(
+                                            Circle().strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 0.5)
+                                        )
+
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(event.title)
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .foregroundStyle(MuesliTheme.textPrimary)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                                        Text(calendarEventMeta(event))
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(MuesliTheme.textSecondary)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+
+                                    Text(L10n.text(.meetingUseThisCalendarEvent, config: appState.config))
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(MuesliTheme.accent)
+                                }
+                                .padding(MuesliTheme.spacing12)
+                                .background(MuesliTheme.backgroundRaised)
+                                .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerMedium))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: MuesliTheme.cornerMedium)
+                                        .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .frame(minHeight: 160, maxHeight: 320)
+            }
+
+            HStack {
+                Spacer()
+                Button(L10n.text(.sidebarCancel, config: appState.config)) {
+                    isCalendarEventPickerPresented = false
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(MuesliTheme.textSecondary)
+            }
+        }
+        .padding(24)
+        .frame(minWidth: 560)
+        .background(MuesliTheme.backgroundBase)
     }
 
     private func syncPendingTemplateSelectionIfNeeded(for meeting: MeetingRecord?) {
@@ -651,15 +802,11 @@ struct MeetingDetailView: View {
     private func formatMeta(_ meeting: MeetingRecord) -> String {
         let time = formatTime(meeting.startTime)
         let duration = formatDuration(meeting.durationSeconds)
-        return "\(time)  \u{2022}  \(duration)  \u{2022}  \(meeting.wordCount) words"
+        return "\(time)  \u{2022}  \(duration)  \u{2022}  \(L10n.text(.meetingWords(count: meeting.wordCount), config: appState.config))"
     }
 
     private func formatTime(_ raw: String) -> String {
-        let clean = raw.replacingOccurrences(of: "T", with: " ")
-        if clean.count > 16 {
-            return String(clean.prefix(16))
-        }
-        return clean
+        MeetingDateFormatting.formatMeetingTimestamp(raw)
     }
 
     private func formatDuration(_ seconds: Double) -> String {
@@ -674,6 +821,45 @@ struct MeetingDetailView: View {
         }
         return "\(rounded)s"
     }
+
+    private func calendarEventMeta(_ event: UnifiedCalendarEvent) -> String {
+        let timeRange = "\(Self.calendarEventTimeFormatter.string(from: event.startDate)) – \(Self.calendarEventTimeFormatter.string(from: event.endDate))"
+        if let calendarName = event.calendarName, !calendarName.isEmpty {
+            return "\(timeRange)  •  \(calendarName)"
+        }
+        if let sourceTitle = event.calendarSourceTitle, !sourceTitle.isEmpty {
+            return "\(timeRange)  •  \(sourceTitle)"
+        }
+        return timeRange
+    }
+
+    private func calendarEventColor(_ event: UnifiedCalendarEvent) -> Color {
+        colorFromHex(event.calendarColorHex) ?? MuesliTheme.accent
+    }
+
+    private func colorFromHex(_ hex: String?) -> Color? {
+        guard var hex else { return nil }
+        hex = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        if hex.hasPrefix("#") {
+            hex.removeFirst()
+        }
+        guard hex.count == 6, let value = UInt64(hex, radix: 16) else {
+            return nil
+        }
+        return Color(
+            .sRGB,
+            red: Double((value >> 16) & 0xFF) / 255.0,
+            green: Double((value >> 8) & 0xFF) / 255.0,
+            blue: Double(value & 0xFF) / 255.0,
+            opacity: 1
+        )
+    }
+
+    private static let calendarEventTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd/MM HH:mm"
+        return formatter
+    }()
 }
 
 private struct MeetingTranscriptView: View {

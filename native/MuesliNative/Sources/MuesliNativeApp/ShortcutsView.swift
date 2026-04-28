@@ -11,11 +11,11 @@ struct ShortcutsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: MuesliTheme.spacing24) {
-                Text("Shortcuts")
+                Text(L10n.text(.shortcutsTitle, config: appState.config))
                     .font(MuesliTheme.title1())
                     .foregroundStyle(MuesliTheme.textPrimary)
 
-                Text("Choose your preferred shortcut for dictation.")
+                Text(L10n.text(.shortcutsDescription, config: appState.config))
                     .font(MuesliTheme.body())
                     .foregroundStyle(MuesliTheme.textSecondary)
 
@@ -37,10 +37,10 @@ struct ShortcutsView: View {
         VStack(alignment: .leading, spacing: MuesliTheme.spacing16) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: MuesliTheme.spacing4) {
-                    Text("Push to Talk")
+                    Text(L10n.text(.shortcutsPushToTalk, config: appState.config))
                         .font(MuesliTheme.headline())
                         .foregroundStyle(MuesliTheme.textPrimary)
-                    Text("Hold to record, release to transcribe")
+                    Text(L10n.text(.shortcutsPushToTalkHint, config: appState.config))
                         .font(MuesliTheme.caption())
                         .foregroundStyle(MuesliTheme.textSecondary)
                 }
@@ -84,7 +84,11 @@ struct ShortcutsView: View {
                 startRecording()
             }
         } label: {
-            Text(isRecording ? "Press a modifier key..." : "Change Shortcut")
+            Text(
+                isRecording
+                    ? L10n.text(.shortcutsPressModifier, config: appState.config)
+                    : L10n.text(.shortcutsChangeShortcut, config: appState.config)
+            )
                 .font(MuesliTheme.body())
                 .foregroundStyle(isRecording ? MuesliTheme.accent : MuesliTheme.textPrimary)
         }
@@ -103,10 +107,10 @@ struct ShortcutsView: View {
         VStack(alignment: .leading, spacing: MuesliTheme.spacing16) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: MuesliTheme.spacing4) {
-                    Text("Hands-Free Mode")
+                    Text(L10n.text(.shortcutsHandsFreeMode, config: appState.config))
                         .font(MuesliTheme.headline())
                         .foregroundStyle(MuesliTheme.textPrimary)
-                    Text("Double-tap to start, tap again to stop")
+                    Text(L10n.text(.shortcutsHandsFreeHint, config: appState.config))
                         .font(MuesliTheme.caption())
                         .foregroundStyle(MuesliTheme.textSecondary)
                 }
@@ -135,7 +139,7 @@ struct ShortcutsView: View {
         Button {
             controller.updateDictationHotkey(.default)
         } label: {
-            Text("Reset to Default")
+            Text(L10n.text(.shortcutsResetDefault, config: appState.config))
                 .font(MuesliTheme.body())
                 .foregroundStyle(MuesliTheme.textSecondary)
         }

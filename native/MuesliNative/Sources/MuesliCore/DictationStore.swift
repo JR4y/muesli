@@ -60,9 +60,16 @@ public final class DictationStore {
             created_at TEXT DEFAULT (datetime('now'))
         );
         CREATE INDEX IF NOT EXISTS idx_meetings_start_time ON meetings(start_time DESC);
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_meetings_calendar_event_id ON meetings(calendar_event_id) WHERE calendar_event_id IS NOT NULL;
         """
         try exec(createSQL, db: db)
+        let _ = sqlite3_exec(db, "DROP INDEX IF EXISTS idx_meetings_calendar_event_id", nil, nil, nil)
+        let _ = sqlite3_exec(
+            db,
+            "CREATE INDEX IF NOT EXISTS idx_meetings_calendar_event_id ON meetings(calendar_event_id) WHERE calendar_event_id IS NOT NULL",
+            nil,
+            nil,
+            nil
+        )
 
         let foldersSQL = """
         CREATE TABLE IF NOT EXISTS meeting_folders (
@@ -651,6 +658,22 @@ public final class DictationStore {
         }
         defer { sqlite3_finalize(statement) }
         bindOptionalText(path, at: 1, statement: statement)
+        sqlite3_bind_int64(statement, 2, id)
+        guard sqlite3_step(statement) == SQLITE_DONE else {
+            throw lastError(db)
+        }
+    }
+
+    public func updateMeetingCalendarEventID(id: Int64, calendarEventID: String?) throws {
+        let db = try openDatabase()
+        defer { sqlite3_close(db) }
+        let sql = "UPDATE meetings SET calendar_event_id = ? WHERE id = ?"
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw lastError(db)
+        }
+        defer { sqlite3_finalize(statement) }
+        bindOptionalText(calendarEventID, at: 1, statement: statement)
         sqlite3_bind_int64(statement, 2, id)
         guard sqlite3_step(statement) == SQLITE_DONE else {
             throw lastError(db)

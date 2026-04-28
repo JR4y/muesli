@@ -71,6 +71,7 @@ struct CompletedMeetingPersistenceResult {
 
 @MainActor
 final class MuesliController: NSObject {
+    private static let iso8601DateFormatter = ISO8601DateFormatter()
     private let runtime: RuntimePaths
     private let configStore = ConfigStore()
     private let dictationStore: DictationStore
@@ -138,6 +139,7 @@ final class MuesliController: NSObject {
         )
         self.meetingHookDispatcher = meetingHookDispatcher
         self.config = loadedConfig
+        MuesliTheme.currentThemePreset = loadedConfig.resolvedThemePreset
         if loadedConfig.recordingColorHex != "1e1e2e" {
             MuesliTheme.accentOverrideHex = loadedConfig.recordingColorHex
         }
@@ -241,7 +243,8 @@ final class MuesliController: NSObject {
         refreshUI()
 
         meetingMonitor.calendarEventProvider = { [weak self] in
-            self?.calendarMonitor.currentOrNearbyEvent()
+            guard let self else { return nil }
+            return self.calendarMonitor.currentOrNearbyEvent(excluding: Set(self.config.hiddenLocalCalendarIDs))
         }
         meetingMonitor.detectionEnabledProvider = { [weak self] in
             self?.config.showMeetingDetectionNotification ?? false
@@ -373,6 +376,45 @@ final class MuesliController: NSObject {
         return try? dictationStore.meeting(id: id)
     }
 
+    func suggestedCalendarEvents(for meeting: MeetingRecord) -> [UnifiedCalendarEvent] {
+        guard let meetingStartDate = Self.iso8601DateFormatter.date(from: meeting.startTime) else { return [] }
+
+        let hiddenLocalCalendarIDs = Set(config.hiddenLocalCalendarIDs)
+        let rangeStart = meetingStartDate.addingTimeInterval(-2 * 60 * 60)
+        let rangeEnd = meetingStartDate.addingTimeInterval(6 * 60 * 60)
+
+        let localEvents = calendarMonitor.events(
+            from: rangeStart,
+            to: rangeEnd,
+            excluding: hiddenLocalCalendarIDs
+        )
+
+        let googleEvents = appState.upcomingCalendarEvents.filter { event in
+            event.source == .googleCalendar
+                && event.endDate >= rangeStart
+                && event.startDate <= rangeEnd
+        }
+
+        var mergedByID: [String: UnifiedCalendarEvent] = [:]
+        for event in localEvents + googleEvents {
+            mergedByID[event.id] = event
+        }
+
+        return mergedByID.values.sorted { lhs, rhs in
+            let lhsOverlaps = lhs.startDate <= meetingStartDate && lhs.endDate >= meetingStartDate
+            let rhsOverlaps = rhs.startDate <= meetingStartDate && rhs.endDate >= meetingStartDate
+            if lhsOverlaps != rhsOverlaps {
+                return lhsOverlaps && !rhsOverlaps
+            }
+            let lhsDelta = abs(lhs.startDate.timeIntervalSince(meetingStartDate))
+            let rhsDelta = abs(rhs.startDate.timeIntervalSince(meetingStartDate))
+            if lhsDelta != rhsDelta {
+                return lhsDelta < rhsDelta
+            }
+            return lhs.startDate < rhs.startDate
+        }
+    }
+
     func dictationStats() -> DictationStats {
         (try? dictationStore.dictationStats()) ?? DictationStats(
             totalWords: 0,
@@ -453,6 +495,7 @@ final class MuesliController: NSObject {
         appState.isGoogleCalendarAvailable = googleCalAuth.isAvailable
         appState.isGoogleCalendarVerified = googleCalAuth.isVerified
         appState.isGoogleCalendarAuthenticated = googleCalAuth.isAuthenticated
+        appState.availableLocalCalendars = calendarMonitor.localCalendars()
         // Keep appState in sync with persisted hidden event IDs
         let persisted = Set(config.hiddenCalendarEventIDs)
         if appState.hiddenCalendarEventIDs != persisted {
@@ -494,6 +537,7 @@ final class MuesliController: NSObject {
     func updateConfig(_ mutate: (inout AppConfig) -> Void) {
         mutate(&config)
         configStore.save(config)
+        MuesliTheme.currentThemePreset = config.resolvedThemePreset
         MuesliTheme.accentOverrideHex = config.recordingColorHex == "1e1e2e" ? nil : config.recordingColorHex
         selectedBackend = BackendOption.all.first(where: {
             $0.backend == config.sttBackend && $0.model == config.sttModel
@@ -772,7 +816,11 @@ final class MuesliController: NSObject {
     }
 
     func refreshUpcomingCalendarEvents() async {
-        var ekEvents = calendarMonitor.upcomingEvents(daysAhead: 7)
+        appState.availableLocalCalendars = calendarMonitor.localCalendars()
+        var ekEvents = calendarMonitor.upcomingEvents(
+            daysAhead: 7,
+            excluding: Set(config.hiddenLocalCalendarIDs)
+        )
 
         if googleCalAuth.isAuthenticated {
             do {
@@ -1328,6 +1376,11 @@ final class MuesliController: NSObject {
         syncAppState()
     }
 
+    func associateMeeting(id: Int64, with event: UnifiedCalendarEvent) throws {
+        try dictationStore.updateMeetingCalendarEventID(id: id, calendarEventID: event.id)
+        syncAppState()
+    }
+
     // MARK: - Folder Management
 
     @discardableResult
@@ -1365,6 +1418,22 @@ final class MuesliController: NSObject {
         appState.hiddenCalendarEventIDs.insert(eventID)
         updateConfig { $0.hiddenCalendarEventIDs = self.appState.hiddenCalendarEventIDs.sorted() }
         statusBarController?.refresh()
+    }
+
+    func setLocalCalendarEnabled(_ calendarID: String, isEnabled: Bool) {
+        var hiddenIDs = Set(config.hiddenLocalCalendarIDs)
+        if isEnabled {
+            hiddenIDs.remove(calendarID)
+        } else {
+            hiddenIDs.insert(calendarID)
+        }
+        updateConfig { $0.hiddenLocalCalendarIDs = hiddenIDs.sorted() }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.refreshUpcomingCalendarEvents()
+            self.checkUpcomingCalendarNotifications()
+            self.meetingMonitor.refreshState()
+        }
     }
 
     func createMeetingFromCalendarEvent(_ event: UnifiedCalendarEvent, folderID: Int64?) {
@@ -1620,11 +1689,18 @@ final class MuesliController: NSObject {
 
     private func startMeetingRecordingWithSystemAudioRecovery(title: String) async throws {
         var shouldRetryAfterPermissionRequest = config.useCoreAudioTap
+        let activeCalendarEvent = calendarMonitor.currentEvent(excluding: Set(config.hiddenLocalCalendarIDs))
+        let resolvedTitle: String
+        if title == "Meeting", let calendarTitle = activeCalendarEvent?.title {
+            resolvedTitle = calendarTitle
+        } else {
+            resolvedTitle = title
+        }
 
         while true {
             let meetingSession = MeetingSession(
-                title: title,
-                calendarEventID: nil,
+                title: resolvedTitle,
+                calendarEventID: activeCalendarEvent?.id,
                 backend: selectedMeetingTranscriptionBackend,
                 runtime: runtime,
                 config: config,
@@ -1636,7 +1712,7 @@ final class MuesliController: NSObject {
                 activeMeetingSession = meetingSession
                 meetingMonitor.suppressWhileActive()
                 meetingMonitor.refreshState()
-                statusBarController?.setStatus("Meeting: \(title)")
+                statusBarController?.setStatus("Meeting: \(resolvedTitle)")
                 indicator.powerProvider = { [weak meetingSession] in
                     meetingSession?.currentPower() ?? -160
                 }

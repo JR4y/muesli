@@ -2,6 +2,7 @@ import SwiftUI
 import MuesliCore
 
 struct StatsHeaderView: View {
+    let config: AppConfig
     let dictationStats: DictationStats
     let meetingStats: MeetingStats
 
@@ -11,25 +12,25 @@ struct StatsHeaderView: View {
                 icon: "flame.fill",
                 iconColor: .orange,
                 value: "\(dictationStats.currentStreakDays)",
-                label: "day streak"
+                label: L10n.text(.statsDayStreak, config: config)
             )
             StatCard(
                 icon: "character.cursor.ibeam",
                 iconColor: MuesliTheme.accent,
                 value: formatWordCount(dictationStats.totalWords),
-                label: "words dictated"
+                label: L10n.text(.statsWordsDictated, config: config)
             )
             StatCard(
                 icon: "gauge.with.dots.needle.33percent",
                 iconColor: MuesliTheme.success,
                 value: String(format: "%.0f", dictationStats.averageWPM),
-                label: "avg WPM"
+                label: L10n.text(.statsAvgWPM, config: config)
             )
             StatCard(
                 icon: "person.2.fill",
                 iconColor: MuesliTheme.accent,
                 value: "\(meetingStats.totalMeetings)",
-                label: "meetings"
+                label: L10n.text(.statsMeetings, config: config)
             )
         }
         .padding(.horizontal, MuesliTheme.spacing24)

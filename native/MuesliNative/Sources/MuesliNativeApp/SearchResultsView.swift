@@ -181,8 +181,7 @@ private struct SearchDictationRow: View {
     }
 
     private func formatTime(_ raw: String) -> String {
-        let clean = raw.replacingOccurrences(of: "T", with: " ")
-        return clean.count > 16 ? String(clean.prefix(16)) : clean
+        MeetingDateFormatting.formatMeetingTimestamp(raw)
     }
 }
 

@@ -4,14 +4,14 @@ import MuesliCore
 enum DictationFilter: Hashable {
     case all, last2Days, lastWeek, last2Weeks, lastMonth, last3Months
 
-    var label: String {
+    func label(config: AppConfig) -> String {
         switch self {
-        case .all: return "All time"
-        case .last2Days: return "Last 2 days"
-        case .lastWeek: return "Last week"
-        case .last2Weeks: return "Last 2 weeks"
-        case .lastMonth: return "Last month"
-        case .last3Months: return "Last 3 months"
+        case .all: return L10n.text(.meetingsFilterAllTime, config: config)
+        case .last2Days: return L10n.text(.meetingsFilterLast2Days, config: config)
+        case .lastWeek: return L10n.text(.meetingsFilterLastWeek, config: config)
+        case .last2Weeks: return L10n.text(.meetingsFilterLast2Weeks, config: config)
+        case .lastMonth: return L10n.text(.meetingsFilterLastMonth, config: config)
+        case .last3Months: return L10n.text(.meetingsFilterLast3Months, config: config)
         }
     }
 }
@@ -29,7 +29,7 @@ struct DictationsView: View {
 
         let dateHeaderFormatter: DateFormatter = {
             let f = DateFormatter()
-            f.locale = Locale.current
+            f.locale = Locale(identifier: appState.config.resolvedAppLanguage.effectiveLanguageCode)
             f.dateFormat = "EEE, d MMM"
             return f
         }()
@@ -51,9 +51,9 @@ struct DictationsView: View {
                 currentRecords = []
 
                 if dayStart == today {
-                    currentHeader = "TODAY"
+                    currentHeader = L10n.text(.dictationsTodayHeader, config: appState.config)
                 } else if dayStart == yesterday {
-                    currentHeader = "YESTERDAY"
+                    currentHeader = L10n.text(.dictationsYesterdayHeader, config: appState.config)
                 } else {
                     currentHeader = dateHeaderFormatter.string(from: date).uppercased()
                 }
@@ -70,6 +70,7 @@ struct DictationsView: View {
     var body: some View {
         VStack(spacing: 0) {
             StatsHeaderView(
+                config: appState.config,
                 dictationStats: appState.dictationStats,
                 meetingStats: appState.meetingStats
             )
@@ -80,10 +81,10 @@ struct DictationsView: View {
                     Image(systemName: "mic.badge.plus")
                         .font(.system(size: 40, weight: .thin))
                         .foregroundStyle(MuesliTheme.textTertiary)
-                    Text("No dictations yet")
+                    Text(L10n.text(.dictationsNoDictationsTitle, config: appState.config))
                         .font(MuesliTheme.title3())
                         .foregroundStyle(MuesliTheme.textSecondary)
-                    Text("Hold \(appState.config.dictationHotkey.label) to start dictating")
+                    Text(L10n.text(.dictationsHoldToStart(hotkey: appState.config.dictationHotkey.label), config: appState.config))
                         .font(MuesliTheme.callout())
                         .foregroundStyle(MuesliTheme.textTertiary)
                 }
@@ -110,6 +111,7 @@ struct DictationsView: View {
                                 VStack(spacing: 1) {
                                     ForEach(group.records) { record in
                                         DictationRowView(
+                                            config: appState.config,
                                             record: record,
                                             timeOnly: formatTimeOnly(record.timestamp),
                                             onCopy: {
@@ -123,7 +125,7 @@ struct DictationsView: View {
                                             Button {
                                                 controller.copyToClipboard(record.rawText)
                                             } label: {
-                                                Label("Copy", systemImage: "doc.on.doc")
+                                                Label(L10n.text(.dictationsCopy, config: appState.config), systemImage: "doc.on.doc")
                                             }
                                         }
                                     }
@@ -161,7 +163,7 @@ struct DictationsView: View {
                     applyFilter(filter)
                 } label: {
                     HStack {
-                        Text(filter.label)
+                        Text(filter.label(config: appState.config))
                         if selectedFilter == filter {
                             Image(systemName: "checkmark")
                         }
@@ -173,7 +175,7 @@ struct DictationsView: View {
                 Image(systemName: "line.3.horizontal.decrease")
                     .font(.system(size: 11))
                 if selectedFilter != .all {
-                    Text(selectedFilter.label)
+                    Text(selectedFilter.label(config: appState.config))
                         .font(.system(size: 11))
                 }
             }
@@ -256,7 +258,7 @@ struct DictationsView: View {
 
     private static let timeFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.locale = Locale.current
+        f.locale = Locale.autoupdatingCurrent
         f.dateFormat = "hh:mm a"
         return f
     }()

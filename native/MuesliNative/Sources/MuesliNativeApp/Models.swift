@@ -404,7 +404,23 @@ struct HotkeyConfig: Codable, Equatable {
     static let `default` = HotkeyConfig()
 }
 
+enum ThemePreset: String, CaseIterable, Codable {
+    case warm
+    case neutral
+    case graphite
+
+    static func resolved(_ rawValue: String?) -> ThemePreset {
+        guard let rawValue,
+              let preset = ThemePreset(rawValue: rawValue) else {
+            return .warm
+        }
+        return preset
+    }
+}
+
 struct AppConfig: Codable {
+    var appLanguage: String = AppLanguage.system.rawValue
+    var themePreset: String = ThemePreset.warm.rawValue
     var dictationHotkey: HotkeyConfig = .default
     var sttBackend: String = BackendOption.whisper.backend
     var sttModel: String = BackendOption.whisper.model
@@ -447,6 +463,7 @@ struct AppConfig: Codable {
     var maraudersMapUnlocked: Bool = false
     var maraudersMapAudioClip: String = "bbc_world_news"
     var maraudersMapCustomAudioPath: String?
+    var hiddenLocalCalendarIDs: [String] = []
     var hiddenCalendarEventIDs: [String] = []
     var enablePostProcessor: Bool = false
     var activePostProcessorId: String = PostProcessorOption.defaultOption.id
@@ -458,6 +475,8 @@ struct AppConfig: Codable {
     var meetingHookTimeoutSeconds: Int = 30
 
     enum CodingKeys: String, CodingKey {
+        case appLanguage = "app_language"
+        case themePreset = "theme_preset"
         case dictationHotkey = "dictation_hotkey"
         case sttBackend = "stt_backend"
         case sttModel = "stt_model"
@@ -498,6 +517,7 @@ struct AppConfig: Codable {
         case maraudersMapUnlocked = "marauders_map_unlocked"
         case maraudersMapAudioClip = "marauders_map_audio_clip"
         case maraudersMapCustomAudioPath = "marauders_map_custom_audio_path"
+        case hiddenLocalCalendarIDs = "hidden_local_calendar_ids"
         case hiddenCalendarEventIDs = "hidden_calendar_event_ids"
         case enablePostProcessor = "enable_post_processor"
         case activePostProcessorId = "active_post_processor_id"
@@ -514,6 +534,8 @@ struct AppConfig: Codable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let defaults = AppConfig()
+        appLanguage = AppLanguage.resolved(try? c.decode(String.self, forKey: .appLanguage)).rawValue
+        themePreset = ThemePreset.resolved(try? c.decode(String.self, forKey: .themePreset)).rawValue
         dictationHotkey = (try? c.decode(HotkeyConfig.self, forKey: .dictationHotkey)) ?? defaults.dictationHotkey
         sttBackend = (try? c.decode(String.self, forKey: .sttBackend)) ?? defaults.sttBackend
         sttModel = (try? c.decode(String.self, forKey: .sttModel)) ?? defaults.sttModel
@@ -555,6 +577,7 @@ struct AppConfig: Codable {
         maraudersMapUnlocked = (try? c.decode(Bool.self, forKey: .maraudersMapUnlocked)) ?? defaults.maraudersMapUnlocked
         maraudersMapAudioClip = (try? c.decode(String.self, forKey: .maraudersMapAudioClip)) ?? defaults.maraudersMapAudioClip
         maraudersMapCustomAudioPath = try? c.decode(String.self, forKey: .maraudersMapCustomAudioPath)
+        hiddenLocalCalendarIDs = (try? c.decode([String].self, forKey: .hiddenLocalCalendarIDs)) ?? defaults.hiddenLocalCalendarIDs
         hiddenCalendarEventIDs = (try? c.decode([String].self, forKey: .hiddenCalendarEventIDs)) ?? defaults.hiddenCalendarEventIDs
         enablePostProcessor = (try? c.decode(Bool.self, forKey: .enablePostProcessor)) ?? defaults.enablePostProcessor
         activePostProcessorId = (try? c.decode(String.self, forKey: .activePostProcessorId)) ?? defaults.activePostProcessorId
@@ -568,6 +591,14 @@ struct AppConfig: Codable {
 
     var resolvedCohereLanguage: CohereTranscribeLanguage {
         CohereTranscribeLanguage.resolved(cohereLanguage)
+    }
+
+    var resolvedAppLanguage: AppLanguage {
+        AppLanguage.resolved(appLanguage)
+    }
+
+    var resolvedThemePreset: ThemePreset {
+        ThemePreset.resolved(themePreset)
     }
 }
 

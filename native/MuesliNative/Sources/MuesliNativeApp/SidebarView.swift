@@ -42,19 +42,19 @@ struct SidebarView: View {
         switch appState.sparkleUpdateStatus {
         case .available:
             return UpdateCTA(
-                label: "Update Now",
+                label: L10n.text(.sidebarUpdateNow, config: appState.config),
                 icon: "arrow.down",
                 foreground: updateCTAForeground,
-                accessibilityLabel: "Update available",
-                tooltip: "Open About to install the update"
+                accessibilityLabel: L10n.text(.sidebarUpdateAvailable, config: appState.config),
+                tooltip: L10n.text(.sidebarUpdateTooltip, config: appState.config)
             )
         case .downloaded:
             return UpdateCTA(
-                label: "Restart",
+                label: L10n.text(.sidebarRestart, config: appState.config),
                 icon: "arrow.clockwise",
                 foreground: updateCTAForeground,
-                accessibilityLabel: "Update ready to install",
-                tooltip: "Open About to finish installing the update"
+                accessibilityLabel: L10n.text(.sidebarUpdateReady, config: appState.config),
+                tooltip: L10n.text(.sidebarRestartTooltip, config: appState.config)
             )
         case .idle, .checking, .busy, .installing, .upToDate, .disabled, .failed:
             return nil
@@ -100,16 +100,16 @@ struct SidebarView: View {
             sidebarHeader
             searchBar
 
-            sidebarItem(tab: .dictations, icon: "mic.fill", label: "Dictations")
             meetingsSection
-            sidebarItem(tab: .dictionary, icon: "character.book.closed", label: "Dictionary")
-            sidebarItem(tab: .models, icon: "square.and.arrow.down", label: "Models")
-            sidebarItem(tab: .shortcuts, icon: "keyboard", label: "Shortcuts")
+            sidebarItem(tab: .dictations, icon: "mic.fill", label: L10n.text(.sidebarDictations, config: appState.config))
+            sidebarItem(tab: .dictionary, icon: "character.book.closed", label: L10n.text(.sidebarDictionary, config: appState.config))
+            sidebarItem(tab: .models, icon: "square.and.arrow.down", label: L10n.text(.sidebarModels, config: appState.config))
+            sidebarItem(tab: .shortcuts, icon: "keyboard", label: L10n.text(.sidebarShortcuts, config: appState.config))
 
             Spacer()
 
-            sidebarItem(tab: .settings, icon: "gearshape", label: "Settings")
-            sidebarItem(tab: .about, icon: "info.circle", label: "About", updateCTA: pendingUpdateCTA)
+            sidebarItem(tab: .settings, icon: "gearshape", label: L10n.text(.sidebarSettings, config: appState.config))
+            sidebarItem(tab: .about, icon: "info.circle", label: L10n.text(.sidebarAbout, config: appState.config), updateCTA: pendingUpdateCTA)
             darkModeToggle
                 .padding(.bottom, MuesliTheme.spacing16)
         }
@@ -126,13 +126,13 @@ struct SidebarView: View {
             }
         }
         .alert(
-            "Delete \"\(folderToDelete?.name ?? "")\"?",
+            "\(L10n.text(.sidebarDelete, config: appState.config)) \"\(folderToDelete?.name ?? "")\"?",
             isPresented: $showDeleteConfirmation
         ) {
-            Button("Cancel", role: .cancel) {
+            Button(L10n.text(.sidebarCancel, config: appState.config), role: .cancel) {
                 folderToDelete = nil
             }
-            Button("Delete", role: .destructive) {
+            Button(L10n.text(.sidebarDelete, config: appState.config), role: .destructive) {
                 if let folder = folderToDelete {
                     controller.deleteFolder(id: folder.id)
                     controller.showMeetingsHome(folderID: appState.selectedFolderID)
@@ -144,9 +144,9 @@ struct SidebarView: View {
                 appState.meetingCountsByFolder[folder.id] ?? 0
             } ?? 0
             if count > 0 {
-                Text("\(count) meeting\(count == 1 ? "" : "s") in this folder will be moved to Unfiled.")
+                Text(L10n.text(.sidebarMeetingsMovedToUnfiled(count: count), config: appState.config))
             } else {
-                Text("This folder will be permanently removed.")
+                Text(L10n.text(.sidebarFolderRemoved, config: appState.config))
             }
         }
     }
@@ -172,7 +172,7 @@ struct SidebarView: View {
                     .foregroundStyle(MuesliTheme.textPrimary)
             }
             if !userName.isEmpty {
-                Text("Hi, \(userName)")
+                Text(L10n.text(.sidebarGreeting(name: userName), config: appState.config))
                     .font(MuesliTheme.caption())
                     .foregroundStyle(MuesliTheme.textTertiary)
                     .padding(.leading, 34)
@@ -189,7 +189,7 @@ struct SidebarView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 12))
                 .foregroundStyle(MuesliTheme.textTertiary)
-            TextField("Search...", text: searchTextBinding)
+            TextField(L10n.text(.sidebarSearchPlaceholder, config: appState.config), text: searchTextBinding)
                 .textFieldStyle(.plain)
                 .font(MuesliTheme.callout())
                 .foregroundStyle(MuesliTheme.textPrimary)
@@ -240,7 +240,7 @@ struct SidebarView: View {
                             .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(isSelected ? MuesliTheme.accent : MuesliTheme.textSecondary)
                             .frame(width: sidebarIconColumnWidth)
-                        Text("Meetings")
+                        Text(L10n.text(.sidebarMeetings, config: appState.config))
                             .font(MuesliTheme.headline())
                             .foregroundStyle(isSelected ? MuesliTheme.textPrimary : MuesliTheme.textSecondary)
                         Spacer(minLength: 0)
@@ -268,7 +268,7 @@ struct SidebarView: View {
                         .frame(width: meetingsTrailingColumnWidth, height: 18)
                 }
                 .buttonStyle(.plain)
-                .help("New Meeting Folder")
+                .help(L10n.text(.sidebarNewMeetingFolder, config: appState.config))
             }
             .padding(.horizontal, sidebarRowHorizontalPadding)
             .padding(.vertical, MuesliTheme.spacing8)
@@ -282,7 +282,7 @@ struct SidebarView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     meetingFilterRow(
                         icon: "tray.2",
-                        label: "All Meetings",
+                        label: L10n.text(.sidebarAllMeetings, config: appState.config),
                         count: appState.totalMeetingCount,
                         isSelected: appState.selectedTab == .meetings && appState.selectedFolderID == nil
                     ) {
@@ -314,12 +314,12 @@ struct SidebarView: View {
                                 commitOrder: { ids in controller.reorderFolders(ids: ids) }
                             ))
                             .contextMenu {
-                                Button("Rename") {
+                                Button(L10n.text(.sidebarRename, config: appState.config)) {
                                     renamingFolderID = folder.id
                                     renamingFolderName = folder.name
                                 }
                                 Divider()
-                                Button("Delete", role: .destructive) {
+                                Button(L10n.text(.sidebarDelete, config: appState.config), role: .destructive) {
                                     folderToDelete = folder
                                     showDeleteConfirmation = true
                                 }
@@ -466,7 +466,7 @@ struct SidebarView: View {
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(MuesliTheme.accent)
                 .frame(width: sidebarIconColumnWidth)
-            TextField("Folder name", text: $renamingFolderName)
+            TextField(L10n.text(.sidebarFolderName, config: appState.config), text: $renamingFolderName)
                 .font(MuesliTheme.callout())
                 .textFieldStyle(.plain)
                 .onSubmit {
@@ -495,12 +495,13 @@ struct SidebarView: View {
     }
 
     private func createNewFolder() {
-        if let id = controller.createFolder(name: "New Folder") {
+        let newFolderName = L10n.text(.sidebarNewFolder, config: appState.config)
+        if let id = controller.createFolder(name: newFolderName) {
             withAnimation(.easeInOut(duration: 0.15)) {
                 meetingsExpanded = true
             }
             renamingFolderID = id
-            renamingFolderName = "New Folder"
+            renamingFolderName = newFolderName
             controller.showMeetingsHome(folderID: id)
         }
     }

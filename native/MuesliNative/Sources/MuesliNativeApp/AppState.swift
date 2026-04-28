@@ -62,6 +62,7 @@ final class AppState {
     var isGoogleCalendarAvailable: Bool = false
     var isGoogleCalendarVerified: Bool = false
     var isGoogleCalendarAuthenticated: Bool = false
+    var availableLocalCalendars: [LocalCalendarInfo] = []
     var upcomingCalendarEvents: [UnifiedCalendarEvent] = []
     var hiddenCalendarEventIDs: Set<String> = []
     var sparkleUpdateStatus: SparkleUpdateStatus = .idle
@@ -81,7 +82,7 @@ final class AppState {
     var isSearchActive: Bool { !searchQuery.isEmpty }
 
     // Navigation
-    var selectedTab: DashboardTab = .dictations
+    var selectedTab: DashboardTab = .meetings
 
     // Computed
     var selectedMeeting: MeetingRecord? {

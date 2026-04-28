@@ -1,3 +1,4 @@
+import AppKit
 import EventKit
 import Foundation
 import MuesliCore
@@ -25,6 +26,7 @@ final class CalendarMonitor {
             }
             DispatchQueue.main.async {
                 self?.registerForChanges()
+                self?.onCalendarChanged?()
             }
         }
     }
@@ -50,10 +52,36 @@ final class CalendarMonitor {
         }
     }
 
+    func localCalendars() -> [LocalCalendarInfo] {
+        store.calendars(for: .event)
+            .map {
+                LocalCalendarInfo(
+                    id: $0.calendarIdentifier,
+                    title: $0.title,
+                    sourceTitle: $0.source.title,
+                    colorHex: Self.hexString(from: $0.cgColor)
+                )
+            }
+            .sorted { lhs, rhs in
+                let lhsSource = lhs.sourceTitle ?? ""
+                let rhsSource = rhs.sourceTitle ?? ""
+                if lhsSource != rhsSource {
+                    return lhsSource.localizedCaseInsensitiveCompare(rhsSource) == .orderedAscending
+                }
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            }
+    }
+
     /// Returns the current calendar event if one is happening right now.
-    func currentEvent() -> UpcomingMeetingEvent? {
+    func currentEvent(excluding hiddenCalendarIDs: Set<String> = []) -> UpcomingMeetingEvent? {
+        let calendars = visibleCalendars(excluding: hiddenCalendarIDs, using: store)
+        guard !calendars.isEmpty else { return nil }
         let now = Date()
-        let predicate = store.predicateForEvents(withStart: now.addingTimeInterval(-3600), end: now.addingTimeInterval(60), calendars: nil)
+        let predicate = store.predicateForEvents(
+            withStart: now.addingTimeInterval(-3600),
+            end: now.addingTimeInterval(60),
+            calendars: calendars
+        )
         let events = store.events(matching: predicate)
         for event in events {
             guard !event.isAllDay else { continue }
@@ -72,11 +100,13 @@ final class CalendarMonitor {
 
     /// Returns the current or recently started event (within 15 minutes)
     /// for meeting detection. Prefers currently active events over nearby ones.
-    func currentOrNearbyEvent() -> CalendarEventContext? {
+    func currentOrNearbyEvent(excluding hiddenCalendarIDs: Set<String> = []) -> CalendarEventContext? {
+        let calendars = visibleCalendars(excluding: hiddenCalendarIDs, using: store)
+        guard !calendars.isEmpty else { return nil }
         let now = Date()
         let searchStart = now.addingTimeInterval(-15 * 60)
         let searchEnd = now.addingTimeInterval(5 * 60)
-        let predicate = store.predicateForEvents(withStart: searchStart, end: searchEnd, calendars: nil)
+        let predicate = store.predicateForEvents(withStart: searchStart, end: searchEnd, calendars: calendars)
         let events = store.events(matching: predicate)
 
         var nearby: CalendarEventContext?
@@ -101,7 +131,7 @@ final class CalendarMonitor {
 
     /// Returns upcoming timed events from the local macOS calendar (EventKit) for the next N days.
     /// All-day events are excluded — they're not useful for meeting recording.
-    func upcomingEvents(daysAhead: Int = 7) -> [UnifiedCalendarEvent] {
+    func upcomingEvents(daysAhead: Int = 7, excluding hiddenCalendarIDs: Set<String> = []) -> [UnifiedCalendarEvent] {
         // Create a fresh EKEventStore each time to avoid stale cache.
         // EKEventStore instances cache calendar data and don't automatically
         // reflect external changes (e.g., events moved in Google Calendar).
@@ -109,7 +139,9 @@ final class CalendarMonitor {
         let freshStore = EKEventStore()
         let now = Date()
         guard let future = Calendar.current.date(byAdding: .day, value: daysAhead, to: now) else { return [] }
-        let predicate = freshStore.predicateForEvents(withStart: now, end: future, calendars: nil)
+        let calendars = visibleCalendars(excluding: hiddenCalendarIDs, using: freshStore)
+        guard !calendars.isEmpty else { return [] }
+        let predicate = freshStore.predicateForEvents(withStart: now, end: future, calendars: calendars)
         let events = freshStore.events(matching: predicate)
         return events.compactMap { event in
             guard let startDate = event.startDate, let endDate = event.endDate else { return nil }
@@ -121,7 +153,40 @@ final class CalendarMonitor {
                 endDate: endDate,
                 isAllDay: false,
                 source: .eventKit,
-                meetingURL: Self.extractMeetingURL(from: event)
+                meetingURL: Self.extractMeetingURL(from: event),
+                calendarID: event.calendar.calendarIdentifier,
+                calendarName: event.calendar.title,
+                calendarSourceTitle: event.calendar.source.title,
+                calendarColorHex: Self.hexString(from: event.calendar.cgColor)
+            )
+        }.sorted { $0.startDate < $1.startDate }
+    }
+
+    func events(
+        from startDate: Date,
+        to endDate: Date,
+        excluding hiddenCalendarIDs: Set<String> = []
+    ) -> [UnifiedCalendarEvent] {
+        let freshStore = EKEventStore()
+        let calendars = visibleCalendars(excluding: hiddenCalendarIDs, using: freshStore)
+        guard !calendars.isEmpty else { return [] }
+        let predicate = freshStore.predicateForEvents(withStart: startDate, end: endDate, calendars: calendars)
+        let events = freshStore.events(matching: predicate)
+        return events.compactMap { event in
+            guard let eventStartDate = event.startDate, let eventEndDate = event.endDate else { return nil }
+            guard !event.isAllDay else { return nil }
+            return UnifiedCalendarEvent(
+                id: event.eventIdentifier ?? UUID().uuidString,
+                title: event.title ?? "Meeting",
+                startDate: eventStartDate,
+                endDate: eventEndDate,
+                isAllDay: false,
+                source: .eventKit,
+                meetingURL: Self.extractMeetingURL(from: event),
+                calendarID: event.calendar.calendarIdentifier,
+                calendarName: event.calendar.title,
+                calendarSourceTitle: event.calendar.source.title,
+                calendarColorHex: Self.hexString(from: event.calendar.cgColor)
             )
         }.sorted { $0.startDate < $1.startDate }
     }
@@ -173,6 +238,21 @@ final class CalendarMonitor {
         guard let match = regex.firstMatch(in: text, range: range) else { return nil }
         guard let matchRange = Range(match.range, in: text) else { return nil }
         return URL(string: String(text[matchRange]))
+    }
+
+    private func visibleCalendars(excluding hiddenCalendarIDs: Set<String>, using store: EKEventStore) -> [EKCalendar] {
+        store.calendars(for: .event).filter { !hiddenCalendarIDs.contains($0.calendarIdentifier) }
+    }
+
+    private static func hexString(from cgColor: CGColor?) -> String? {
+        guard let cgColor,
+              let color = NSColor(cgColor: cgColor)?.usingColorSpace(.deviceRGB) else {
+            return nil
+        }
+        let red = Int(round(color.redComponent * 255))
+        let green = Int(round(color.greenComponent * 255))
+        let blue = Int(round(color.blueComponent * 255))
+        return String(format: "%02X%02X%02X", red, green, blue)
     }
 
 }

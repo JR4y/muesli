@@ -20,7 +20,7 @@ struct AboutView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: MuesliTheme.spacing32) {
-                Text("About")
+                Text(L10n.text(.aboutTitle, config: appState.config))
                     .font(MuesliTheme.title1())
                     .foregroundStyle(MuesliTheme.textPrimary)
 
@@ -29,9 +29,9 @@ struct AboutView: View {
                 }
 
                 // MARK: - App Info
-                sectionHeader("App Info")
+                sectionHeader(L10n.text(.aboutAppInfoSection, config: appState.config))
                 aboutCard {
-                    aboutRow("Version") {
+                    aboutRow(L10n.text(.aboutVersion, config: appState.config)) {
                         Text(version)
                             .font(.system(size: 15, weight: .semibold, design: .monospaced))
                             .foregroundStyle(MuesliTheme.textPrimary)
@@ -39,24 +39,24 @@ struct AboutView: View {
 
                     Divider().background(MuesliTheme.surfaceBorder)
 
-                    aboutRow("Check for Updates") {
-                        actionButton("Check Now", icon: "arrow.triangle.2.circlepath") {
+                    aboutRow(L10n.text(.aboutCheckForUpdates, config: appState.config)) {
+                        actionButton(L10n.text(.aboutCheckNow, config: appState.config), icon: "arrow.triangle.2.circlepath") {
                             controller.retryUpdateCheck()
                         }
                     }
                 }
 
                 // MARK: - Support
-                sectionHeader("Support")
+                sectionHeader(L10n.text(.aboutSupportSection, config: appState.config))
                 aboutCard {
-                    aboutRow("Support Development") {
+                    aboutRow(L10n.text(.aboutSupportDevelopment, config: appState.config)) {
                         Button {
                             if let url = URL(string: donateURL) { NSWorkspace.shared.open(url) }
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "heart.fill")
                                     .font(.system(size: 12))
-                                Text("Donate")
+                                Text(L10n.text(.aboutDonate, config: appState.config))
                                     .font(.system(size: 13, weight: .semibold))
                             }
                             .foregroundStyle(.white)
@@ -70,18 +70,18 @@ struct AboutView: View {
 
                     Divider().background(MuesliTheme.surfaceBorder)
 
-                    aboutRow("Source Code") {
-                        actionButton("View on GitHub", icon: "arrow.up.right.square") {
+                    aboutRow(L10n.text(.aboutSourceCode, config: appState.config)) {
+                        actionButton(L10n.text(.aboutViewOnGitHub, config: appState.config), icon: "arrow.up.right.square") {
                             if let url = URL(string: githubURL) { NSWorkspace.shared.open(url) }
                         }
                     }
                 }
 
                 // MARK: - Data
-                sectionHeader("Data")
+                sectionHeader(L10n.text(.aboutDataSection, config: appState.config))
                 aboutCard {
                     VStack(alignment: .leading, spacing: MuesliTheme.spacing12) {
-                        Text("App Data Directory")
+                        Text(L10n.text(.aboutAppDataDirectory, config: appState.config))
                             .font(MuesliTheme.body())
                             .foregroundStyle(MuesliTheme.textPrimary)
 
@@ -93,7 +93,7 @@ struct AboutView: View {
                                 .truncationMode(.middle)
                                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                            actionButton("Open", icon: "folder") {
+                            actionButton(L10n.text(.aboutOpen, config: appState.config), icon: "folder") {
                                 NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: appDataPath)
                             }
                         }
@@ -101,7 +101,7 @@ struct AboutView: View {
                 }
 
                 // MARK: - Acknowledgements
-                sectionHeader("Acknowledgements")
+                sectionHeader(L10n.text(.aboutAcknowledgementsSection, config: appState.config))
                 aboutCard {
                     acknowledgement(
                         name: "FluidAudio by FluidInference",
@@ -158,15 +158,6 @@ struct AboutView: View {
         case install
         case retry
 
-        var title: String {
-            switch self {
-            case .install:
-                return "Install Update"
-            case .retry:
-                return "Try Again"
-            }
-        }
-
         var icon: String {
             switch self {
             case .install:
@@ -184,15 +175,15 @@ struct AboutView: View {
         case .checking:
             return UpdateBanner(
                 icon: "arrow.triangle.2.circlepath",
-                title: "Checking for updates",
-                message: "Muesli is checking the appcast for the latest version.",
+                title: L10n.text(.aboutCheckingForUpdatesTitle, config: appState.config),
+                message: L10n.text(.aboutCheckingForUpdatesMessage, config: appState.config),
                 tint: MuesliTheme.transcribing,
                 action: nil
             )
         case .busy(let message):
             return UpdateBanner(
                 icon: "clock.arrow.circlepath",
-                title: "Updater is busy",
+                title: L10n.text(.aboutUpdaterBusyTitle, config: appState.config),
                 message: message,
                 tint: MuesliTheme.transcribing,
                 action: nil
@@ -200,39 +191,39 @@ struct AboutView: View {
         case .available(let version):
             return UpdateBanner(
                 icon: "exclamationmark.triangle.fill",
-                title: "Muesli \(version) is available",
-                message: "An update is available. Start the updater to download and install it.",
+                title: L10n.text(.aboutUpdateAvailableTitle(version: version), config: appState.config),
+                message: L10n.text(.aboutUpdateAvailableMessage, config: appState.config),
                 tint: MuesliTheme.transcribing,
                 action: .install
             )
         case .downloaded(let version):
             return UpdateBanner(
                 icon: "exclamationmark.triangle.fill",
-                title: "Muesli \(version) is ready to install",
-                message: "Quit and reopen Muesli to finish installing the update.",
+                title: L10n.text(.aboutUpdateReadyTitle(version: version), config: appState.config),
+                message: L10n.text(.aboutUpdateReadyMessage, config: appState.config),
                 tint: MuesliTheme.transcribing,
                 action: nil
             )
         case .installing(let version):
             return UpdateBanner(
                 icon: "arrow.down.circle.fill",
-                title: "Installing Muesli \(version)",
-                message: "Sparkle is preparing the update. Muesli may relaunch when installation finishes.",
+                title: L10n.text(.aboutInstallingUpdateTitle(version: version), config: appState.config),
+                message: L10n.text(.aboutInstallingUpdateMessage, config: appState.config),
                 tint: MuesliTheme.transcribing,
                 action: nil
             )
         case .upToDate:
             return UpdateBanner(
                 icon: "checkmark.circle.fill",
-                title: "Muesli is up to date",
-                message: "No newer version was found in the appcast.",
+                title: L10n.text(.aboutUpToDateTitle, config: appState.config),
+                message: L10n.text(.aboutUpToDateMessage, config: appState.config),
                 tint: MuesliTheme.success,
                 action: nil
             )
         case .disabled(let message):
             return UpdateBanner(
                 icon: "minus.circle.fill",
-                title: "Updates are disabled",
+                title: L10n.text(.aboutUpdatesDisabledTitle, config: appState.config),
                 message: message,
                 tint: MuesliTheme.textTertiary,
                 action: nil
@@ -240,7 +231,7 @@ struct AboutView: View {
         case .failed(let message):
             return UpdateBanner(
                 icon: "xmark.octagon.fill",
-                title: "Update check failed",
+                title: L10n.text(.aboutUpdateCheckFailedTitle, config: appState.config),
                 message: message,
                 tint: MuesliTheme.recording,
                 action: .retry
@@ -269,7 +260,7 @@ struct AboutView: View {
             Spacer(minLength: MuesliTheme.spacing16)
 
             if let action = banner.action {
-                actionButton(action.title, icon: action.icon) {
+                actionButton(actionTitle(action), icon: action.icon) {
                     switch action {
                     case .install:
                         controller.installAvailableUpdate()
@@ -286,6 +277,15 @@ struct AboutView: View {
             RoundedRectangle(cornerRadius: MuesliTheme.cornerMedium)
                 .strokeBorder(banner.tint.opacity(0.45), lineWidth: 1)
         )
+    }
+
+    private func actionTitle(_ action: UpdateBannerAction) -> String {
+        switch action {
+        case .install:
+            return L10n.text(.aboutInstallUpdate, config: appState.config)
+        case .retry:
+            return L10n.text(.aboutTryAgain, config: appState.config)
+        }
     }
 
     @ViewBuilder

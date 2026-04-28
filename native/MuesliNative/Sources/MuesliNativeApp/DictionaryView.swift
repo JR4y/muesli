@@ -25,7 +25,7 @@ struct DictionaryView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: MuesliTheme.spacing8) {
             HStack {
-                Text("Dictionary")
+                Text(L10n.text(.dictionaryTitle, config: appState.config))
                     .font(MuesliTheme.title1())
                     .foregroundStyle(MuesliTheme.textPrimary)
                 Spacer()
@@ -38,7 +38,7 @@ struct DictionaryView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "plus")
                             .font(.system(size: 11, weight: .bold))
-                        Text("Add new")
+                        Text(L10n.text(.dictionaryAddNew, config: appState.config))
                             .font(.system(size: 13, weight: .medium))
                     }
                     .foregroundStyle(MuesliTheme.textPrimary)
@@ -53,7 +53,7 @@ struct DictionaryView: View {
                 }
                 .buttonStyle(.plain)
             }
-            Text("Add custom words for names, brands, and domain terms, and tune how aggressively each entry should fuzzy-match transcription errors.")
+            Text(L10n.text(.dictionaryDescription, config: appState.config))
                 .font(MuesliTheme.body())
                 .foregroundStyle(MuesliTheme.textSecondary)
         }
@@ -70,7 +70,7 @@ struct DictionaryView: View {
                 emptyState
             } else {
                 ForEach(appState.config.customWords) { word in
-                    DictionaryWordEditorRow(word: word, controller: controller)
+                    DictionaryWordEditorRow(word: word, controller: controller, config: appState.config)
                     Divider().background(MuesliTheme.surfaceBorder)
                 }
             }
@@ -88,10 +88,10 @@ struct DictionaryView: View {
             Image(systemName: "character.book.closed")
                 .font(.system(size: 28))
                 .foregroundStyle(MuesliTheme.textTertiary)
-            Text("No custom words yet")
+            Text(L10n.text(.dictionaryEmptyTitle, config: appState.config))
                 .font(MuesliTheme.body())
                 .foregroundStyle(MuesliTheme.textSecondary)
-            Text("Add words that transcription frequently gets wrong")
+            Text(L10n.text(.dictionaryEmptyMessage, config: appState.config))
                 .font(MuesliTheme.caption())
                 .foregroundStyle(MuesliTheme.textTertiary)
         }
@@ -102,20 +102,20 @@ struct DictionaryView: View {
     private var addWordRow: some View {
         VStack(alignment: .leading, spacing: MuesliTheme.spacing12) {
             HStack(spacing: MuesliTheme.spacing12) {
-                TextField("Word", text: $newWord)
+                TextField(L10n.text(.dictionaryWordPlaceholder, config: appState.config), text: $newWord)
                     .textFieldStyle(.roundedBorder)
-                TextField("Replace with (optional)", text: $newReplacement)
+                TextField(L10n.text(.dictionaryReplacementPlaceholder, config: appState.config), text: $newReplacement)
                     .textFieldStyle(.roundedBorder)
             }
 
             thresholdEditorRow(
                 threshold: $newThreshold,
-                label: "Matching threshold"
+                label: L10n.text(.dictionaryMatchingThreshold, config: appState.config)
             )
 
             HStack {
                 Spacer()
-                Button("Cancel") {
+                Button(L10n.text(.sidebarCancel, config: appState.config)) {
                     isAdding = false
                     newWord = ""
                     newReplacement = ""
@@ -125,7 +125,7 @@ struct DictionaryView: View {
                 .font(.system(size: 12))
                 .foregroundStyle(MuesliTheme.textTertiary)
 
-                Button("Add") {
+                Button(L10n.text(.dictionaryAdd, config: appState.config)) {
                     let trimmedWord = newWord.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !trimmedWord.isEmpty else { return }
                     let replacement = newReplacement.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -167,6 +167,7 @@ struct DictionaryView: View {
 }
 
 private struct DictionaryWordEditorRow: View {
+    let config: AppConfig
     let word: CustomWord
     let controller: MuesliController
 
@@ -174,7 +175,8 @@ private struct DictionaryWordEditorRow: View {
     @State private var draftReplacement: String
     @State private var draftThreshold: Double
 
-    init(word: CustomWord, controller: MuesliController) {
+    init(word: CustomWord, controller: MuesliController, config: AppConfig) {
+        self.config = config
         self.word = word
         self.controller = controller
         _draftWord = State(initialValue: word.word)
@@ -199,14 +201,14 @@ private struct DictionaryWordEditorRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: MuesliTheme.spacing12) {
             HStack(spacing: MuesliTheme.spacing12) {
-                TextField("Word", text: $draftWord)
+                TextField(L10n.text(.dictionaryWordPlaceholder, config: config), text: $draftWord)
                     .textFieldStyle(.roundedBorder)
-                TextField("Replace with (optional)", text: $draftReplacement)
+                TextField(L10n.text(.dictionaryReplacementPlaceholder, config: config), text: $draftReplacement)
                     .textFieldStyle(.roundedBorder)
             }
 
             HStack(spacing: MuesliTheme.spacing12) {
-                Text("Matching threshold")
+                Text(L10n.text(.dictionaryMatchingThreshold, config: config))
                     .font(MuesliTheme.caption())
                     .foregroundStyle(MuesliTheme.textSecondary)
                 Slider(value: $draftThreshold, in: 0.70...0.95, step: 0.01)
@@ -219,14 +221,14 @@ private struct DictionaryWordEditorRow: View {
 
             HStack {
                 Spacer()
-                Button("Delete") {
+                Button(L10n.text(.sidebarDelete, config: config)) {
                     controller.removeCustomWord(id: word.id)
                 }
                 .buttonStyle(.plain)
                 .font(.system(size: 12))
                 .foregroundStyle(MuesliTheme.recording)
 
-                Button("Save") {
+                Button(L10n.text(.dictionarySave, config: config)) {
                     controller.updateCustomWord(
                         CustomWord(
                             id: word.id,
