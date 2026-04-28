@@ -117,39 +117,50 @@ struct MeetingSummaryClientTests {
 
     @Test("final notes retain manual notes verbatim")
     func finalNotesRetainManualNotesVerbatim() {
+        var config = AppConfig()
+        config.appLanguage = AppLanguage.english.rawValue
         let result = MeetingSummaryClient.notesByRetainingManualNotes(
             generatedNotes: "## Summary\n- Shipped the plan",
-            manualNotes: "- Decision: ship today\n- [ ] Follow up with Priy"
+            manualNotes: "- Decision: ship today\n- [ ] Follow up with Priy",
+            config: config
         )
 
+        #expect(result.hasPrefix("## Notes"))
         #expect(result.contains("## Summary"))
-        #expect(result.contains("### Written notes"))
         #expect(result.contains("- Decision: ship today"))
         #expect(result.contains("- [ ] Follow up with Priy"))
     }
 
     @Test("final notes do not append written notes already placed in summary")
     func finalNotesSkipAlreadyPlacedManualNotes() {
+        var config = AppConfig()
+        config.appLanguage = AppLanguage.english.rawValue
         let result = MeetingSummaryClient.notesByRetainingManualNotes(
             generatedNotes: "## Decisions\n- Decision: ship today",
-            manualNotes: "- Decision: ship today"
+            manualNotes: "- Decision: ship today",
+            config: config
         )
 
-        #expect(result == "## Decisions\n- Decision: ship today")
+        #expect(result == "## Notes\n\n- Decision: ship today\n\n## Decisions\n- Decision: ship today")
     }
 
     @Test("final notes retain missing numbered written notes without duplicating placed ones")
     func finalNotesRetainMissingNumberedManualNotes() {
+        var config = AppConfig()
+        config.appLanguage = AppLanguage.english.rawValue
         let result = MeetingSummaryClient.notesByRetainingManualNotes(
             generatedNotes: "## Decisions\n1. First decision",
-            manualNotes: "1. First decision\n2. Second decision"
+            manualNotes: "1. First decision\n2. Second decision",
+            config: config
         )
 
-        #expect(result == "## Decisions\n1. First decision\n\n### Written notes\n\n2. Second decision")
+        #expect(result == "## Notes\n\n2. Second decision\n\n## Decisions\n1. First decision")
     }
 
     @Test("final notes match manual notes across list marker changes")
     func finalNotesMatchManualNotesAcrossListMarkers() {
+        var config = AppConfig()
+        config.appLanguage = AppLanguage.english.rawValue
         let result = MeetingSummaryClient.notesByRetainingManualNotes(
             generatedNotes: """
             ## Decisions
@@ -162,25 +173,30 @@ struct MeetingSummaryClientTests {
             - [ ] Follow up with Priy
             1) First decision
             2) Second decision
-            """
+            """,
+            config: config
         )
 
-        #expect(result == "## Decisions\n- Decision: ship today\n- Follow up with Priy\n1. First decision\n\n### Written notes\n\n2) Second decision")
+        #expect(result == "## Notes\n\n2) Second decision\n\n## Decisions\n- Decision: ship today\n- Follow up with Priy\n1. First decision")
     }
 
     @Test("short written notes are not dropped by section title substring matches")
     func shortManualNotesDoNotFalseMatchSectionTitles() {
+        var config = AppConfig()
+        config.appLanguage = AppLanguage.english.rawValue
         let result = MeetingSummaryClient.notesByRetainingManualNotes(
             generatedNotes: "## Next steps\n- Follow up with Priy",
-            manualNotes: "Next steps"
+            manualNotes: "Next steps",
+            config: config
         )
 
-        #expect(result == "## Next steps\n- Follow up with Priy\n\n### Written notes\n\nNext steps")
+        #expect(result == "## Notes\n\nNext steps\n\n## Next steps\n- Follow up with Priy")
     }
 
     @Test("fallback summary retains manual notes")
     func fallbackSummaryRetainsManualNotes() async throws {
         var config = AppConfig()
+        config.appLanguage = AppLanguage.english.rawValue
         config.openAIAPIKey = ""
         config.meetingSummaryBackend = "openai"
 
@@ -193,7 +209,7 @@ struct MeetingSummaryClientTests {
         )
 
         #expect(result.contains("## Raw Transcript"))
-        #expect(result.contains("### Written notes"))
+        #expect(result.contains("## Notes"))
         #expect(result.contains("- Manual decision"))
     }
 
@@ -236,6 +252,8 @@ struct MeetingSummaryClientTests {
 
     @Test("summary failure notes make backend failure visible")
     func summaryFailureNotesAreExplicit() {
+        var config = AppConfig()
+        config.appLanguage = AppLanguage.english.rawValue
         let error = MeetingSummaryError.backendFailed(
             backend: "OpenRouter",
             statusCode: 400,
@@ -246,14 +264,15 @@ struct MeetingSummaryClientTests {
             transcript: "Raw words",
             meetingTitle: "Customer Review",
             error: error,
-            manualNotes: "- User typed this during the meeting"
+            manualNotes: "- User typed this during the meeting",
+            config: config
         )
 
         #expect(result.contains("## Summary failed"))
         #expect(result.contains("OpenRouter could not generate meeting notes."))
         #expect(result.contains("Status 400"))
         #expect(result.contains("selected model may be unavailable or retired"))
-        #expect(result.contains("### Written notes"))
+        #expect(result.contains("## Notes"))
         #expect(result.contains("- User typed this during the meeting"))
         #expect(result.contains("## Raw Transcript"))
         #expect(result.contains("Raw words"))

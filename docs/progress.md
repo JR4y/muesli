@@ -185,6 +185,30 @@ A small but practical UX pass was added for meetings organization:
 This was intentionally kept lightweight: folders are still single-assignment
 containers, not tags or nested structures.
 
+#### Calendar persistence and meeting context
+
+The next pass focused on making calendar-linked meetings durable and easier to
+trust after the event has already passed:
+
+- future meetings now persist a calendar event snapshot instead of keeping only `calendarEventID`
+- the snapshot includes useful event metadata such as title, time range, calendar source, color, and join URL
+- attendee data is now persisted together with the event snapshot
+- active meetings refresh that snapshot while they are still recording or processing, then keep it frozen once completed
+- meeting detail now shows the associated event, join link, and attendee list directly in the note view
+
+This was intentionally scoped forward-only: older historical notes were not
+backfilled.
+
+#### Meeting start and manual-notes consistency
+
+Two behavior fixes closed important daily-use gaps in the meetings flow:
+
+- `Coming Up > Join and Record` now passes the concrete calendar event id, so meetings started from the dashboard are associated immediately instead of relying on time-based inference
+- protected manual notes now render as a localized top section (`## Notes` / `## Notas`) instead of falling back to a trailing hardcoded English appendix
+
+This keeps handwritten notes intact while making the final document structure
+feel consistent with the rest of the generated summary.
+
 ## Current technical notes
 
 ### Permissions after reinstall
@@ -223,10 +247,14 @@ README "delivered features" section:
 - Editable meeting title prompt from the templates manager
 - Collapsible `Coming Up` dashboard section
 - Optional accent colors for meeting folders
+- Persisted calendar event snapshots with attendee context for future meetings
+- Meeting detail event card with join link and attendee visibility
+- Reliable calendar association when starting from `Coming Up`
+- Localized `Notes` / `Notas` section for protected written notes
 
 ## Recommended next work
 
-1. Review why nearby calendar suggestions can appear intermittently and stabilize that query/state flow
+1. Review remaining calendar edge cases around nearby suggestions and historical expectations for old notes
 2. Decide whether Google Calendar configuration should remain hidden/disabled without credentials or be exposed more explicitly
 3. Continue improving summary/title quality now that template and title-prompt controls exist
 4. Explore meeting-chat / copilot direction

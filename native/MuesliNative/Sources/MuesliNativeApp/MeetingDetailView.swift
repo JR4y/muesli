@@ -251,6 +251,7 @@ struct MeetingDetailView: View {
         if showsManualNotesEditor(for: meeting) {
             let isManualNotesEditable = canEditManualNotes(for: meeting)
             VStack(alignment: .leading, spacing: MuesliTheme.spacing12) {
+                eventSnapshotSection(for: meeting)
                 manualNotesToolbar(for: meeting)
                     .disabled(!isManualNotesEditable)
 
@@ -278,6 +279,7 @@ struct MeetingDetailView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         } else if isEditingNotes {
             VStack(alignment: .leading, spacing: MuesliTheme.spacing12) {
+                eventSnapshotSection(for: meeting)
                 contentToolbar(for: meeting)
 
                 TextEditor(text: $editableNotes)
@@ -297,6 +299,7 @@ struct MeetingDetailView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         } else {
             VStack(alignment: .leading, spacing: MuesliTheme.spacing12) {
+                eventSnapshotSection(for: meeting)
                 contentToolbar(for: meeting)
 
                 ZStack {
@@ -315,6 +318,124 @@ struct MeetingDetailView: View {
             .padding(.top, 12)
             .padding(.bottom, 24)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+    }
+
+    @ViewBuilder
+    private func eventSnapshotSection(for meeting: MeetingRecord) -> some View {
+        if let snapshot = meeting.calendarEventSnapshot {
+            VStack(alignment: .leading, spacing: MuesliTheme.spacing12) {
+                HStack(alignment: .top, spacing: MuesliTheme.spacing12) {
+                    Circle()
+                        .fill(calendarEventColor(snapshot))
+                        .frame(width: 10, height: 10)
+                        .overlay(
+                            Circle().strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 0.5)
+                        )
+                        .padding(.top, 5)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(L10n.text(.meetingAssociatedEvent, config: appState.config))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(MuesliTheme.textTertiary)
+                            .textCase(.uppercase)
+                        Text(snapshot.title)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(MuesliTheme.textPrimary)
+                        Text(calendarEventMeta(snapshot))
+                            .font(.system(size: 12))
+                            .foregroundStyle(MuesliTheme.textSecondary)
+                    }
+
+                    Spacer(minLength: MuesliTheme.spacing12)
+
+                    if let meetingURL = snapshot.meetingURL,
+                       let url = URL(string: meetingURL) {
+                        Link(destination: url) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "video")
+                                    .font(.system(size: 10, weight: .semibold))
+                                Text(L10n.text(.meetingOpenJoinLink, config: appState.config))
+                                    .font(.system(size: 11, weight: .semibold))
+                            }
+                            .foregroundStyle(MuesliTheme.textPrimary)
+                            .padding(.horizontal, MuesliTheme.spacing12)
+                            .padding(.vertical, 7)
+                            .background(
+                                RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
+                                    .fill(MuesliTheme.accent.opacity(0.18))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
+                                    .strokeBorder(MuesliTheme.accent.opacity(0.35), lineWidth: 1)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                if !snapshot.attendees.isEmpty {
+                    Divider()
+                        .background(MuesliTheme.surfaceBorder)
+
+                    VStack(alignment: .leading, spacing: MuesliTheme.spacing8) {
+                        Text(L10n.text(.meetingAttendees, config: appState.config))
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(MuesliTheme.textSecondary)
+
+                        ForEach(sortedAttendees(snapshot.attendees)) { attendee in
+                            HStack(alignment: .top, spacing: MuesliTheme.spacing12) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(attendeeDisplayName(attendee))
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(MuesliTheme.textPrimary)
+
+                                    if let email = attendee.email,
+                                       !email.isEmpty,
+                                       email.caseInsensitiveCompare(attendeeDisplayName(attendee)) != .orderedSame {
+                                        Text(email)
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(MuesliTheme.textTertiary)
+                                    }
+                                }
+
+                                Spacer(minLength: MuesliTheme.spacing8)
+
+                                HStack(spacing: 6) {
+                                    attendeeStatusChip(attendee)
+                                    if attendee.isOrganizer {
+                                        attendeeMetaChip(
+                                            L10n.text(.meetingAttendeeOrganizer, config: appState.config),
+                                            tint: MuesliTheme.accent
+                                        )
+                                    }
+                                    if attendee.isCurrentUser {
+                                        attendeeMetaChip(
+                                            L10n.text(.meetingAttendeeYou, config: appState.config),
+                                            tint: MuesliTheme.success
+                                        )
+                                    }
+                                    if attendee.isOptional {
+                                        attendeeMetaChip(
+                                            L10n.text(.meetingAttendeeOptional, config: appState.config),
+                                            tint: MuesliTheme.textTertiary
+                                        )
+                                    }
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+            }
+            .padding(MuesliTheme.spacing16)
+            .frame(maxWidth: 980, alignment: .leading)
+            .background(MuesliTheme.backgroundRaised)
+            .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerMedium))
+            .overlay(
+                RoundedRectangle(cornerRadius: MuesliTheme.cornerMedium)
+                    .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
+            )
         }
     }
 
@@ -1098,8 +1219,110 @@ struct MeetingDetailView: View {
         return timeRange
     }
 
+    private func calendarEventMeta(_ snapshot: MeetingCalendarEventSnapshot) -> String {
+        let timeRange = calendarEventTimeRange(start: snapshot.startTime, end: snapshot.endTime)
+        if let calendarName = snapshot.calendarName, !calendarName.isEmpty {
+            return "\(timeRange)  •  \(calendarName)"
+        }
+        if let sourceTitle = snapshot.calendarSourceTitle, !sourceTitle.isEmpty {
+            return "\(timeRange)  •  \(sourceTitle)"
+        }
+        return timeRange
+    }
+
     private func calendarEventColor(_ event: UnifiedCalendarEvent) -> Color {
         colorFromHex(event.calendarColorHex) ?? MuesliTheme.accent
+    }
+
+    private func calendarEventColor(_ snapshot: MeetingCalendarEventSnapshot) -> Color {
+        colorFromHex(snapshot.calendarColorHex) ?? MuesliTheme.accent
+    }
+
+    private func calendarEventTimeRange(start: String, end: String) -> String {
+        guard let startDate = Self.snapshotDate(from: start),
+              let endDate = Self.snapshotDate(from: end) else {
+            return "\(start) – \(end)"
+        }
+        return "\(Self.calendarEventTimeFormatter.string(from: startDate)) – \(Self.calendarEventTimeFormatter.string(from: endDate))"
+    }
+
+    private func sortedAttendees(_ attendees: [MeetingCalendarEventAttendee]) -> [MeetingCalendarEventAttendee] {
+        attendees.sorted { lhs, rhs in
+            if lhs.isCurrentUser != rhs.isCurrentUser {
+                return lhs.isCurrentUser && !rhs.isCurrentUser
+            }
+            if lhs.isOrganizer != rhs.isOrganizer {
+                return lhs.isOrganizer && !rhs.isOrganizer
+            }
+            return attendeeDisplayName(lhs).localizedCaseInsensitiveCompare(attendeeDisplayName(rhs)) == .orderedAscending
+        }
+    }
+
+    private func attendeeDisplayName(_ attendee: MeetingCalendarEventAttendee) -> String {
+        if let name = attendee.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+            return name
+        }
+        if let email = attendee.email?.trimmingCharacters(in: .whitespacesAndNewlines), !email.isEmpty {
+            return email
+        }
+        return "Unknown attendee"
+    }
+
+    private func attendeeStatusLabel(_ status: MeetingCalendarEventAttendee.ResponseStatus) -> String {
+        switch status {
+        case .accepted:
+            return L10n.text(.meetingAttendeeAccepted, config: appState.config)
+        case .declined:
+            return L10n.text(.meetingAttendeeDeclined, config: appState.config)
+        case .tentative:
+            return L10n.text(.meetingAttendeeTentative, config: appState.config)
+        case .pending:
+            return L10n.text(.meetingAttendeePending, config: appState.config)
+        case .delegated:
+            return L10n.text(.meetingAttendeeDelegated, config: appState.config)
+        case .completed:
+            return L10n.text(.meetingAttendeeCompleted, config: appState.config)
+        case .inProcess:
+            return L10n.text(.meetingAttendeeInProcess, config: appState.config)
+        case .unknown:
+            return L10n.text(.meetingAttendeeUnknown, config: appState.config)
+        }
+    }
+
+    private func attendeeStatusTint(_ status: MeetingCalendarEventAttendee.ResponseStatus) -> Color {
+        switch status {
+        case .accepted:
+            return MuesliTheme.success
+        case .declined:
+            return MuesliTheme.recording
+        case .tentative:
+            return MuesliTheme.transcribing
+        case .pending, .unknown:
+            return MuesliTheme.textTertiary
+        case .delegated, .completed, .inProcess:
+            return MuesliTheme.accent
+        }
+    }
+
+    private static func snapshotDate(from raw: String) -> Date? {
+        snapshotDateFormatter.date(from: raw) ?? snapshotDateFormatterNoFractional.date(from: raw)
+    }
+
+    private func attendeeStatusChip(_ attendee: MeetingCalendarEventAttendee) -> some View {
+        attendeeMetaChip(
+            attendeeStatusLabel(attendee.responseStatus),
+            tint: attendeeStatusTint(attendee.responseStatus)
+        )
+    }
+
+    private func attendeeMetaChip(_ label: String, tint: Color) -> some View {
+        Text(label)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(tint.opacity(0.12))
+            .clipShape(Capsule())
     }
 
     private func colorFromHex(_ hex: String?) -> Color? {
@@ -1123,6 +1346,18 @@ struct MeetingDetailView: View {
     private static let calendarEventTimeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "dd/MM HH:mm"
+        return formatter
+    }()
+
+    private static let snapshotDateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static let snapshotDateFormatterNoFractional: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
         return formatter
     }()
 }

@@ -36,6 +36,10 @@ Completed or largely completed:
 - `Coming Up` now supports collapse/expand
 - Meeting folders now support accent colors and clearer note association visibility
 - Meeting title prompt is now editable from `Manage Templates`
+- Future meetings now persist associated calendar event snapshots
+- Event snapshots now include attendee data and are shown in meeting detail
+- `Coming Up` join-and-record now associates the selected calendar event immediately
+- Manual written notes now render as a localized top-level `Notes` / `Notas` section
 
 Known limitation:
 
@@ -120,6 +124,8 @@ Possible scope:
 - consider showing calendar source identity and color in upcoming meetings and related UI
 - preserve or surface per-calendar colors where they help users understand which event source won or was deduplicated
 - decide whether users should be able to include/exclude specific calendars inside app settings
+- persist a useful snapshot of the associated calendar event inside the saved meeting record instead of relying only on `calendarEventID`
+- review whether additional attendee/invitee details should be expanded beyond the current stored snapshot
 
 Notes:
 
@@ -127,8 +133,12 @@ Notes:
 - observed in real usage: the same meeting can appear repeated when it exists in two local calendars, even if only one seems visible in Calendar
 - first pass implemented: users can now enable/disable local calendars explicitly from Settings instead of relying on inferred visibility
 - second pass implemented: `Coming Up` already shows clearer calendar color/source cues, and notes can now be associated manually with nearby calendar events
+- third pass implemented: future meetings now persist a rich event snapshot, store attendee data, and surface that context in meeting detail
 - still open: nearby event suggestions have shown intermittent behavior and need stabilization before we can consider this area fully trustworthy
 - this area is product-significant because it affects prompts, auto-recording, and note creation
+- current limitation: older existing meetings were intentionally not backfilled with historical event snapshots
+- this means historical traceability is now strong for future meetings, but older notes still depend on what was already stored at the time
+- next review in this area should focus on suggestion stability, duplicate handling, and any extra attendee metadata worth surfacing
 
 Implemented so far in the summary/template area:
 
@@ -140,6 +150,7 @@ Still open in this area:
 
 - improve title-language behavior so Spanish transcripts produce Spanish titles more reliably
 - keep reviewing hardcoded English defaults in the title-generation and summary base prompts
+- continue refining how manual notes and generated sections blend when the model does not integrate user-written notes naturally
 
 ### 5. Personalization screen
 

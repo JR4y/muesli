@@ -114,6 +114,20 @@ enum L10nKey {
     case meetingBackToMeetings
     case meetingAssociateEvent
     case meetingCalendarLinked
+    case meetingAssociatedEvent
+    case meetingAttendees
+    case meetingOpenJoinLink
+    case meetingAttendeeOrganizer
+    case meetingAttendeeYou
+    case meetingAttendeeOptional
+    case meetingAttendeeAccepted
+    case meetingAttendeeDeclined
+    case meetingAttendeeTentative
+    case meetingAttendeePending
+    case meetingAttendeeDelegated
+    case meetingAttendeeCompleted
+    case meetingAttendeeInProcess
+    case meetingAttendeeUnknown
     case meetingSelectCalendarEvent
     case meetingSelectCalendarEventHint
     case meetingNoNearbyCalendarEvents
@@ -502,6 +516,34 @@ enum L10n {
             return "Associate event"
         case .meetingCalendarLinked:
             return "Calendar linked"
+        case .meetingAssociatedEvent:
+            return "Associated Event"
+        case .meetingAttendees:
+            return "Attendees"
+        case .meetingOpenJoinLink:
+            return "Open meeting link"
+        case .meetingAttendeeOrganizer:
+            return "Organizer"
+        case .meetingAttendeeYou:
+            return "You"
+        case .meetingAttendeeOptional:
+            return "Optional"
+        case .meetingAttendeeAccepted:
+            return "Accepted"
+        case .meetingAttendeeDeclined:
+            return "Declined"
+        case .meetingAttendeeTentative:
+            return "Tentative"
+        case .meetingAttendeePending:
+            return "Pending"
+        case .meetingAttendeeDelegated:
+            return "Delegated"
+        case .meetingAttendeeCompleted:
+            return "Completed"
+        case .meetingAttendeeInProcess:
+            return "In progress"
+        case .meetingAttendeeUnknown:
+            return "Unknown"
         case .meetingSelectCalendarEvent:
             return "Select a calendar event"
         case .meetingSelectCalendarEventHint:
@@ -1110,6 +1152,34 @@ enum L10n {
             return "Asociar cita"
         case .meetingCalendarLinked:
             return "Cita asociada"
+        case .meetingAssociatedEvent:
+            return "Evento asociado"
+        case .meetingAttendees:
+            return "Asistentes"
+        case .meetingOpenJoinLink:
+            return "Abrir enlace de reunion"
+        case .meetingAttendeeOrganizer:
+            return "Organizador"
+        case .meetingAttendeeYou:
+            return "Tu"
+        case .meetingAttendeeOptional:
+            return "Opcional"
+        case .meetingAttendeeAccepted:
+            return "Aceptado"
+        case .meetingAttendeeDeclined:
+            return "Rechazado"
+        case .meetingAttendeeTentative:
+            return "Tentativo"
+        case .meetingAttendeePending:
+            return "Pendiente"
+        case .meetingAttendeeDelegated:
+            return "Delegado"
+        case .meetingAttendeeCompleted:
+            return "Completado"
+        case .meetingAttendeeInProcess:
+            return "En curso"
+        case .meetingAttendeeUnknown:
+            return "Desconocido"
         case .meetingSelectCalendarEvent:
             return "Selecciona una cita"
         case .meetingSelectCalendarEventHint:

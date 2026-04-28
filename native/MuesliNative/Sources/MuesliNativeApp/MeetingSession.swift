@@ -56,6 +56,7 @@ struct MeetingSessionResult {
     let title: String
     let originalTitle: String
     let calendarEventID: String?
+    let calendarEventSnapshot: MeetingCalendarEventSnapshot?
     let startTime: Date
     let endTime: Date
     let durationSeconds: Double
@@ -65,6 +66,36 @@ struct MeetingSessionResult {
     let retainedRecordingError: Error?
     let systemRecordingURL: URL?
     let templateSnapshot: MeetingTemplateSnapshot
+
+    init(
+        title: String,
+        originalTitle: String,
+        calendarEventID: String?,
+        calendarEventSnapshot: MeetingCalendarEventSnapshot? = nil,
+        startTime: Date,
+        endTime: Date,
+        durationSeconds: Double,
+        rawTranscript: String,
+        formattedNotes: String,
+        retainedRecordingURL: URL?,
+        retainedRecordingError: Error?,
+        systemRecordingURL: URL?,
+        templateSnapshot: MeetingTemplateSnapshot
+    ) {
+        self.title = title
+        self.originalTitle = originalTitle
+        self.calendarEventID = calendarEventID
+        self.calendarEventSnapshot = calendarEventSnapshot
+        self.startTime = startTime
+        self.endTime = endTime
+        self.durationSeconds = durationSeconds
+        self.rawTranscript = rawTranscript
+        self.formattedNotes = formattedNotes
+        self.retainedRecordingURL = retainedRecordingURL
+        self.retainedRecordingError = retainedRecordingError
+        self.systemRecordingURL = systemRecordingURL
+        self.templateSnapshot = templateSnapshot
+    }
 }
 
 enum MeetingProcessingStage {
@@ -85,6 +116,7 @@ final class MeetingSession {
 
     private let title: String
     private let calendarEventID: String?
+    private let calendarEventSnapshot: MeetingCalendarEventSnapshot?
     private let backend: BackendOption
     private let runtime: RuntimePaths
     private let config: AppConfig
@@ -125,6 +157,7 @@ final class MeetingSession {
     init(
         title: String,
         calendarEventID: String?,
+        calendarEventSnapshot: MeetingCalendarEventSnapshot? = nil,
         backend: BackendOption,
         runtime: RuntimePaths,
         config: AppConfig,
@@ -132,6 +165,7 @@ final class MeetingSession {
     ) {
         self.title = title
         self.calendarEventID = calendarEventID
+        self.calendarEventSnapshot = calendarEventSnapshot
         self.backend = backend
         self.runtime = runtime
         self.config = config
@@ -495,7 +529,8 @@ final class MeetingSession {
                 transcript: rawTranscript,
                 meetingTitle: generatedTitle,
                 error: error,
-                manualNotes: manualNotes
+                manualNotes: manualNotes,
+                config: config
             )
         }
 
@@ -503,6 +538,7 @@ final class MeetingSession {
             title: generatedTitle,
             originalTitle: title,
             calendarEventID: calendarEventID,
+            calendarEventSnapshot: calendarEventSnapshot,
             startTime: meetingStart,
             endTime: endTime,
             durationSeconds: max(endTime.timeIntervalSince(meetingStart), 0),

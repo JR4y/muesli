@@ -1,4 +1,5 @@
 import Foundation
+import MuesliCore
 
 // MARK: - Shared Calendar Event Model
 
@@ -21,10 +22,39 @@ struct UnifiedCalendarEvent: Identifiable, Equatable {
     let calendarName: String?
     let calendarSourceTitle: String?
     let calendarColorHex: String?
+    let attendees: [MeetingCalendarEventAttendee]
 
     enum CalendarSource: String {
         case eventKit
         case googleCalendar
+    }
+
+    init(
+        id: String,
+        title: String,
+        startDate: Date,
+        endDate: Date,
+        isAllDay: Bool,
+        source: CalendarSource,
+        meetingURL: URL? = nil,
+        calendarID: String? = nil,
+        calendarName: String? = nil,
+        calendarSourceTitle: String? = nil,
+        calendarColorHex: String? = nil,
+        attendees: [MeetingCalendarEventAttendee] = []
+    ) {
+        self.id = id
+        self.title = title
+        self.startDate = startDate
+        self.endDate = endDate
+        self.isAllDay = isAllDay
+        self.source = source
+        self.meetingURL = meetingURL
+        self.calendarID = calendarID
+        self.calendarName = calendarName
+        self.calendarSourceTitle = calendarSourceTitle
+        self.calendarColorHex = calendarColorHex
+        self.attendees = attendees
     }
 }
 
@@ -212,6 +242,31 @@ final class GoogleCalendarClient {
             return nil
         }()
 
+        let attendees: [MeetingCalendarEventAttendee] = {
+            guard let rawAttendees = item["attendees"] as? [[String: Any]] else { return [] }
+            return rawAttendees.compactMap { attendee in
+                let email = (attendee["email"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let displayName = (attendee["displayName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let organizer = attendee["organizer"] as? Bool ?? false
+                let isSelf = attendee["self"] as? Bool ?? false
+                let optional = attendee["optional"] as? Bool ?? false
+                let status = MeetingCalendarEventAttendee.ResponseStatus(
+                    rawValue: (attendee["responseStatus"] as? String) ?? ""
+                ) ?? .unknown
+                if (email?.isEmpty ?? true) && (displayName?.isEmpty ?? true) {
+                    return nil
+                }
+                return MeetingCalendarEventAttendee(
+                    name: displayName,
+                    email: email,
+                    responseStatus: status,
+                    isOrganizer: organizer,
+                    isCurrentUser: isSelf,
+                    isOptional: optional
+                )
+            }
+        }()
+
         return UnifiedCalendarEvent(
             id: id,
             title: summary,
@@ -223,7 +278,8 @@ final class GoogleCalendarClient {
             calendarID: nil,
             calendarName: "Google Calendar",
             calendarSourceTitle: "Google Calendar",
-            calendarColorHex: nil
+            calendarColorHex: nil,
+            attendees: attendees
         )
     }
 
@@ -247,6 +303,22 @@ final class GoogleCalendarClient {
                 // Prefer Google Calendar's meetingURL when EventKit doesn't have one
                 if merged[idx].meetingURL == nil, gEvent.meetingURL != nil {
                     merged[idx].meetingURL = gEvent.meetingURL
+                }
+                if merged[idx].attendees.isEmpty, !gEvent.attendees.isEmpty {
+                    merged[idx] = UnifiedCalendarEvent(
+                        id: merged[idx].id,
+                        title: merged[idx].title,
+                        startDate: merged[idx].startDate,
+                        endDate: merged[idx].endDate,
+                        isAllDay: merged[idx].isAllDay,
+                        source: merged[idx].source,
+                        meetingURL: merged[idx].meetingURL,
+                        calendarID: merged[idx].calendarID ?? gEvent.calendarID,
+                        calendarName: merged[idx].calendarName ?? gEvent.calendarName,
+                        calendarSourceTitle: merged[idx].calendarSourceTitle ?? gEvent.calendarSourceTitle,
+                        calendarColorHex: merged[idx].calendarColorHex ?? gEvent.calendarColorHex,
+                        attendees: gEvent.attendees
+                    )
                 }
             } else {
                 merged.append(gEvent)

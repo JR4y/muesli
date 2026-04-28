@@ -44,6 +44,39 @@ struct DictationStoreTests {
         return DictationStore(databaseURL: url)
     }
 
+    private func makeCalendarSnapshot() -> MeetingCalendarEventSnapshot {
+        MeetingCalendarEventSnapshot(
+            id: "evt_123",
+            title: "Customer Review",
+            startTime: "2026-04-28T10:00:00Z",
+            endTime: "2026-04-28T10:30:00Z",
+            source: .eventKit,
+            meetingURL: "https://meet.google.com/abc-defg-hij",
+            calendarID: "cal_1",
+            calendarName: "Work",
+            calendarSourceTitle: "iCloud",
+            calendarColorHex: "FF9500",
+            attendees: [
+                MeetingCalendarEventAttendee(
+                    name: "Ray",
+                    email: "ray@example.com",
+                    responseStatus: .accepted,
+                    isOrganizer: true,
+                    isCurrentUser: true,
+                    isOptional: false
+                ),
+                MeetingCalendarEventAttendee(
+                    name: "Ana",
+                    email: "ana@example.com",
+                    responseStatus: .tentative,
+                    isOrganizer: false,
+                    isCurrentUser: false,
+                    isOptional: true
+                ),
+            ]
+        )
+    }
+
     @Test("migration creates tables without error")
     func migration() throws {
         let store = try makeStore()
@@ -296,6 +329,29 @@ struct DictationStoreTests {
         #expect(rows.first!.title == "Test Meeting")
         #expect(rows.first!.wordCount == 7)
         #expect(rows.first!.appliedTemplateID == MeetingTemplates.autoID)
+    }
+
+    @Test("meeting calendar snapshot persists on insert")
+    func meetingCalendarSnapshotPersistsOnInsert() throws {
+        let store = try makeStore()
+        let start = Date()
+        let snapshot = makeCalendarSnapshot()
+
+        try store.insertMeeting(
+            title: "Calendar-backed Meeting",
+            calendarEventID: snapshot.id,
+            calendarEventSnapshot: snapshot,
+            startTime: start,
+            endTime: start.addingTimeInterval(1800),
+            rawTranscript: "Transcript body",
+            formattedNotes: "## Summary\nNotes",
+            micAudioPath: nil,
+            systemAudioPath: nil
+        )
+
+        let meeting = try store.recentMeetings(limit: 1).first
+        #expect(meeting?.calendarEventID == snapshot.id)
+        #expect(meeting?.calendarEventSnapshot == snapshot)
     }
 
     @Test("meeting template snapshot persists on insert")

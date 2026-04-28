@@ -428,6 +428,35 @@ final class MuesliController: NSObject {
         }
     }
 
+    private func calendarEventSnapshot(from event: UnifiedCalendarEvent) -> MeetingCalendarEventSnapshot {
+        MeetingCalendarEventSnapshot(
+            id: event.id,
+            title: event.title,
+            startTime: Self.iso8601DateFormatter.string(from: event.startDate),
+            endTime: Self.iso8601DateFormatter.string(from: event.endDate),
+            source: event.source == .googleCalendar ? .googleCalendar : .eventKit,
+            meetingURL: event.meetingURL?.absoluteString,
+            calendarID: event.calendarID,
+            calendarName: event.calendarName,
+            calendarSourceTitle: event.calendarSourceTitle,
+            calendarColorHex: event.calendarColorHex,
+            attendees: event.attendees
+        )
+    }
+
+    private func resolvedCalendarEventSnapshot(id: String?) -> MeetingCalendarEventSnapshot? {
+        guard let id, !id.isEmpty else { return nil }
+        if let event = appState.upcomingCalendarEvents.first(where: { $0.id == id }) {
+            return calendarEventSnapshot(from: event)
+        }
+        let hiddenLocalCalendarIDs = Set(config.hiddenLocalCalendarIDs)
+        if let currentEvent = calendarMonitor.currentUnifiedEvent(excluding: hiddenLocalCalendarIDs),
+           currentEvent.id == id {
+            return calendarEventSnapshot(from: currentEvent)
+        }
+        return nil
+    }
+
     func dictationStats() -> DictationStats {
         (try? dictationStore.dictationStats()) ?? DictationStats(
             totalWords: 0,
@@ -964,6 +993,7 @@ final class MuesliController: NSObject {
         }
 
         appState.upcomingCalendarEvents = ekEvents
+        refreshLiveMeetingCalendarSnapshotsIfNeeded()
 
         // Prune hidden IDs for events that no longer exist in the calendar
         let currentEventIDs = Set(ekEvents.map(\.id))
@@ -974,6 +1004,30 @@ final class MuesliController: NSObject {
         }
 
         statusBarController?.updateMenuBarTitle()
+    }
+
+    private func refreshLiveMeetingCalendarSnapshotsIfNeeded() {
+        let liveMeetings = appState.meetingRows.filter { meeting in
+            guard let eventID = meeting.calendarEventID, !eventID.isEmpty else { return false }
+            return meeting.status == .recording || meeting.status == .processing
+        }
+        guard !liveMeetings.isEmpty else { return }
+
+        var changed = false
+        for meeting in liveMeetings {
+            guard let snapshot = resolvedCalendarEventSnapshot(id: meeting.calendarEventID) else { continue }
+            guard meeting.calendarEventSnapshot != snapshot else { continue }
+            try? dictationStore.updateMeetingCalendarEvent(
+                id: meeting.id,
+                calendarEventID: meeting.calendarEventID,
+                snapshot: snapshot
+            )
+            changed = true
+        }
+
+        if changed {
+            syncAppState()
+        }
     }
 
     func startCalendarMonitoring() {
@@ -1517,7 +1571,24 @@ final class MuesliController: NSObject {
     }
 
     static func stripManualNotesSection(from notes: String) -> String {
-        let markers = [
+        let trimmed = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        let leadingMarkers = [
+            "## Notes\n\n",
+            "## Notas\n\n",
+            "## Manual Notes\n\n",
+            "### Written notes\n\n",
+        ]
+        for marker in leadingMarkers where trimmed.hasPrefix(marker) {
+            let bodyStart = trimmed.index(trimmed.startIndex, offsetBy: marker.count)
+            let remaining = String(trimmed[bodyStart...])
+            if let nextSectionRange = remaining.range(of: "\n## ") {
+                let sectionStart = remaining.index(after: nextSectionRange.lowerBound)
+                return String(remaining[sectionStart...])
+            }
+            return ""
+        }
+
+        let trailingMarkers = [
             "\n\n### Written notes\n\n",
             "\n### Written notes\n\n",
             "### Written notes\n\n",
@@ -1525,12 +1596,12 @@ final class MuesliController: NSObject {
             "\n## Manual Notes\n\n",
             "## Manual Notes\n\n"
         ]
-        for marker in markers {
-            if let range = notes.range(of: marker, options: [.backwards]) {
-                return String(notes[..<range.lowerBound])
+        for marker in trailingMarkers {
+            if let range = trimmed.range(of: marker, options: [.backwards]) {
+                return String(trimmed[..<range.lowerBound])
             }
         }
-        return notes
+        return trimmed
     }
 
     func updateMeetingTitle(id: Int64, title: String) {
@@ -1554,7 +1625,11 @@ final class MuesliController: NSObject {
     }
 
     func associateMeeting(id: Int64, with event: UnifiedCalendarEvent) throws {
-        try dictationStore.updateMeetingCalendarEventID(id: id, calendarEventID: event.id)
+        try dictationStore.updateMeetingCalendarEvent(
+            id: id,
+            calendarEventID: event.id,
+            snapshot: calendarEventSnapshot(from: event)
+        )
         syncAppState()
     }
 
@@ -1752,6 +1827,7 @@ final class MuesliController: NSObject {
             let meetingID = try dictationStore.insertMeeting(
                 title: event.title,
                 calendarEventID: event.id,
+                calendarEventSnapshot: calendarEventSnapshot(from: event),
                 startTime: event.startDate,
                 endTime: event.endDate,
                 rawTranscript: "",
@@ -1970,8 +2046,10 @@ final class MuesliController: NSObject {
         startForegroundMeetingRecording(title: title)
     }
 
-    private func resolvedForegroundMeetingStart(title: String, calendarEventID: String?) -> (title: String, calendarEventID: String?) {
-        let activeCalendarEvent = calendarMonitor.currentEvent(excluding: Set(config.hiddenLocalCalendarIDs))
+    private func resolvedForegroundMeetingStart(title: String, calendarEventID: String?) -> (title: String, calendarEventID: String?, calendarEventSnapshot: MeetingCalendarEventSnapshot?) {
+        let hiddenLocalCalendarIDs = Set(config.hiddenLocalCalendarIDs)
+        let activeCalendarEvent = calendarMonitor.currentEvent(excluding: hiddenLocalCalendarIDs)
+        let activeUnifiedEvent = calendarMonitor.currentUnifiedEvent(excluding: hiddenLocalCalendarIDs)
         let resolvedCalendarEventID = calendarEventID ?? activeCalendarEvent?.id
         let resolvedTitle: String
         if title == "Meeting", let calendarTitle = activeCalendarEvent?.title {
@@ -1979,7 +2057,17 @@ final class MuesliController: NSObject {
         } else {
             resolvedTitle = title
         }
-        return (resolvedTitle, resolvedCalendarEventID)
+        let resolvedSnapshot: MeetingCalendarEventSnapshot?
+        if let explicitID = calendarEventID,
+           let snapshot = resolvedCalendarEventSnapshot(id: explicitID) {
+            resolvedSnapshot = snapshot
+        } else if let activeUnifiedEvent,
+                  activeUnifiedEvent.id == resolvedCalendarEventID {
+            resolvedSnapshot = calendarEventSnapshot(from: activeUnifiedEvent)
+        } else {
+            resolvedSnapshot = resolvedCalendarEventSnapshot(id: resolvedCalendarEventID)
+        }
+        return (resolvedTitle, resolvedCalendarEventID, resolvedSnapshot)
     }
 
     func startForegroundMeetingRecording(title: String = "Meeting", calendarEventID: String? = nil) {
@@ -1996,6 +2084,7 @@ final class MuesliController: NSObject {
             meetingID = try dictationStore.createLiveMeeting(
                 title: resolvedStart.title,
                 calendarEventID: resolvedStart.calendarEventID,
+                calendarEventSnapshot: resolvedStart.calendarEventSnapshot,
                 startTime: Date(),
                 selectedTemplateID: templateSnapshot.id,
                 selectedTemplateName: templateSnapshot.name,
@@ -2024,10 +2113,11 @@ final class MuesliController: NSObject {
             guard let self else { return }
             do {
                 try await self.startMeetingRecordingWithSystemAudioRecovery(
-                    title: resolvedStart.title,
-                    calendarEventID: resolvedStart.calendarEventID,
-                    meetingID: meetingID
-                )
+                title: resolvedStart.title,
+                calendarEventID: resolvedStart.calendarEventID,
+                calendarEventSnapshot: resolvedStart.calendarEventSnapshot,
+                meetingID: meetingID
+            )
             } catch {
                 fputs("[muesli-native] failed to start meeting: \(error)\n", stderr)
                 self.resolveLiveMeetingAfterStartFailure(id: meetingID)
@@ -2064,13 +2154,19 @@ final class MuesliController: NSObject {
         startForegroundMeetingRecording(title: "Meeting")
     }
 
-    private func startMeetingRecordingWithSystemAudioRecovery(title: String, calendarEventID: String?, meetingID: Int64) async throws {
+    private func startMeetingRecordingWithSystemAudioRecovery(
+        title: String,
+        calendarEventID: String?,
+        calendarEventSnapshot: MeetingCalendarEventSnapshot?,
+        meetingID: Int64
+    ) async throws {
         var shouldRetryAfterPermissionRequest = config.useCoreAudioTap
 
         while true {
             let meetingSession = MeetingSession(
                 title: title,
                 calendarEventID: calendarEventID,
+                calendarEventSnapshot: calendarEventSnapshot,
                 backend: selectedMeetingTranscriptionBackend,
                 runtime: runtime,
                 config: config,
@@ -2411,6 +2507,7 @@ final class MuesliController: NSObject {
                 id: existingMeetingID,
                 title: persistedTitle,
                 calendarEventID: result.calendarEventID,
+                calendarEventSnapshot: result.calendarEventSnapshot,
                 startTime: result.startTime,
                 endTime: result.endTime,
                 rawTranscript: result.rawTranscript,
@@ -2430,6 +2527,7 @@ final class MuesliController: NSObject {
             meetingID = try dictationStore.insertMeeting(
                 title: result.title,
                 calendarEventID: result.calendarEventID,
+                calendarEventSnapshot: result.calendarEventSnapshot,
                 startTime: result.startTime,
                 endTime: result.endTime,
                 rawTranscript: result.rawTranscript,

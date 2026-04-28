@@ -54,6 +54,7 @@ public struct MeetingRecord: Identifiable, Codable, Sendable {
     public let wordCount: Int
     public let folderID: Int64?
     public let calendarEventID: String?
+    public let calendarEventSnapshot: MeetingCalendarEventSnapshot?
     public let micAudioPath: String?
     public let systemAudioPath: String?
     public let savedRecordingPath: String?
@@ -74,6 +75,7 @@ public struct MeetingRecord: Identifiable, Codable, Sendable {
         wordCount: Int,
         folderID: Int64?,
         calendarEventID: String? = nil,
+        calendarEventSnapshot: MeetingCalendarEventSnapshot? = nil,
         micAudioPath: String? = nil,
         systemAudioPath: String? = nil,
         savedRecordingPath: String? = nil,
@@ -93,6 +95,7 @@ public struct MeetingRecord: Identifiable, Codable, Sendable {
         self.wordCount = wordCount
         self.folderID = folderID
         self.calendarEventID = calendarEventID
+        self.calendarEventSnapshot = calendarEventSnapshot
         self.micAudioPath = micAudioPath
         self.systemAudioPath = systemAudioPath
         self.savedRecordingPath = savedRecordingPath
@@ -114,6 +117,7 @@ public struct MeetingRecord: Identifiable, Codable, Sendable {
         case wordCount
         case folderID
         case calendarEventID
+        case calendarEventSnapshot
         case micAudioPath
         case systemAudioPath
         case savedRecordingPath
@@ -137,6 +141,7 @@ public struct MeetingRecord: Identifiable, Codable, Sendable {
             wordCount: try c.decode(Int.self, forKey: .wordCount),
             folderID: try c.decodeIfPresent(Int64.self, forKey: .folderID),
             calendarEventID: try c.decodeIfPresent(String.self, forKey: .calendarEventID),
+            calendarEventSnapshot: try c.decodeIfPresent(MeetingCalendarEventSnapshot.self, forKey: .calendarEventSnapshot),
             micAudioPath: try c.decodeIfPresent(String.self, forKey: .micAudioPath),
             systemAudioPath: try c.decodeIfPresent(String.self, forKey: .systemAudioPath),
             savedRecordingPath: try c.decodeIfPresent(String.self, forKey: .savedRecordingPath),
@@ -171,6 +176,102 @@ public struct MeetingRecord: Identifiable, Codable, Sendable {
 
     public var appliedTemplateKind: MeetingTemplateKind {
         selectedTemplateKind ?? .auto
+    }
+}
+
+public struct MeetingCalendarEventSnapshot: Codable, Equatable, Sendable {
+    public enum Source: String, Codable, Sendable {
+        case eventKit
+        case googleCalendar
+    }
+
+    public let id: String
+    public let title: String
+    public let startTime: String
+    public let endTime: String
+    public let source: Source
+    public let meetingURL: String?
+    public let calendarID: String?
+    public let calendarName: String?
+    public let calendarSourceTitle: String?
+    public let calendarColorHex: String?
+    public let attendees: [MeetingCalendarEventAttendee]
+
+    public init(
+        id: String,
+        title: String,
+        startTime: String,
+        endTime: String,
+        source: Source,
+        meetingURL: String? = nil,
+        calendarID: String? = nil,
+        calendarName: String? = nil,
+        calendarSourceTitle: String? = nil,
+        calendarColorHex: String? = nil,
+        attendees: [MeetingCalendarEventAttendee] = []
+    ) {
+        self.id = id
+        self.title = title
+        self.startTime = startTime
+        self.endTime = endTime
+        self.source = source
+        self.meetingURL = meetingURL
+        self.calendarID = calendarID
+        self.calendarName = calendarName
+        self.calendarSourceTitle = calendarSourceTitle
+        self.calendarColorHex = calendarColorHex
+        self.attendees = attendees
+    }
+}
+
+public struct MeetingCalendarEventAttendee: Codable, Equatable, Sendable, Identifiable {
+    public enum ResponseStatus: String, Codable, Sendable {
+        case accepted
+        case declined
+        case tentative
+        case pending
+        case delegated
+        case completed
+        case inProcess
+        case unknown
+    }
+
+    public let name: String?
+    public let email: String?
+    public let responseStatus: ResponseStatus
+    public let isOrganizer: Bool
+    public let isCurrentUser: Bool
+    public let isOptional: Bool
+
+    public var id: String {
+        if let email, !email.isEmpty {
+            return email.lowercased()
+        }
+        if let name, !name.isEmpty {
+            return name.lowercased()
+        }
+        return [
+            responseStatus.rawValue,
+            isOrganizer ? "organizer" : "attendee",
+            isCurrentUser ? "self" : "other",
+            isOptional ? "optional" : "required",
+        ].joined(separator: ":")
+    }
+
+    public init(
+        name: String? = nil,
+        email: String? = nil,
+        responseStatus: ResponseStatus = .unknown,
+        isOrganizer: Bool = false,
+        isCurrentUser: Bool = false,
+        isOptional: Bool = false
+    ) {
+        self.name = name
+        self.email = email
+        self.responseStatus = responseStatus
+        self.isOrganizer = isOrganizer
+        self.isCurrentUser = isCurrentUser
+        self.isOptional = isOptional
     }
 }
 

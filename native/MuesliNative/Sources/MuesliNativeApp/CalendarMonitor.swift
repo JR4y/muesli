@@ -74,6 +74,16 @@ final class CalendarMonitor {
 
     /// Returns the current calendar event if one is happening right now.
     func currentEvent(excluding hiddenCalendarIDs: Set<String> = []) -> UpcomingMeetingEvent? {
+        guard let event = currentUnifiedEvent(excluding: hiddenCalendarIDs) else { return nil }
+        return UpcomingMeetingEvent(
+            id: event.id,
+            title: event.title,
+            startDate: event.startDate,
+            meetingURL: event.meetingURL
+        )
+    }
+
+    func currentUnifiedEvent(excluding hiddenCalendarIDs: Set<String> = []) -> UnifiedCalendarEvent? {
         let calendars = visibleCalendars(excluding: hiddenCalendarIDs, using: store)
         guard !calendars.isEmpty else { return nil }
         let now = Date()
@@ -86,13 +96,8 @@ final class CalendarMonitor {
         for event in events {
             guard !event.isAllDay else { continue }
             guard let startDate = event.startDate, let endDate = event.endDate else { continue }
-            if startDate <= now && endDate > now {
-                return UpcomingMeetingEvent(
-                    id: event.eventIdentifier ?? "",
-                    title: event.title ?? "Meeting",
-                    startDate: startDate,
-                    meetingURL: Self.extractMeetingURL(from: event)
-                )
+            if startDate <= now && endDate > now, let unified = Self.unifiedCalendarEvent(from: event) {
+                return unified
             }
         }
         return nil
@@ -144,21 +149,7 @@ final class CalendarMonitor {
         let predicate = freshStore.predicateForEvents(withStart: now, end: future, calendars: calendars)
         let events = freshStore.events(matching: predicate)
         return events.compactMap { event in
-            guard let startDate = event.startDate, let endDate = event.endDate else { return nil }
-            guard !event.isAllDay else { return nil }
-            return UnifiedCalendarEvent(
-                id: event.eventIdentifier ?? UUID().uuidString,
-                title: event.title ?? "Meeting",
-                startDate: startDate,
-                endDate: endDate,
-                isAllDay: false,
-                source: .eventKit,
-                meetingURL: Self.extractMeetingURL(from: event),
-                calendarID: event.calendar.calendarIdentifier,
-                calendarName: event.calendar.title,
-                calendarSourceTitle: event.calendar.source.title,
-                calendarColorHex: Self.hexString(from: event.calendar.cgColor)
-            )
+            Self.unifiedCalendarEvent(from: event)
         }.sorted { $0.startDate < $1.startDate }
     }
 
@@ -173,21 +164,7 @@ final class CalendarMonitor {
         let predicate = freshStore.predicateForEvents(withStart: startDate, end: endDate, calendars: calendars)
         let events = freshStore.events(matching: predicate)
         return events.compactMap { event in
-            guard let eventStartDate = event.startDate, let eventEndDate = event.endDate else { return nil }
-            guard !event.isAllDay else { return nil }
-            return UnifiedCalendarEvent(
-                id: event.eventIdentifier ?? UUID().uuidString,
-                title: event.title ?? "Meeting",
-                startDate: eventStartDate,
-                endDate: eventEndDate,
-                isAllDay: false,
-                source: .eventKit,
-                meetingURL: Self.extractMeetingURL(from: event),
-                calendarID: event.calendar.calendarIdentifier,
-                calendarName: event.calendar.title,
-                calendarSourceTitle: event.calendar.source.title,
-                calendarColorHex: Self.hexString(from: event.calendar.cgColor)
-            )
+            Self.unifiedCalendarEvent(from: event)
         }.sorted { $0.startDate < $1.startDate }
     }
 
@@ -238,6 +215,89 @@ final class CalendarMonitor {
         guard let match = regex.firstMatch(in: text, range: range) else { return nil }
         guard let matchRange = Range(match.range, in: text) else { return nil }
         return URL(string: String(text[matchRange]))
+    }
+
+    private static func unifiedCalendarEvent(from event: EKEvent) -> UnifiedCalendarEvent? {
+        guard let startDate = event.startDate, let endDate = event.endDate else { return nil }
+        guard !event.isAllDay else { return nil }
+        return UnifiedCalendarEvent(
+            id: event.eventIdentifier ?? UUID().uuidString,
+            title: event.title ?? "Meeting",
+            startDate: startDate,
+            endDate: endDate,
+            isAllDay: false,
+            source: .eventKit,
+            meetingURL: extractMeetingURL(from: event),
+            calendarID: event.calendar.calendarIdentifier,
+            calendarName: event.calendar.title,
+            calendarSourceTitle: event.calendar.source.title,
+            calendarColorHex: hexString(from: event.calendar.cgColor),
+            attendees: attendees(from: event)
+        )
+    }
+
+    private static func attendees(from event: EKEvent) -> [MeetingCalendarEventAttendee] {
+        var resolved: [MeetingCalendarEventAttendee] = []
+        let participants = event.attendees ?? []
+        for participant in participants {
+            if let attendee = attendee(from: participant) {
+                resolved.append(attendee)
+            }
+        }
+        if let organizer = event.organizer,
+           let organizerAttendee = attendee(from: organizer, forceOrganizer: true),
+           !resolved.contains(where: { $0.id == organizerAttendee.id }) {
+            resolved.append(organizerAttendee)
+        }
+        return resolved
+    }
+
+    private static func attendee(from participant: EKParticipant, forceOrganizer: Bool = false) -> MeetingCalendarEventAttendee? {
+        let name = participant.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let email = normalizedParticipantEmail(from: participant.url)
+        if (name?.isEmpty ?? true) && (email?.isEmpty ?? true) {
+            return nil
+        }
+
+        let responseStatus: MeetingCalendarEventAttendee.ResponseStatus
+        switch participant.participantStatus {
+        case .accepted:
+            responseStatus = .accepted
+        case .declined:
+            responseStatus = .declined
+        case .tentative:
+            responseStatus = .tentative
+        case .pending:
+            responseStatus = .pending
+        case .delegated:
+            responseStatus = .delegated
+        case .completed:
+            responseStatus = .completed
+        case .inProcess:
+            responseStatus = .inProcess
+        default:
+            responseStatus = .unknown
+        }
+
+        let role = participant.participantRole
+        return MeetingCalendarEventAttendee(
+            name: name,
+            email: email,
+            responseStatus: responseStatus,
+            isOrganizer: forceOrganizer || role == .chair,
+            isCurrentUser: participant.isCurrentUser,
+            isOptional: role == .optional
+        )
+    }
+
+    private static func normalizedParticipantEmail(from url: URL?) -> String? {
+        guard let url else { return nil }
+        let raw = url.absoluteString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return nil }
+        if raw.lowercased().hasPrefix("mailto:") {
+            return String(raw.dropFirst("mailto:".count))
+        }
+        return raw
     }
 
     private func visibleCalendars(excluding hiddenCalendarIDs: Set<String>, using store: EKEventStore) -> [EKCalendar] {

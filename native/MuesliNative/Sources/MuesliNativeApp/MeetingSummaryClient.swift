@@ -64,7 +64,11 @@ enum MeetingSummaryClient {
                 template: template,
                 visualContext: visualContext
             )
-            return notesByRetainingManualNotes(generatedNotes: generatedNotes, manualNotes: manualNotesToRetain)
+            return notesByRetainingManualNotes(
+                generatedNotes: generatedNotes,
+                manualNotes: manualNotesToRetain,
+                config: config
+            )
         }
         if backend == MeetingSummaryBackendOption.openRouter.backend {
             generatedNotes = try await summarizeWithOpenRouter(
@@ -76,7 +80,11 @@ enum MeetingSummaryClient {
                 template: template,
                 visualContext: visualContext
             )
-            return notesByRetainingManualNotes(generatedNotes: generatedNotes, manualNotes: manualNotesToRetain)
+            return notesByRetainingManualNotes(
+                generatedNotes: generatedNotes,
+                manualNotes: manualNotesToRetain,
+                config: config
+            )
         }
         generatedNotes = try await summarizeWithOpenAI(
             transcript: transcript,
@@ -87,10 +95,20 @@ enum MeetingSummaryClient {
             template: template,
             visualContext: visualContext
         )
-        return notesByRetainingManualNotes(generatedNotes: generatedNotes, manualNotes: manualNotesToRetain)
+        return notesByRetainingManualNotes(
+            generatedNotes: generatedNotes,
+            manualNotes: manualNotesToRetain,
+            config: config
+        )
     }
 
-    static func summaryFailureNotes(transcript: String, meetingTitle: String, error: Error, manualNotes: String? = nil) -> String {
+    static func summaryFailureNotes(
+        transcript: String,
+        meetingTitle: String,
+        error: Error,
+        manualNotes: String? = nil,
+        config: AppConfig = AppConfig()
+    ) -> String {
         let trimmedTitle = meetingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedManualNotes = manualNotes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         var sections = ["## Summary failed"]
@@ -99,7 +117,7 @@ enum MeetingSummaryClient {
         }
         sections.append("Muesli could not generate structured meeting notes.\n\n\(error.localizedDescription)")
         if !trimmedManualNotes.isEmpty {
-            sections.append("### Written notes\n\n\(trimmedManualNotes)")
+            sections.append(manualNotesSection(notes: trimmedManualNotes, config: config))
         }
         sections.append("## Raw Transcript\n\n\(transcript)")
         return sections.joined(separator: "\n\n")
@@ -155,22 +173,25 @@ enum MeetingSummaryClient {
         return prompt
     }
 
-    static func notesByRetainingManualNotes(generatedNotes: String, manualNotes: String?) -> String {
+    static func notesByRetainingManualNotes(
+        generatedNotes: String,
+        manualNotes: String?,
+        config: AppConfig = AppConfig()
+    ) -> String {
         let trimmedManualNotes = manualNotes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !trimmedManualNotes.isEmpty else { return generatedNotes }
 
-        let trimmedGeneratedNotes = generatedNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedGeneratedNotes = stripLeadingManualNotesSection(from: generatedNotes, config: config)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         let missingNotes = manualNoteBlocks(from: trimmedManualNotes).filter { note in
             !generatedNotesContainManualNote(trimmedGeneratedNotes, note: note)
         }
-        guard !missingNotes.isEmpty else {
-            return trimmedGeneratedNotes
-        }
-        let manualSection = "### Written notes\n\n\(missingNotes.joined(separator: "\n"))"
+        let notesBody = missingNotes.isEmpty ? trimmedManualNotes : missingNotes.joined(separator: "\n")
+        let manualSection = manualNotesSection(notes: notesBody, config: config)
         if trimmedGeneratedNotes.isEmpty {
             return manualSection
         }
-        return "\(trimmedGeneratedNotes)\n\n\(manualSection)"
+        return "\(manualSection)\n\n\(trimmedGeneratedNotes)"
     }
 
     static func manualNoteBlocks(from notes: String) -> [String] {
@@ -208,6 +229,31 @@ enum MeetingSummaryClient {
         }
         return normalizedNote.count >= 40
             && normalizedManualNoteMatchText(generatedNotes).contains(normalizedNote)
+    }
+
+    private static func manualNotesSection(notes: String, config: AppConfig) -> String {
+        "## \(L10n.text(.meetingNotes, config: config))\n\n\(notes)"
+    }
+
+    private static func stripLeadingManualNotesSection(from notes: String, config: AppConfig) -> String {
+        let trimmed = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        let markers = [
+            "## \(L10n.text(.meetingNotes, config: config))\n\n",
+            "## Manual Notes\n\n",
+            "### Written notes\n\n",
+        ]
+
+        for marker in markers where trimmed.hasPrefix(marker) {
+            let bodyStart = trimmed.index(trimmed.startIndex, offsetBy: marker.count)
+            let remaining = String(trimmed[bodyStart...])
+            if let nextSectionRange = remaining.range(of: "\n## ") {
+                let sectionStart = remaining.index(after: nextSectionRange.lowerBound)
+                return String(remaining[sectionStart...])
+            }
+            return ""
+        }
+
+        return trimmed
     }
 
     private static func normalizedManualNoteMatchText(_ text: String) -> String {
