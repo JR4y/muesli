@@ -63,9 +63,13 @@ struct SettingsView: View {
     @State private var screenRecordingGranted = false
     @State private var systemAudioGranted = false
     @State private var isCheckingSystemAudioPermission = false
+    @State private var openRouterFreeModels: [SummaryModelPreset] = []
+    @State private var isLoadingOpenRouterFreeModels = false
+    @State private var openRouterFreeModelsError: String?
 
     // Uniform width for all right-side controls
     private let controlWidth: CGFloat = 220
+    private let meetingControlWidth: CGFloat = 275
 
     private var dictationBackendOptions: [BackendOption] {
         backendOptions(including: appState.selectedBackend)
@@ -95,6 +99,9 @@ struct SettingsView: View {
         .onAppear {
             refreshDownloadedModelOptions()
             startPermissionPolling()
+            if appState.selectedMeetingSummaryBackend == .openRouter {
+                loadOpenRouterFreeModelsIfNeeded()
+            }
         }
         .onDisappear {
             SoundController.stopMaraudersMapClip()
@@ -112,6 +119,11 @@ struct SettingsView: View {
         }
         .onChange(of: appState.selectedMeetingTranscriptionBackend) { _, _ in
             refreshDownloadedModelOptions()
+        }
+        .onChange(of: appState.selectedMeetingSummaryBackend) { _, backend in
+            if backend == .openRouter {
+                loadOpenRouterFreeModelsIfNeeded()
+            }
         }
         .alert(
             pendingDataDestruction?.title(config: appState.config) ?? L10n.text(.settingsConfirmDestructiveAction, config: appState.config),
@@ -366,7 +378,7 @@ struct SettingsView: View {
             }
 
             settingsSection(L10n.text(.settingsMeetingSummariesSection, config: appState.config)) {
-                settingsRow(L10n.text(.settingsSummaryBackend, config: appState.config)) {
+                settingsRow(L10n.text(.settingsSummaryBackend, config: appState.config), controlWidth: meetingControlWidth) {
                     settingsMenu(
                         selection: appState.selectedMeetingSummaryBackend.label,
                         options: MeetingSummaryBackendOption.all.map(\.label)
@@ -379,18 +391,18 @@ struct SettingsView: View {
                 Divider().background(MuesliTheme.surfaceBorder)
 
                 if appState.selectedMeetingSummaryBackend == .chatGPT {
-                    settingsRow(L10n.text(.settingsAccount, config: appState.config)) {
+                    settingsRow(L10n.text(.settingsAccount, config: appState.config), controlWidth: meetingControlWidth) {
                         chatGPTAccountControl
                     }
                     Divider().background(MuesliTheme.surfaceBorder)
-                    settingsRow(L10n.text(.settingsModel, config: appState.config)) {
+                    settingsRow(L10n.text(.settingsModel, config: appState.config), controlWidth: meetingControlWidth) {
                         settingsModelMenu(
                             currentModel: appState.config.chatGPTModel,
                             presets: SummaryModelPreset.chatGPTModels
                         ) { val in controller.updateConfig { $0.chatGPTModel = val } }
                     }
                 } else if appState.selectedMeetingSummaryBackend == .openAI {
-                    settingsRow(L10n.text(.settingsApiKey, config: appState.config)) {
+                    settingsRow(L10n.text(.settingsApiKey, config: appState.config), controlWidth: meetingControlWidth) {
                         PastableSecureField(
                             text: appState.config.openAIAPIKey,
                             placeholder: "sk-...",
@@ -399,7 +411,7 @@ struct SettingsView: View {
                         .frame(height: 22)
                     }
                     Divider().background(MuesliTheme.surfaceBorder)
-                    settingsRow(L10n.text(.settingsModel, config: appState.config)) {
+                    settingsRow(L10n.text(.settingsModel, config: appState.config), controlWidth: meetingControlWidth) {
                         settingsModelMenu(
                             currentModel: appState.config.openAIModel,
                             presets: SummaryModelPreset.openAIModels
@@ -407,7 +419,7 @@ struct SettingsView: View {
                     }
                     keyStatusRow(key: appState.config.openAIAPIKey)
                 } else {
-                    settingsRow(L10n.text(.settingsApiKey, config: appState.config)) {
+                    settingsRow(L10n.text(.settingsApiKey, config: appState.config), controlWidth: meetingControlWidth) {
                         PastableSecureField(
                             text: appState.config.openRouterAPIKey,
                             placeholder: "sk-or-...",
@@ -416,23 +428,27 @@ struct SettingsView: View {
                         .frame(height: 22)
                     }
                     Divider().background(MuesliTheme.surfaceBorder)
-                    settingsRow(L10n.text(.settingsModel, config: appState.config)) {
-                        settingsModelMenu(
+                    settingsRow(L10n.text(.settingsFreeModel, config: appState.config), controlWidth: meetingControlWidth) {
+                        openRouterFreeModelMenu
+                    }
+                    Divider().background(MuesliTheme.surfaceBorder)
+                    settingsRow(L10n.text(.settingsCustomModelID, config: appState.config), controlWidth: meetingControlWidth) {
+                        settingsModelTextField(
                             currentModel: appState.config.openRouterModel,
-                            presets: SummaryModelPreset.openRouterModels
+                            placeholder: "provider/model or openrouter/free"
                         ) { val in controller.updateConfig { $0.openRouterModel = val } }
                     }
                     keyStatusRow(key: appState.config.openRouterAPIKey)
                 }
 
                 Divider().background(MuesliTheme.surfaceBorder)
-                settingsRow(L10n.text(.settingsDefaultTemplate, config: appState.config)) {
+                settingsRow(L10n.text(.settingsDefaultTemplate, config: appState.config), controlWidth: meetingControlWidth) {
                     meetingTemplateMenu(selectionID: appState.config.defaultMeetingTemplateID) { id in
                         controller.updateDefaultMeetingTemplate(id: id)
                     }
                 }
                 Divider().background(MuesliTheme.surfaceBorder)
-                settingsRow(L10n.text(.settingsTemplates, config: appState.config)) {
+                settingsRow(L10n.text(.settingsTemplates, config: appState.config), controlWidth: meetingControlWidth) {
                     actionButton(L10n.text(.meetingsManageTemplates, config: appState.config)) {
                         controller.showMeetingTemplatesManager()
                     }
@@ -1243,7 +1259,8 @@ struct SettingsView: View {
     /// Standardized row: label on left, control on right.
     /// Controls share a fixed-width column so they all right-align consistently.
     @ViewBuilder
-    private func settingsRow(_ label: String, @ViewBuilder control: () -> some View) -> some View {
+    private func settingsRow(_ label: String, controlWidth rowControlWidth: CGFloat? = nil, @ViewBuilder control: () -> some View) -> some View {
+        let width = rowControlWidth ?? controlWidth
         HStack(alignment: .center) {
             Text(label)
                 .font(MuesliTheme.body())
@@ -1252,9 +1269,9 @@ struct SettingsView: View {
             Spacer(minLength: 20)
             ZStack(alignment: .trailing) {
                 // Invisible spacer forces the ZStack to exactly controlWidth
-                Color.clear.frame(width: controlWidth, height: 1)
+                Color.clear.frame(width: width, height: 1)
                 control()
-                    .frame(maxWidth: controlWidth)
+                    .frame(maxWidth: width)
             }
         }
         .frame(minHeight: 32)
@@ -1372,18 +1389,100 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func settingsModelMenu(currentModel: String, presets: [SummaryModelPreset], onChange: @escaping (String) -> Void) -> some View {
+        let menuPresets = SummaryModelPreset.menuPresets(presets, currentModel: currentModel)
         let effectiveModel = currentModel.isEmpty ? (presets.first?.id ?? "") : currentModel
-        let selectedLabel = presets.first(where: { $0.id == effectiveModel })?.label ?? presets.first?.label ?? ""
+        let selectedLabel = menuPresets.first(where: { $0.id == effectiveModel })?.label ?? menuPresets.first?.label ?? ""
         FixedWidthPopUp(
             selection: selectedLabel,
-            options: presets.map(\.label),
+            options: menuPresets.map(\.label),
             onSelectIndex: { index in
-                guard index >= 0 && index < presets.count else { return }
-                let selectedId = presets[index].id
+                guard index >= 0 && index < menuPresets.count else { return }
+                let selectedId = menuPresets[index].id
                 onChange(selectedId == presets.first?.id ? "" : selectedId)
             }
         )
         .frame(height: 24)
+    }
+
+    @ViewBuilder
+    private func settingsModelTextField(currentModel: String, placeholder: String, onChange: @escaping (String) -> Void) -> some View {
+        PastableTextField(
+            text: currentModel,
+            placeholder: placeholder,
+            onChange: { value in
+                onChange(value.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+        )
+        .frame(height: 22)
+    }
+
+    @ViewBuilder
+    private var openRouterFreeModelMenu: some View {
+        if isLoadingOpenRouterFreeModels {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(L10n.text(.settingsLoadingModels, config: appState.config))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(MuesliTheme.textTertiary)
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+        } else if !openRouterFreeModels.isEmpty {
+            settingsModelMenu(
+                currentModel: appState.config.openRouterModel,
+                presets: openRouterFreeModels
+            ) { val in controller.updateConfig { $0.openRouterModel = val } }
+        } else {
+            HStack(spacing: 8) {
+                if let openRouterFreeModelsError {
+                    Text(openRouterFreeModelsError)
+                        .font(.system(size: 11))
+                        .foregroundStyle(MuesliTheme.textTertiary)
+                        .lineLimit(1)
+                }
+                Button(L10n.text(.settingsLoadModels, config: appState.config)) {
+                    loadOpenRouterFreeModels(force: true)
+                }
+                .font(.system(size: 12, weight: .medium))
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+    }
+
+    private func loadOpenRouterFreeModelsIfNeeded() {
+        guard openRouterFreeModels.isEmpty, !isLoadingOpenRouterFreeModels else { return }
+        loadOpenRouterFreeModels(force: false)
+    }
+
+    private func loadOpenRouterFreeModels(force: Bool) {
+        guard force || openRouterFreeModels.isEmpty else { return }
+        isLoadingOpenRouterFreeModels = true
+        openRouterFreeModelsError = nil
+
+        Task {
+            do {
+                let url = URL(string: "https://openrouter.ai/api/v1/models?output_modalities=text")!
+                let (data, response) = try await URLSession.shared.data(from: url)
+                if let httpResponse = response as? HTTPURLResponse,
+                   !(200..<300).contains(httpResponse.statusCode) {
+                    throw URLError(.badServerResponse)
+                }
+                let catalog = try JSONDecoder().decode(OpenRouterModelCatalog.self, from: data)
+                let presets = OpenRouterModelCatalogFilter.freeTextSummaryPresets(from: catalog.data)
+
+                await MainActor.run {
+                    openRouterFreeModels = presets
+                    openRouterFreeModelsError = presets.isEmpty ? "No free text models found" : nil
+                    isLoadingOpenRouterFreeModels = false
+                }
+            } catch {
+                await MainActor.run {
+                    openRouterFreeModels = []
+                    openRouterFreeModelsError = "Could not load"
+                    isLoadingOpenRouterFreeModels = false
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -1548,6 +1647,48 @@ struct PastableSecureField: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: EditableNSSecureTextField, context: Context) {
+        if nsView.stringValue != text {
+            nsView.stringValue = text
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onChange: onChange)
+    }
+
+    class Coordinator: NSObject, NSTextFieldDelegate {
+        let onChange: (String) -> Void
+
+        init(onChange: @escaping (String) -> Void) {
+            self.onChange = onChange
+        }
+
+        func controlTextDidChange(_ obj: Notification) {
+            guard let field = obj.object as? NSTextField else { return }
+            onChange(field.stringValue)
+        }
+    }
+}
+
+/// Plain text field with the same accessory-app edit shortcuts as secure fields.
+struct PastableTextField: NSViewRepresentable {
+    let text: String
+    let placeholder: String
+    let onChange: (String) -> Void
+
+    func makeNSView(context: Context) -> EditableNSTextField {
+        let field = EditableNSTextField()
+        field.placeholderString = placeholder
+        field.font = .systemFont(ofSize: 13)
+        field.isBordered = true
+        field.isBezeled = true
+        field.bezelStyle = .roundedBezel
+        field.delegate = context.coordinator
+        field.stringValue = text
+        return field
+    }
+
+    func updateNSView(_ nsView: EditableNSTextField, context: Context) {
         if nsView.stringValue != text {
             nsView.stringValue = text
         }

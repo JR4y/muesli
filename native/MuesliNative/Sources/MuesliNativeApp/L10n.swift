@@ -184,6 +184,8 @@ enum L10nKey {
     case settingsSummaryBackend
     case settingsAccount
     case settingsModel
+    case settingsFreeModel
+    case settingsCustomModelID
     case settingsApiKey
     case settingsDefaultTemplate
     case settingsTemplates
@@ -232,6 +234,8 @@ enum L10nKey {
     case settingsChooseHookScript
     case settingsNoApiKeyConfigured
     case settingsApiKeyConfigured
+    case settingsLoadingModels
+    case settingsLoadModels
     case settingsRecordingSaveNever
     case settingsRecordingSavePrompt
     case settingsRecordingSaveAlways
@@ -611,6 +615,10 @@ enum L10n {
             return "Account"
         case .settingsModel:
             return "Model"
+        case .settingsFreeModel:
+            return "Free model"
+        case .settingsCustomModelID:
+            return "Custom model ID"
         case .settingsApiKey:
             return "API Key"
         case .settingsDefaultTemplate:
@@ -707,6 +715,10 @@ enum L10n {
             return "No API key configured"
         case .settingsApiKeyConfigured:
             return "Key configured"
+        case .settingsLoadingModels:
+            return "Loading models"
+        case .settingsLoadModels:
+            return "Load"
         case .settingsRecordingSaveNever:
             return "Never"
         case .settingsRecordingSavePrompt:
@@ -1157,6 +1169,10 @@ enum L10n {
             return "Cuenta"
         case .settingsModel:
             return "Modelo"
+        case .settingsFreeModel:
+            return "Modelo gratuito"
+        case .settingsCustomModelID:
+            return "ID de modelo personalizado"
         case .settingsApiKey:
             return "Clave API"
         case .settingsDefaultTemplate:
@@ -1253,6 +1269,10 @@ enum L10n {
             return "No hay clave API configurada"
         case .settingsApiKeyConfigured:
             return "Clave configurada"
+        case .settingsLoadingModels:
+            return "Cargando modelos"
+        case .settingsLoadModels:
+            return "Cargar"
         case .settingsRecordingSaveNever:
             return "Nunca"
         case .settingsRecordingSavePrompt:
