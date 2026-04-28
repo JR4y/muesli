@@ -296,26 +296,26 @@ enum MeetingTemplates {
         [auto] + builtIns + customDefinitions(from: customTemplates)
     }
 
-    static func resolveDefinition(id: String?, customTemplates: [CustomMeetingTemplate]) -> MeetingTemplateDefinition {
-        let normalizedID = id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? autoID
-        if normalizedID == autoID {
-            return auto
-        }
-        if let builtIn = builtIns.first(where: { $0.id == normalizedID }) {
-            return builtIn
-        }
-        if let custom = customTemplates.first(where: { $0.id == normalizedID }) {
-            return customDefinition(from: custom)
-        }
-        return auto
+    static func builtInDefinition(id: String) -> MeetingTemplateDefinition? {
+        builtIns.first(where: { $0.id == id })
     }
 
-    static func resolveExactDefinition(id: String?, customTemplates: [CustomMeetingTemplate]) -> MeetingTemplateDefinition? {
-        let normalizedID = id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? autoID
-        if normalizedID.isEmpty || normalizedID == autoID {
-            return auto
-        }
-        if let builtIn = builtIns.first(where: { $0.id == normalizedID }) {
+    static func visibleBuiltIns(hiddenIDs: [String]) -> [MeetingTemplateDefinition] {
+        let hidden = Set(
+            hiddenIDs
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        )
+        return builtIns.filter { !hidden.contains($0.id) }
+    }
+
+    static func autoTargetDefinition(
+        customTemplates: [CustomMeetingTemplate],
+        autoTemplateTargetID: String?
+    ) -> MeetingTemplateDefinition? {
+        let normalizedID = autoTemplateTargetID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !normalizedID.isEmpty, normalizedID != autoID else { return nil }
+        if let builtIn = builtInDefinition(id: normalizedID) {
             return builtIn
         }
         if let custom = customTemplates.first(where: { $0.id == normalizedID }) {
@@ -324,15 +324,65 @@ enum MeetingTemplates {
         return nil
     }
 
-    static func resolveSnapshot(id: String?, customTemplates: [CustomMeetingTemplate]) -> MeetingTemplateSnapshot {
-        resolveDefinition(id: id, customTemplates: customTemplates).snapshot
+    static func resolveDefinition(
+        id: String?,
+        customTemplates: [CustomMeetingTemplate],
+        autoTemplateTargetID: String? = nil
+    ) -> MeetingTemplateDefinition {
+        let normalizedID = id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? autoID
+        if normalizedID == autoID {
+            return autoTargetDefinition(
+                customTemplates: customTemplates,
+                autoTemplateTargetID: autoTemplateTargetID
+            ) ?? auto
+        }
+        if let builtIn = builtInDefinition(id: normalizedID) {
+            return builtIn
+        }
+        if let custom = customTemplates.first(where: { $0.id == normalizedID }) {
+            return customDefinition(from: custom)
+        }
+        return autoTargetDefinition(
+            customTemplates: customTemplates,
+            autoTemplateTargetID: autoTemplateTargetID
+        ) ?? auto
+    }
+
+    static func resolveExactDefinition(id: String?, customTemplates: [CustomMeetingTemplate]) -> MeetingTemplateDefinition? {
+        let normalizedID = id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? autoID
+        if normalizedID.isEmpty || normalizedID == autoID {
+            return auto
+        }
+        if let builtIn = builtInDefinition(id: normalizedID) {
+            return builtIn
+        }
+        if let custom = customTemplates.first(where: { $0.id == normalizedID }) {
+            return customDefinition(from: custom)
+        }
+        return nil
+    }
+
+    static func resolveSnapshot(
+        id: String?,
+        customTemplates: [CustomMeetingTemplate],
+        autoTemplateTargetID: String? = nil
+    ) -> MeetingTemplateSnapshot {
+        resolveDefinition(
+            id: id,
+            customTemplates: customTemplates,
+            autoTemplateTargetID: autoTemplateTargetID
+        ).snapshot
     }
 
     static func resolveExactSnapshot(id: String?, customTemplates: [CustomMeetingTemplate]) -> MeetingTemplateSnapshot? {
         resolveExactDefinition(id: id, customTemplates: customTemplates)?.snapshot
     }
 
-    static func snapshot(for meeting: MeetingRecord, customTemplates: [CustomMeetingTemplate]) -> MeetingTemplateSnapshot {
+    static func snapshot(
+        for meeting: MeetingRecord,
+        customTemplates: [CustomMeetingTemplate],
+        autoTemplateTargetID: String? = nil
+    ) -> MeetingTemplateSnapshot {
         let storedID = meeting.selectedTemplateID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let storedName = meeting.selectedTemplateName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let storedPrompt = meeting.selectedTemplatePrompt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -344,6 +394,10 @@ enum MeetingTemplates {
                 prompt: storedPrompt
             )
         }
-        return resolveSnapshot(id: storedID.isEmpty ? nil : storedID, customTemplates: customTemplates)
+        return resolveSnapshot(
+            id: storedID.isEmpty ? nil : storedID,
+            customTemplates: customTemplates,
+            autoTemplateTargetID: autoTemplateTargetID
+        )
     }
 }

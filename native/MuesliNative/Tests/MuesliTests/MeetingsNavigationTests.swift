@@ -459,13 +459,52 @@ struct MeetingsNavigationTests {
         controller.updateConfig {
             $0.customMeetingTemplates = [customTemplate]
             $0.defaultMeetingTemplateID = customTemplate.id
+            $0.autoTemplateTargetID = customTemplate.id
         }
 
         controller.deleteCustomMeetingTemplate(id: customTemplate.id)
 
         #expect(controller.config.defaultMeetingTemplateID == MeetingTemplates.autoID)
+        #expect(controller.config.autoTemplateTargetID.isEmpty)
         #expect(controller.appState.config.defaultMeetingTemplateID == MeetingTemplates.autoID)
         #expect(controller.config.customMeetingTemplates.isEmpty)
+    }
+
+    @Test("useTemplateAsDefault updates default and auto target")
+    func useTemplateAsDefaultUpdatesDefaultAndAutoTarget() {
+        let controller = makeController()
+        let customTemplate = CustomMeetingTemplate(
+            id: "tmpl_ops_review",
+            name: "Ops Review",
+            prompt: "## Summary",
+            icon: "shippingbox.fill"
+        )
+
+        controller.updateConfig {
+            $0.customMeetingTemplates = [customTemplate]
+        }
+
+        controller.useTemplateAsDefault(id: customTemplate.id)
+
+        #expect(controller.config.defaultMeetingTemplateID == customTemplate.id)
+        #expect(controller.config.autoTemplateTargetID == customTemplate.id)
+    }
+
+    @Test("hiding a built-in clears default and auto target references")
+    func hidingBuiltInClearsTemplateReferences() {
+        let controller = makeController()
+        let builtIn = controller.builtInMeetingTemplates().first!
+
+        controller.updateConfig {
+            $0.defaultMeetingTemplateID = builtIn.id
+            $0.autoTemplateTargetID = builtIn.id
+        }
+
+        controller.setBuiltInMeetingTemplateVisibility(id: builtIn.id, isVisible: false)
+
+        #expect(controller.config.defaultMeetingTemplateID == MeetingTemplates.autoID)
+        #expect(controller.config.autoTemplateTargetID.isEmpty)
+        #expect(controller.config.hiddenBuiltInTemplateIDs.contains(builtIn.id))
     }
 
     @Test("meeting transcription backend selection is independent from dictation backend")

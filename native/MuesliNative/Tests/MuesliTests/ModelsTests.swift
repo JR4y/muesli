@@ -338,6 +338,8 @@ struct AppConfigTests {
         #expect(config.meetingTranscriptionModel == BackendOption.whisper.model)
         #expect(config.meetingSummaryBackend == "openai")
         #expect(config.defaultMeetingTemplateID == MeetingTemplates.autoID)
+        #expect(config.autoTemplateTargetID.isEmpty)
+        #expect(config.meetingTitlePrompt == MeetingSummaryClient.defaultTitleInstructions)
         #expect(config.meetingRecordingSavePolicy == .never)
         #expect(config.openAIAPIKey.isEmpty)
         #expect(config.openRouterAPIKey.isEmpty)
@@ -347,6 +349,7 @@ struct AppConfigTests {
         #expect(config.hasCompletedOnboarding == false)
         #expect(config.userName.isEmpty)
         #expect(config.customMeetingTemplates.isEmpty)
+        #expect(config.hiddenBuiltInTemplateIDs.isEmpty)
         #expect(config.meetingHookEnabled == false)
         #expect(config.meetingHookPath.isEmpty)
         #expect(config.meetingHookTimeoutSeconds == 30)
@@ -360,6 +363,8 @@ struct AppConfigTests {
         config.hasCompletedOnboarding = true
         config.cohereLanguage = CohereTranscribeLanguage.german.rawValue
         config.defaultMeetingTemplateID = "weekly-team-meeting"
+        config.autoTemplateTargetID = "tmpl_123"
+        config.meetingTitlePrompt = "Return only a title in Spanish."
         config.meetingRecordingSavePolicy = .always
         config.customMeetingTemplates = [
             CustomMeetingTemplate(
@@ -369,6 +374,7 @@ struct AppConfigTests {
                 icon: "dollarsign.circle"
             )
         ]
+        config.hiddenBuiltInTemplateIDs = ["hiring"]
         config.meetingHookEnabled = true
         config.meetingHookPath = "/tmp/meeting-hook.sh"
         config.meetingHookTimeoutSeconds = 45
@@ -381,10 +387,13 @@ struct AppConfigTests {
         #expect(decoded.hasCompletedOnboarding == true)
         #expect(decoded.cohereLanguage == CohereTranscribeLanguage.german.rawValue)
         #expect(decoded.defaultMeetingTemplateID == "weekly-team-meeting")
+        #expect(decoded.autoTemplateTargetID == "tmpl_123")
+        #expect(decoded.meetingTitlePrompt == "Return only a title in Spanish.")
         #expect(decoded.meetingRecordingSavePolicy == .always)
         #expect(decoded.customMeetingTemplates.count == 1)
         #expect(decoded.customMeetingTemplates.first?.name == "Customer Follow-Up")
         #expect(decoded.customMeetingTemplates.first?.icon == "dollarsign.circle")
+        #expect(decoded.hiddenBuiltInTemplateIDs == ["hiring"])
         #expect(decoded.meetingHookEnabled == true)
         #expect(decoded.meetingHookPath == "/tmp/meeting-hook.sh")
         #expect(decoded.meetingHookTimeoutSeconds == 45)
@@ -407,8 +416,11 @@ struct AppConfigTests {
         #expect(json["has_completed_onboarding"] != nil)
         #expect(json["user_name"] != nil)
         #expect(json["default_meeting_template_id"] != nil)
+        #expect(json["auto_template_target_id"] != nil)
+        #expect(json["meeting_title_prompt"] != nil)
         #expect(json["meeting_recording_save_policy"] != nil)
         #expect(json["custom_meeting_templates"] != nil)
+        #expect(json["hidden_built_in_template_ids"] != nil)
         #expect(json["meeting_hook_enabled"] != nil)
         #expect(json["meeting_hook_path"] != nil)
         #expect(json["meeting_hook_timeout_seconds"] != nil)
@@ -425,8 +437,11 @@ struct AppConfigTests {
         #expect(config.resolvedCohereLanguage == .english)
         #expect(config.hasCompletedOnboarding == false)
         #expect(config.defaultMeetingTemplateID == MeetingTemplates.autoID)
+        #expect(config.autoTemplateTargetID.isEmpty)
+        #expect(config.meetingTitlePrompt == MeetingSummaryClient.defaultTitleInstructions)
         #expect(config.meetingRecordingSavePolicy == .never)
         #expect(config.customMeetingTemplates.isEmpty)
+        #expect(config.hiddenBuiltInTemplateIDs.isEmpty)
         #expect(config.meetingHookEnabled == false)
         #expect(config.meetingHookPath.isEmpty)
         #expect(config.meetingHookTimeoutSeconds == 30)
@@ -682,6 +697,36 @@ struct MeetingTemplateResolutionTests {
                 customTemplates: []
             )?.id == builtIn.id
         )
+    }
+
+    @Test("auto resolution can target a custom template")
+    func autoResolutionCanTargetCustomTemplate() {
+        let customTemplates = [
+            CustomMeetingTemplate(
+                id: "tmpl_sales",
+                name: "Sales Follow-Up",
+                prompt: "## Summary",
+                icon: "dollarsign.circle"
+            )
+        ]
+
+        let resolved = MeetingTemplates.resolveSnapshot(
+            id: MeetingTemplates.autoID,
+            customTemplates: customTemplates,
+            autoTemplateTargetID: "tmpl_sales"
+        )
+
+        #expect(resolved.id == "tmpl_sales")
+        #expect(resolved.name == "Sales Follow-Up")
+    }
+
+    @Test("visible built-ins exclude hidden ids")
+    func visibleBuiltInsExcludeHiddenIDs() {
+        let hiddenID = MeetingTemplates.builtIns.first!.id
+        let visible = MeetingTemplates.visibleBuiltIns(hiddenIDs: [hiddenID])
+
+        #expect(!visible.contains(where: { $0.id == hiddenID }))
+        #expect(visible.count == MeetingTemplates.builtIns.count - 1)
     }
 }
 

@@ -177,11 +177,13 @@ public struct MeetingRecord: Identifiable, Codable, Sendable {
 public struct MeetingFolder: Identifiable, Codable, Sendable {
     public let id: Int64
     public var name: String
+    public let colorHex: String?
     public let createdAt: String
 
-    public init(id: Int64, name: String, createdAt: String) {
+    public init(id: Int64, name: String, colorHex: String? = nil, createdAt: String) {
         self.id = id
         self.name = name
+        self.colorHex = colorHex
         self.createdAt = createdAt
     }
 }

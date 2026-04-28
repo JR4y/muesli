@@ -91,11 +91,15 @@ public final class DictationStore {
         CREATE TABLE IF NOT EXISTS meeting_folders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
+            color_hex TEXT,
             sort_order INTEGER NOT NULL DEFAULT 0,
             created_at TEXT DEFAULT (datetime('now'))
         );
         """
         try exec(foldersSQL, db: db)
+        if sqlite3_exec(db, "ALTER TABLE meeting_folders ADD COLUMN color_hex TEXT", nil, nil, nil) != SQLITE_OK {
+            // Column may already exist.
+        }
 
         if sqlite3_exec(db, "ALTER TABLE meetings ADD COLUMN folder_id INTEGER REFERENCES meeting_folders(id)", nil, nil, nil) != SQLITE_OK {
             // Column may already exist.
@@ -907,7 +911,7 @@ public final class DictationStore {
     public func createFolder(name: String) throws -> Int64 {
         let db = try openDatabase()
         defer { sqlite3_close(db) }
-        let sql = "INSERT INTO meeting_folders (name) VALUES (?)"
+        let sql = "INSERT INTO meeting_folders (name, color_hex) VALUES (?, NULL)"
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
             throw lastError(db)
@@ -930,6 +934,26 @@ public final class DictationStore {
         }
         defer { sqlite3_finalize(statement) }
         sqlite3_bind_text(statement, 1, (name as NSString).utf8String, -1, nil)
+        sqlite3_bind_int64(statement, 2, id)
+        guard sqlite3_step(statement) == SQLITE_DONE else {
+            throw lastError(db)
+        }
+    }
+
+    public func updateFolderColor(id: Int64, colorHex: String?) throws {
+        let db = try openDatabase()
+        defer { sqlite3_close(db) }
+        let sql = "UPDATE meeting_folders SET color_hex = ? WHERE id = ?"
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw lastError(db)
+        }
+        defer { sqlite3_finalize(statement) }
+        if let colorHex, !colorHex.isEmpty {
+            sqlite3_bind_text(statement, 1, (colorHex as NSString).utf8String, -1, nil)
+        } else {
+            sqlite3_bind_null(statement, 1)
+        }
         sqlite3_bind_int64(statement, 2, id)
         guard sqlite3_step(statement) == SQLITE_DONE else {
             throw lastError(db)
@@ -976,7 +1000,7 @@ public final class DictationStore {
     public func listFolders() throws -> [MeetingFolder] {
         let db = try openDatabase()
         defer { sqlite3_close(db) }
-        let sql = "SELECT id, name, created_at FROM meeting_folders ORDER BY id ASC"
+        let sql = "SELECT id, name, color_hex, created_at FROM meeting_folders ORDER BY id ASC"
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
             throw lastError(db)
@@ -987,7 +1011,8 @@ public final class DictationStore {
             rows.append(MeetingFolder(
                 id: sqlite3_column_int64(statement, 0),
                 name: stringColumn(statement, index: 1),
-                createdAt: stringColumn(statement, index: 2)
+                colorHex: sqlite3_column_type(statement, 2) == SQLITE_NULL ? nil : stringColumn(statement, index: 2),
+                createdAt: stringColumn(statement, index: 3)
             ))
         }
         return rows

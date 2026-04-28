@@ -16,9 +16,17 @@ struct MeetingListItemView: View {
     @State private var showNewFolderPrompt = false
     @State private var newFolderName = ""
 
-    private var currentFolderName: String? {
+    private var currentFolder: MeetingFolder? {
         guard let fid = record.folderID else { return nil }
-        return folders.first(where: { $0.id == fid })?.name
+        return folders.first(where: { $0.id == fid })
+    }
+
+    private var currentFolderName: String? {
+        currentFolder?.name
+    }
+
+    private var currentFolderColor: Color {
+        MeetingFolderColors.color(for: currentFolder, fallback: MuesliTheme.accent.opacity(0.8))
     }
 
     var body: some View {
@@ -63,7 +71,7 @@ struct MeetingListItemView: View {
                         Text(name)
                             .font(MuesliTheme.caption())
                     }
-                    .foregroundStyle(MuesliTheme.accent.opacity(0.8))
+                    .foregroundStyle(currentFolderColor)
                 }
             }
 
@@ -105,7 +113,7 @@ struct MeetingListItemView: View {
                 .font(.system(size: 11))
                 .foregroundStyle(
                     record.folderID != nil
-                        ? MuesliTheme.accent
+                        ? currentFolderColor
                         : (isHovering ? MuesliTheme.textSecondary : MuesliTheme.textTertiary)
                 )
                 .frame(width: 24, height: 24)
@@ -121,7 +129,12 @@ struct MeetingListItemView: View {
                 }
                 Divider().padding(.vertical, 4)
                 ForEach(folders) { folder in
-                    folderPopoverRow(icon: "folder", label: folder.name, isActive: record.folderID == folder.id) {
+                    folderPopoverRow(
+                        icon: "folder",
+                        label: folder.name,
+                        color: MeetingFolderColors.color(for: folder, fallback: MuesliTheme.textSecondary),
+                        isActive: record.folderID == folder.id
+                    ) {
                         onMove(folder.id)
                         showFolderPopover = false
                     }
@@ -152,11 +165,18 @@ struct MeetingListItemView: View {
     }
 
     @ViewBuilder
-    private func folderPopoverRow(icon: String, label: String, isActive: Bool = false, action: @escaping () -> Void) -> some View {
+    private func folderPopoverRow(
+        icon: String,
+        label: String,
+        color: Color = MuesliTheme.textSecondary,
+        isActive: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
                     .font(.system(size: 11))
+                    .foregroundStyle(color)
                     .frame(width: 16)
                 Text(label)
                     .font(MuesliTheme.callout())

@@ -64,6 +64,11 @@ struct MeetingDetailView: View {
         _documentMode = State(initialValue: meeting.map(Self.defaultDocumentMode(for:)) ?? .notes)
     }
 
+    private func folder(for meeting: MeetingRecord) -> MeetingFolder? {
+        guard let folderID = meeting.folderID else { return nil }
+        return appState.folders.first(where: { $0.id == folderID })
+    }
+
     var body: some View {
         Group {
             if let meeting {
@@ -166,6 +171,7 @@ struct MeetingDetailView: View {
                         Text(formatMeta(meeting))
                             .font(MuesliTheme.callout())
                             .foregroundStyle(MuesliTheme.textSecondary)
+                        folderChip(for: meeting)
                         calendarAssociationControl(for: meeting)
                         templateChip(for: appliedTemplate)
                     }
@@ -224,6 +230,20 @@ struct MeetingDetailView: View {
         .padding(.horizontal, 40)
         .padding(.vertical, 24)
         .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    @ViewBuilder
+    private func folderChip(for meeting: MeetingRecord) -> some View {
+        if let folder = folder(for: meeting) {
+            HStack(spacing: 6) {
+                Image(systemName: "folder.fill")
+                    .font(.system(size: 10, weight: .medium))
+                Text(folder.name)
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(MeetingFolderColors.color(for: folder, fallback: MuesliTheme.accent))
+        }
     }
 
     @ViewBuilder
@@ -426,29 +446,19 @@ struct MeetingDetailView: View {
 
     @ViewBuilder
     private func templateMenu(for meeting: MeetingRecord, appliedTemplate: MeetingTemplateSnapshot) -> some View {
+        let autoTarget = controller.effectiveAutoMeetingTemplate()
+        let autoTitle = autoTarget.id == MeetingTemplates.autoID
+            ? MeetingTemplates.auto.title
+            : "\(MeetingTemplates.auto.title) (\(autoTarget.title))"
         Menu {
             Button {
                 pendingTemplateID = MeetingTemplates.autoID
             } label: {
                 templateMenuItem(
-                    title: MeetingTemplates.auto.title,
+                    title: autoTitle,
                     systemImage: MeetingTemplates.auto.icon,
                     isSelected: pendingTemplateID == MeetingTemplates.autoID
                 )
-            }
-
-            Section(L10n.text(.meetingBuiltInTemplates, config: appState.config)) {
-                ForEach(controller.builtInMeetingTemplates()) { template in
-                    Button {
-                        pendingTemplateID = template.id
-                    } label: {
-                        templateMenuItem(
-                            title: template.title,
-                            systemImage: template.icon,
-                            isSelected: pendingTemplateID == template.id
-                        )
-                    }
-                }
             }
 
             if !controller.customMeetingTemplates().isEmpty {
@@ -461,6 +471,22 @@ struct MeetingDetailView: View {
                             templateMenuItem(
                                 title: template.name,
                                 systemImage: resolved.icon,
+                                isSelected: pendingTemplateID == template.id
+                            )
+                        }
+                    }
+                }
+            }
+
+            if !controller.visibleBuiltInMeetingTemplates().isEmpty {
+                Section(L10n.text(.meetingBuiltInTemplates, config: appState.config)) {
+                    ForEach(controller.visibleBuiltInMeetingTemplates()) { template in
+                        Button {
+                            pendingTemplateID = template.id
+                        } label: {
+                            templateMenuItem(
+                                title: template.title,
+                                systemImage: template.icon,
                                 isSelected: pendingTemplateID == template.id
                             )
                         }
@@ -783,6 +809,12 @@ struct MeetingDetailView: View {
     }
 
     private func labelForSelection(on meeting: MeetingRecord, appliedTemplate: MeetingTemplateSnapshot) -> String {
+        if pendingTemplateID == MeetingTemplates.autoID {
+            let autoTarget = controller.effectiveAutoMeetingTemplate()
+            return autoTarget.id == MeetingTemplates.autoID
+                ? MeetingTemplates.auto.title
+                : "\(MeetingTemplates.auto.title) (\(autoTarget.title))"
+        }
         if pendingTemplateID == appliedTemplate.id {
             return appliedTemplate.name
         }
@@ -790,6 +822,9 @@ struct MeetingDetailView: View {
     }
 
     private func iconName(forSelectionOn meeting: MeetingRecord, appliedTemplate: MeetingTemplateSnapshot) -> String {
+        if pendingTemplateID == MeetingTemplates.autoID {
+            return MeetingTemplates.auto.icon
+        }
         if pendingTemplateID == appliedTemplate.id {
             return iconName(for: appliedTemplate)
         }
@@ -897,12 +932,15 @@ struct MeetingDetailView: View {
         if let resolved = MeetingTemplates.resolveExactDefinition(
             id: pendingTemplateID,
             customTemplates: appState.config.customMeetingTemplates
-        ) {
+        ), pendingTemplateID != MeetingTemplates.autoID {
             return resolved
         }
         return MeetingTemplates.resolveDefinition(
-            id: controller.meetingTemplateSnapshot(for: meeting).id,
-            customTemplates: appState.config.customMeetingTemplates
+            id: pendingTemplateID == MeetingTemplates.autoID
+                ? pendingTemplateID
+                : controller.meetingTemplateSnapshot(for: meeting).id,
+            customTemplates: appState.config.customMeetingTemplates,
+            autoTemplateTargetID: appState.config.autoTemplateTargetID
         )
     }
 

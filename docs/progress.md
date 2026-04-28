@@ -156,6 +156,35 @@ A date formatting fix was added for note timestamps:
 This matters because the stored data was already correct, but the UI could show
 misleading times such as `09:01` instead of the real local `11:01`.
 
+#### Summary workflow and template controls
+
+The next pass focused on making meeting summaries more controllable in daily use:
+
+- the summary pipeline and transcript-cleanup pipeline were reviewed separately
+- custom summary templates are now the main way to control summary structure and language
+- built-in templates can now be hidden from the UI without removing them from code
+- any visible built-in or custom template can now be marked as the default
+- `Auto` can now resolve to the user's chosen template target instead of always behaving like a fixed built-in
+- custom templates are now shown before built-ins in template management and selection surfaces
+- the meeting title generation prompt is now editable from `Manage Templates`
+
+This matters because the fork now supports a much clearer editorial split:
+cleanup prompt in settings, summary templates in the templates manager, and the
+meeting-title prompt as a separate system prompt.
+
+#### Meetings dashboard and folder polish
+
+A small but practical UX pass was added for meetings organization:
+
+- `Coming Up` can now be collapsed and expanded from the dashboard
+- this keeps long upcoming lists from pushing the meetings browser too far down
+- meeting folders now support optional accent colors
+- folder colors are chosen from the folder context menu
+- meetings now surface the assigned folder more clearly in the list and in the meeting detail header
+
+This was intentionally kept lightweight: folders are still single-assignment
+containers, not tags or nested structures.
+
 ## Current technical notes
 
 ### Permissions after reinstall
@@ -190,14 +219,18 @@ README "delivered features" section:
 - Local calendar source controls inside Settings
 - Calendar-aware recovery flow to associate notes with nearby invites after recording
 - Correct local-time rendering for note timestamps
+- Better template control with hideable built-ins and user-targeted `Auto`
+- Editable meeting title prompt from the templates manager
+- Collapsible `Coming Up` dashboard section
+- Optional accent colors for meeting folders
 
 ## Recommended next work
 
 1. Review why nearby calendar suggestions can appear intermittently and stabilize that query/state flow
 2. Decide whether Google Calendar configuration should remain hidden/disabled without credentials or be exposed more explicitly
-3. Start improving summaries and generated headings/templates
+3. Continue improving summary/title quality now that template and title-prompt controls exist
 4. Explore meeting-chat / copilot direction
-5. Continue UX polish through daily real usage
+5. Continue UX polish through daily real usage, especially `Coming Up` pagination/capping
 
 ## Editing note
 

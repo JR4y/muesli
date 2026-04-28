@@ -135,6 +135,7 @@ struct MeetingsView: View {
     let controller: MuesliController
     @State private var selectedFilter: MeetingBrowserFilter = .all
     @State private var selectedSort: MeetingBrowserSort = .newestFirst
+    @State private var isComingUpExpanded = true
 
     private var scopedMeetings: [MeetingRecord] {
         appState.meetingRows
@@ -298,144 +299,192 @@ struct MeetingsView: View {
         }
     }
 
+    private var visibleUpcomingEventCount: Int {
+        groupedUpcomingEvents.reduce(0) { $0 + $1.events.count }
+    }
+
     @ViewBuilder
     private var comingUpSection: some View {
         VStack(alignment: .leading, spacing: MuesliTheme.spacing16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(L10n.text(.meetingsComingUp, config: appState.config))
-                    .font(.custom("Cormorant Garamond", size: 22).weight(.medium))
-                    .foregroundStyle(MuesliTheme.textPrimary)
+            HStack(alignment: .top, spacing: MuesliTheme.spacing16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L10n.text(.meetingsComingUp, config: appState.config))
+                        .font(.custom("Cormorant Garamond", size: 22).weight(.medium))
+                        .foregroundStyle(MuesliTheme.textPrimary)
 
-                if appState.isGoogleCalendarAuthenticated {
-                    Button {
-                        if let url = URL(string: "x-apple.systempreferences:com.apple.Internet-Accounts-Settings.extension") {
-                            NSWorkspace.shared.open(url)
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                                .font(.system(size: 9))
-                            Text(L10n.text(.meetingsCalendarSyncHint, config: appState.config))
+                    HStack(spacing: 8) {
+                        Text(L10n.text(.meetingsCount(count: visibleUpcomingEventCount), config: appState.config))
+                            .font(.system(size: 11))
+                            .foregroundStyle(MuesliTheme.textSecondary)
+
+                        if !isComingUpExpanded {
+                            Text(L10n.text(.meetingsCollapsedHint, config: appState.config))
                                 .font(.system(size: 11))
+                                .foregroundStyle(MuesliTheme.textTertiary)
                         }
-                        .foregroundStyle(MuesliTheme.accent)
                     }
-                    .buttonStyle(.plain)
+
+                    if appState.isGoogleCalendarAuthenticated {
+                        Button {
+                            if let url = URL(string: "x-apple.systempreferences:com.apple.Internet-Accounts-Settings.extension") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                                    .font(.system(size: 9))
+                                Text(L10n.text(.meetingsCalendarSyncHint, config: appState.config))
+                                    .font(.system(size: 11))
+                            }
+                            .foregroundStyle(MuesliTheme.accent)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
+
+                Spacer(minLength: 0)
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        isComingUpExpanded.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(L10n.text(
+                            isComingUpExpanded ? .meetingsCollapseComingUp : .meetingsExpandComingUp,
+                            config: appState.config
+                        ))
+                        .font(.system(size: 11, weight: .medium))
+                        Image(systemName: isComingUpExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .foregroundStyle(MuesliTheme.textSecondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(MuesliTheme.surfacePrimary)
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 7)
+                            .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 0.5)
+                    )
+                }
+                .buttonStyle(.plain)
             }
             .padding(.bottom, 4)
 
-            let groups = groupedUpcomingEvents
-            let lastGroupId = groups.last?.id
-            ForEach(groups) { group in
-                HStack(alignment: .top, spacing: 20) {
-                    // Date column
-                    VStack(alignment: .center, spacing: 2) {
-                        Text(group.dayNumber)
-                            .font(.system(size: 24, weight: .light, design: .default))
-                            .foregroundStyle(group.isToday ? MuesliTheme.accent : MuesliTheme.textPrimary)
-                        Text(group.dayLabel)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(group.isToday ? MuesliTheme.accent : MuesliTheme.textSecondary)
-                        Text(group.dayOfWeek)
-                            .font(.system(size: 10))
-                            .foregroundStyle(MuesliTheme.textSecondary)
-                    }
-                    .frame(width: 60)
+            if isComingUpExpanded {
+                let groups = groupedUpcomingEvents
+                let lastGroupId = groups.last?.id
+                ForEach(groups) { group in
+                    HStack(alignment: .top, spacing: 20) {
+                        // Date column
+                        VStack(alignment: .center, spacing: 2) {
+                            Text(group.dayNumber)
+                                .font(.system(size: 24, weight: .light, design: .default))
+                                .foregroundStyle(group.isToday ? MuesliTheme.accent : MuesliTheme.textPrimary)
+                            Text(group.dayLabel)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(group.isToday ? MuesliTheme.accent : MuesliTheme.textSecondary)
+                            Text(group.dayOfWeek)
+                                .font(.system(size: 10))
+                                .foregroundStyle(MuesliTheme.textSecondary)
+                        }
+                        .frame(width: 60)
 
-                    // Events column
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(group.events) { event in
-                            HStack(spacing: 8) {
-                                RoundedRectangle(cornerRadius: 1.5)
-                                    .fill(eventCalendarColor(event, fallback: group.isToday ? MuesliTheme.accent : MuesliTheme.textSecondary.opacity(0.4)))
-                                    .frame(width: 3, height: 36)
+                        // Events column
+                        VStack(alignment: .leading, spacing: 10) {
+                            ForEach(group.events) { event in
+                                HStack(spacing: 8) {
+                                    RoundedRectangle(cornerRadius: 1.5)
+                                        .fill(eventCalendarColor(event, fallback: group.isToday ? MuesliTheme.accent : MuesliTheme.textSecondary.opacity(0.4)))
+                                        .frame(width: 3, height: 36)
 
-                                VStack(alignment: .leading, spacing: 2) {
-                                    HStack(spacing: 6) {
-                                        Circle()
-                                            .fill(eventCalendarColor(event, fallback: MuesliTheme.textSecondary.opacity(0.35)))
-                                            .frame(width: 7, height: 7)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        HStack(spacing: 6) {
+                                            Circle()
+                                                .fill(eventCalendarColor(event, fallback: MuesliTheme.textSecondary.opacity(0.35)))
+                                                .frame(width: 7, height: 7)
 
-                                        Text(event.title)
-                                            .font(.system(size: 13, weight: .medium))
-                                            .foregroundStyle(MuesliTheme.textPrimary)
-                                            .lineLimit(1)
-                                    }
-
-                                    HStack(spacing: 6) {
-                                        Text(formatTimeRange(event))
-                                            .font(.system(size: 11))
-                                            .foregroundStyle(MuesliTheme.textSecondary)
-
-                                        if let calendarLabel = eventCalendarLabel(event) {
-                                            Text("·")
-                                                .font(.system(size: 11))
-                                                .foregroundStyle(MuesliTheme.textTertiary)
-                                            Text(calendarLabel)
-                                                .font(.system(size: 10))
-                                                .foregroundStyle(MuesliTheme.textTertiary)
+                                            Text(event.title)
+                                                .font(.system(size: 13, weight: .medium))
+                                                .foregroundStyle(MuesliTheme.textPrimary)
                                                 .lineLimit(1)
                                         }
+
+                                        HStack(spacing: 6) {
+                                            Text(formatTimeRange(event))
+                                                .font(.system(size: 11))
+                                                .foregroundStyle(MuesliTheme.textSecondary)
+
+                                            if let calendarLabel = eventCalendarLabel(event) {
+                                                Text("·")
+                                                    .font(.system(size: 11))
+                                                    .foregroundStyle(MuesliTheme.textTertiary)
+                                                Text(calendarLabel)
+                                                    .font(.system(size: 10))
+                                                    .foregroundStyle(MuesliTheme.textTertiary)
+                                                    .lineLimit(1)
+                                            }
+                                        }
                                     }
-                                }
 
-                                Spacer()
+                                    Spacer()
 
-                                if let meetingURL = event.meetingURL, !appState.isMeetingRecording {
-                                    Button {
-                                        controller.joinAndRecord(title: event.title, meetingURL: meetingURL, endDate: event.endDate)
+                                    if let meetingURL = event.meetingURL, !appState.isMeetingRecording {
+                                        Button {
+                                            controller.joinAndRecord(title: event.title, meetingURL: meetingURL, endDate: event.endDate)
+                                        } label: {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "video.fill")
+                                                    .font(.system(size: 9))
+                                                Text(L10n.text(.meetingsJoinAndRecord, config: appState.config))
+                                                    .font(.system(size: 10, weight: .medium))
+                                            }
+                                            .foregroundStyle(.white)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(Color(nsColor: NSColor(red: 0.20, green: 0.72, blue: 0.53, alpha: 1.0)))
+                                            .clipShape(RoundedRectangle(cornerRadius: 5))
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+
+                                    Menu {
+                                        Button(L10n.text(.sidebarAllMeetings, config: appState.config)) {
+                                            controller.createMeetingFromCalendarEvent(event, folderID: nil)
+                                        }
+                                        Divider()
+                                        ForEach(appState.folders) { folder in
+                                            Button(folder.name) {
+                                                controller.createMeetingFromCalendarEvent(event, folderID: folder.id)
+                                            }
+                                        }
                                     } label: {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "video.fill")
-                                                .font(.system(size: 9))
-                                            Text(L10n.text(.meetingsJoinAndRecord, config: appState.config))
-                                                .font(.system(size: 10, weight: .medium))
-                                        }
-                                        .foregroundStyle(.white)
+                                        Text(L10n.text(.meetingsAddToFolder, config: appState.config))
+                                            .font(.system(size: 10, weight: .medium))
+                                            .foregroundStyle(MuesliTheme.textSecondary)
                                         .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color(nsColor: NSColor(red: 0.20, green: 0.72, blue: 0.53, alpha: 1.0)))
-                                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                                            .padding(.vertical, 3)
+                                            .background(MuesliTheme.surfacePrimary)
+                                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 4)
+                                                    .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 0.5)
+                                            )
                                     }
-                                    .buttonStyle(.plain)
-                                }
+                                    .menuStyle(.borderlessButton)
+                                    .fixedSize()
 
-                                Menu {
-                                    Button(L10n.text(.sidebarAllMeetings, config: appState.config)) {
-                                        controller.createMeetingFromCalendarEvent(event, folderID: nil)
-                                    }
-                                    Divider()
-                                    ForEach(appState.folders) { folder in
-                                        Button(folder.name) {
-                                            controller.createMeetingFromCalendarEvent(event, folderID: folder.id)
-                                        }
-                                    }
-                                } label: {
-                                    Text(L10n.text(.meetingsAddToFolder, config: appState.config))
-                                        .font(.system(size: 10, weight: .medium))
-                                        .foregroundStyle(MuesliTheme.textSecondary)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 3)
-                                        .background(MuesliTheme.surfacePrimary)
-                                        .clipShape(RoundedRectangle(cornerRadius: 4))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 4)
-                                                .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 0.5)
-                                        )
+                                    hideEventButton(event)
                                 }
-                                .menuStyle(.borderlessButton)
-                                .fixedSize()
-
-                                hideEventButton(event)
                             }
                         }
                     }
-                }
 
-                if group.id != lastGroupId {
-                    Divider()
-                        .foregroundStyle(MuesliTheme.surfaceBorder)
+                    if group.id != lastGroupId {
+                        Divider()
+                            .foregroundStyle(MuesliTheme.surfaceBorder)
+                    }
                 }
             }
         }

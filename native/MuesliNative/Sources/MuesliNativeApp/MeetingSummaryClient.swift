@@ -30,7 +30,7 @@ enum MeetingSummaryClient {
     private static let defaultChatGPTModel = "gpt-5.4-mini"
     private static let defaultSummaryMaxOutputTokens = 2500
 
-    private static let titleInstructions = """
+    static let defaultTitleInstructions = """
     Generate a short, descriptive meeting title (3-7 words) from this transcript. \
     Return ONLY the title text, nothing else. No quotes, no prefix, no explanation. \
     Examples: "Q3 Sprint Planning", "Customer Onboarding Review", "Security Audit Discussion"
@@ -553,12 +553,17 @@ enum MeetingSummaryClient {
 
     static func generateTitle(transcript: String, config: AppConfig) async -> String? {
         let backend = (config.meetingSummaryBackend.isEmpty ? MeetingSummaryBackendOption.openAI.backend : config.meetingSummaryBackend).lowercased()
+        let titleInstructions = resolvedTitleInstructions(config: config)
 
         // Use a short prefix of the transcript for title generation (save tokens)
         let truncated = String(transcript.prefix(1500))
 
         if backend == MeetingSummaryBackendOption.chatGPT.backend {
-            return await generateTitleWithChatGPT(transcript: truncated, config: config)
+            return await generateTitleWithChatGPT(
+                transcript: truncated,
+                config: config,
+                titleInstructions: titleInstructions
+            )
         }
 
         if backend == MeetingSummaryBackendOption.openRouter.backend {
@@ -589,6 +594,11 @@ enum MeetingSummaryClient {
                 extraHeaders: [:]
             )
         }
+    }
+
+    static func resolvedTitleInstructions(config: AppConfig) -> String {
+        let trimmed = config.meetingTitlePrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? defaultTitleInstructions : trimmed
     }
 
     private static func callChatCompletions(
@@ -645,7 +655,11 @@ enum MeetingSummaryClient {
         }
     }
 
-    private static func generateTitleWithChatGPT(transcript: String, config: AppConfig) async -> String? {
+    private static func generateTitleWithChatGPT(
+        transcript: String,
+        config: AppConfig,
+        titleInstructions: String
+    ) async -> String? {
         do {
             let model = config.chatGPTModel.isEmpty ? defaultChatGPTModel : config.chatGPTModel
             let result = try await callWHAM(

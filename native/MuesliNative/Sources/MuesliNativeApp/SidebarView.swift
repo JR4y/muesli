@@ -295,6 +295,7 @@ struct SidebarView: View {
                         } else {
                             meetingFilterRow(
                                 icon: "folder",
+                                iconColor: MeetingFolderColors.color(for: folder, fallback: MuesliTheme.accent),
                                 label: folder.name,
                                 count: appState.meetingCountsByFolder[folder.id] ?? 0,
                                 isSelected: appState.selectedTab == .meetings && appState.selectedFolderID == folder.id
@@ -317,6 +318,20 @@ struct SidebarView: View {
                                 Button(L10n.text(.sidebarRename, config: appState.config)) {
                                     renamingFolderID = folder.id
                                     renamingFolderName = folder.name
+                                }
+                                Menu(L10n.text(.sidebarFolderColor, config: appState.config)) {
+                                    ForEach(MeetingFolderColors.all) { option in
+                                        Button {
+                                            controller.updateFolderColor(id: folder.id, colorHex: option.hex)
+                                        } label: {
+                                            HStack(spacing: 8) {
+                                                Circle()
+                                                    .fill(option.swatchColor)
+                                                    .frame(width: 9, height: 9)
+                                                Text(L10n.text(option.labelKey, config: appState.config))
+                                            }
+                                        }
+                                    }
                                 }
                                 Divider()
                                 Button(L10n.text(.sidebarDelete, config: appState.config), role: .destructive) {
@@ -428,6 +443,7 @@ struct SidebarView: View {
     @ViewBuilder
     private func meetingFilterRow(
         icon: String,
+        iconColor: Color? = nil,
         label: String,
         count: Int,
         isSelected: Bool,
@@ -436,7 +452,7 @@ struct SidebarView: View {
         HStack(spacing: MuesliTheme.spacing8) {
             Image(systemName: icon)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(isSelected ? MuesliTheme.accent : MuesliTheme.textTertiary)
+                .foregroundStyle(iconColor ?? (isSelected ? MuesliTheme.accent : MuesliTheme.textTertiary))
                 .frame(width: sidebarIconColumnWidth)
             Text(label)
                 .font(MuesliTheme.callout())
@@ -464,7 +480,7 @@ struct SidebarView: View {
         HStack(spacing: MuesliTheme.spacing8) {
             Image(systemName: "folder")
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(MuesliTheme.accent)
+                .foregroundStyle(MeetingFolderColors.color(for: folder, fallback: MuesliTheme.accent))
                 .frame(width: sidebarIconColumnWidth)
             TextField(L10n.text(.sidebarFolderName, config: appState.config), text: $renamingFolderName)
                 .font(MuesliTheme.callout())

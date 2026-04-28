@@ -30,6 +30,12 @@ Completed or largely completed:
 - Major meetings localization pass
 - Major settings localization pass
 - Dictations localization pass
+- Built-in summary templates can now be hidden
+- Custom summary templates now appear before built-ins
+- `Auto` template can now target the user's chosen default template
+- `Coming Up` now supports collapse/expand
+- Meeting folders now support accent colors and clearer note association visibility
+- Meeting title prompt is now editable from `Manage Templates`
 
 Known limitation:
 
@@ -91,6 +97,8 @@ Tasks:
 - Identify hardcoded English headings and template text
 - Define preferred output style for Spanish usage
 - Separate "system summary behavior" from "user customization"
+- Review exactly how meeting summaries are built and sent to ChatGPT/OpenAI
+- Remove or replace hardcoded section titles that are being injected into generated summaries
 
 ## Next
 
@@ -122,6 +130,17 @@ Notes:
 - still open: nearby event suggestions have shown intermittent behavior and need stabilization before we can consider this area fully trustworthy
 - this area is product-significant because it affects prompts, auto-recording, and note creation
 
+Implemented so far in the summary/template area:
+
+- built-in templates can be hidden instead of always appearing in the picker
+- custom templates can be promoted as default and drive `Auto`
+- the editable meeting-title prompt now lives in `Manage Templates` as a separate system prompt
+
+Still open in this area:
+
+- improve title-language behavior so Spanish transcripts produce Spanish titles more reliably
+- keep reviewing hardcoded English defaults in the title-generation and summary base prompts
+
 ### 5. Personalization screen
 
 Goal:
@@ -149,6 +168,14 @@ Possible scope:
 - Copy tone
 - Visual emphasis of primary actions
 - Consistency across onboarding, settings, and meetings
+- Further improve the `Coming Up` dashboard block
+
+Notes:
+
+- first ergonomic pass can stay small: keep the new collapse/expand behavior
+- next likely step: paginate or cap long `Coming Up` lists so the meetings browser stays visible without excessive scrolling
+- also worth exploring later: a direct shortcut from `Coming Up` into the relevant calendar area instead of only sync guidance
+- folders now have a useful low-impact color accent system, but they are still single-assignment folders rather than tags or nested structures
 
 ### 7. Meeting copilot chat
 
@@ -213,6 +240,7 @@ Until then, prefer targeted modifications over full replacements.
 - Should language selection follow system language by default?
 - Should summaries have separate templates for Spanish and English?
 - Should personalized terminology live in settings, templates, or both?
+- Should the meeting title prompt eventually move to a dedicated prompts surface if more system prompts appear?
 - Which screen is the best first target for visible UX improvement: sidebar, settings, or meeting detail?
 - Should meeting chat live inside the note editor, beside the transcript, or as a collapsible side panel?
 - Should slash actions modify saved notes directly, create suggestions, or require explicit apply/accept?

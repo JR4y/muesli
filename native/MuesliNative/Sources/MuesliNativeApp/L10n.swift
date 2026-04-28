@@ -62,6 +62,20 @@ enum L10nKey {
     case sidebarRename
     case sidebarFolderName
     case sidebarNewFolder
+    case sidebarFolderColor
+    case sidebarFolderNoColor
+    case sidebarFolderColorGray
+    case sidebarFolderColorBlue
+    case sidebarFolderColorGreen
+    case sidebarFolderColorAmber
+    case sidebarFolderColorOrange
+    case sidebarFolderColorYellow
+    case sidebarFolderColorRed
+    case sidebarFolderColorPurple
+    case sidebarFolderColorPink
+    case sidebarFolderColorCyan
+    case sidebarFolderColorIndigo
+    case sidebarFolderColorBrown
     case settingsLanguage
     case meetingsFilterAllTime
     case meetingsFilterLast2Days
@@ -74,6 +88,9 @@ enum L10nKey {
     case meetingsToday
     case meetingsTomorrow
     case meetingsComingUp
+    case meetingsCollapseComingUp
+    case meetingsExpandComingUp
+    case meetingsCollapsedHint
     case meetingsCalendarSyncHint
     case meetingsJoinAndRecord
     case meetingsAddToFolder
@@ -146,6 +163,16 @@ enum L10nKey {
     case templateManagerCreate
     case templateManagerSave
     case templateManagerCustom
+    case templateManagerUseAsDefault
+    case templateManagerDefaultBadge
+    case templateManagerAutoBadge
+    case templateManagerVisible
+    case templateManagerSystemPrompts
+    case templateManagerMeetingTitlePrompt
+    case templateManagerMeetingTitlePromptDescription
+    case templateManagerMeetingTitlePromptEditTitle
+    case templateManagerRestoreDefault
+    case templateManagerRestoreDefaultHelp
     case settingsTitle
     case settingsPaneGeneral
     case settingsPaneDictation
@@ -371,6 +398,34 @@ enum L10n {
             return "Folder name"
         case .sidebarNewFolder:
             return "New Folder"
+        case .sidebarFolderColor:
+            return "Color"
+        case .sidebarFolderNoColor:
+            return "No color"
+        case .sidebarFolderColorGray:
+            return "Gray"
+        case .sidebarFolderColorBlue:
+            return "Blue"
+        case .sidebarFolderColorGreen:
+            return "Green"
+        case .sidebarFolderColorAmber:
+            return "Amber"
+        case .sidebarFolderColorOrange:
+            return "Orange"
+        case .sidebarFolderColorYellow:
+            return "Yellow"
+        case .sidebarFolderColorRed:
+            return "Red"
+        case .sidebarFolderColorPurple:
+            return "Purple"
+        case .sidebarFolderColorPink:
+            return "Pink"
+        case .sidebarFolderColorCyan:
+            return "Cyan"
+        case .sidebarFolderColorIndigo:
+            return "Indigo"
+        case .sidebarFolderColorBrown:
+            return "Brown"
         case .settingsLanguage:
             return "Language"
         case .meetingsFilterAllTime:
@@ -395,6 +450,12 @@ enum L10n {
             return "Tomorrow"
         case .meetingsComingUp:
             return "Coming Up"
+        case .meetingsCollapseComingUp:
+            return "Collapse"
+        case .meetingsExpandComingUp:
+            return "Expand"
+        case .meetingsCollapsedHint:
+            return "Section collapsed"
         case .meetingsCalendarSyncHint:
             return "Add Google to macOS Calendar for real-time sync"
         case .meetingsJoinAndRecord:
@@ -539,6 +600,26 @@ enum L10n {
             return "Save changes"
         case .templateManagerCustom:
             return "Custom"
+        case .templateManagerUseAsDefault:
+            return "Use as default"
+        case .templateManagerDefaultBadge:
+            return "Default"
+        case .templateManagerAutoBadge:
+            return "Auto"
+        case .templateManagerVisible:
+            return "Visible"
+        case .templateManagerSystemPrompts:
+            return "System Prompts"
+        case .templateManagerMeetingTitlePrompt:
+            return "Meeting Title"
+        case .templateManagerMeetingTitlePromptDescription:
+            return "Controls how Muesli generates the automatic title for a meeting from the transcript."
+        case .templateManagerMeetingTitlePromptEditTitle:
+            return "Edit Meeting Title Prompt"
+        case .templateManagerRestoreDefault:
+            return "Restore default"
+        case .templateManagerRestoreDefaultHelp:
+            return "Revert this prompt to Muesli's built-in default."
         case .settingsTitle:
             return "Settings"
         case .settingsPaneGeneral:
@@ -925,6 +1006,34 @@ enum L10n {
             return "Nombre de la carpeta"
         case .sidebarNewFolder:
             return "Nueva carpeta"
+        case .sidebarFolderColor:
+            return "Color"
+        case .sidebarFolderNoColor:
+            return "Sin color"
+        case .sidebarFolderColorGray:
+            return "Gris"
+        case .sidebarFolderColorBlue:
+            return "Azul"
+        case .sidebarFolderColorGreen:
+            return "Verde"
+        case .sidebarFolderColorAmber:
+            return "Ambar"
+        case .sidebarFolderColorOrange:
+            return "Naranja"
+        case .sidebarFolderColorYellow:
+            return "Amarillo"
+        case .sidebarFolderColorRed:
+            return "Rojo"
+        case .sidebarFolderColorPurple:
+            return "Morado"
+        case .sidebarFolderColorPink:
+            return "Rosa"
+        case .sidebarFolderColorCyan:
+            return "Cian"
+        case .sidebarFolderColorIndigo:
+            return "Indigo"
+        case .sidebarFolderColorBrown:
+            return "Marron"
         case .settingsLanguage:
             return "Idioma"
         case .meetingsFilterAllTime:
@@ -949,6 +1058,12 @@ enum L10n {
             return "Manana"
         case .meetingsComingUp:
             return "Proximamente"
+        case .meetingsCollapseComingUp:
+            return "Colapsar"
+        case .meetingsExpandComingUp:
+            return "Expandir"
+        case .meetingsCollapsedHint:
+            return "Seccion colapsada"
         case .meetingsCalendarSyncHint:
             return "Agrega Google al Calendario de macOS para sincronizacion en tiempo real"
         case .meetingsJoinAndRecord:
@@ -1093,6 +1208,26 @@ enum L10n {
             return "Guardar cambios"
         case .templateManagerCustom:
             return "Personalizada"
+        case .templateManagerUseAsDefault:
+            return "Usar por defecto"
+        case .templateManagerDefaultBadge:
+            return "Por defecto"
+        case .templateManagerAutoBadge:
+            return "Auto"
+        case .templateManagerVisible:
+            return "Visible"
+        case .templateManagerSystemPrompts:
+            return "Prompts del sistema"
+        case .templateManagerMeetingTitlePrompt:
+            return "Titulo de reunion"
+        case .templateManagerMeetingTitlePromptDescription:
+            return "Controla como Muesli genera automaticamente el titulo de una reunion a partir del transcript."
+        case .templateManagerMeetingTitlePromptEditTitle:
+            return "Editar prompt de titulo"
+        case .templateManagerRestoreDefault:
+            return "Restaurar por defecto"
+        case .templateManagerRestoreDefaultHelp:
+            return "Restablece este prompt al valor por defecto de Muesli."
         case .settingsTitle:
             return "Ajustes"
         case .settingsPaneGeneral:

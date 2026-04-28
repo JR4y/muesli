@@ -1369,13 +1369,17 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func meetingTemplateMenu(selectionID: String, onChange: @escaping (String) -> Void) -> some View {
+        let autoTarget = controller.effectiveAutoMeetingTemplate()
+        let autoLabel = autoTarget.id == MeetingTemplates.autoID
+            ? L10n.text(.settingsDefaultTemplateAuto, config: appState.config)
+            : "\(L10n.text(.settingsDefaultTemplateAuto, config: appState.config)) (\(autoTarget.title))"
         let allItems: [(id: String, label: String)] = {
-            var items: [(String, String)] = [(MeetingTemplates.autoID, L10n.text(.settingsDefaultTemplateAuto, config: appState.config))]
-            items += controller.builtInMeetingTemplates().map { ($0.id, $0.title) }
+            var items: [(String, String)] = [(MeetingTemplates.autoID, autoLabel)]
             items += controller.customMeetingTemplates().map { ($0.id, $0.name) }
+            items += controller.visibleBuiltInMeetingTemplates().map { ($0.id, $0.title) }
             return items
         }()
-        let selectedLabel = allItems.first(where: { $0.id == selectionID })?.label ?? L10n.text(.settingsDefaultTemplateAuto, config: appState.config)
+        let selectedLabel = allItems.first(where: { $0.id == selectionID })?.label ?? autoLabel
         FixedWidthPopUp(
             selection: selectedLabel,
             options: allItems.map(\.label),

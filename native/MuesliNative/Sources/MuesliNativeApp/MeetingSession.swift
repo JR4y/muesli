@@ -470,7 +470,8 @@ final class MeetingSession {
 
         let templateSnapshot = MeetingTemplates.resolveSnapshot(
             id: config.defaultMeetingTemplateID,
-            customTemplates: config.customMeetingTemplates
+            customTemplates: config.customMeetingTemplates,
+            autoTemplateTargetID: config.autoTemplateTargetID
         )
         let visualContext = await screenContextCollector.stopAndDrain()
         Self.logger.info("visual context drained chars=\(visualContext.count) includedInPrompt=\(!visualContext.isEmpty) useOCR=\(self.config.useCoreAudioTap)")

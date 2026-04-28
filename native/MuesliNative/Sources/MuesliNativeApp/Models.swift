@@ -529,6 +529,8 @@ struct AppConfig: Codable {
     var meetingTranscriptionModel: String = BackendOption.whisper.model
     var meetingSummaryBackend: String = MeetingSummaryBackendOption.openAI.backend
     var defaultMeetingTemplateID: String = MeetingTemplates.autoID
+    var autoTemplateTargetID: String = ""
+    var meetingTitlePrompt: String = MeetingSummaryClient.defaultTitleInstructions
     var whisperModel: String = BackendOption.whisper.model
     var idleTimeout: Double = 120
     var autoRecordMeetings: Bool = false
@@ -552,6 +554,7 @@ struct AppConfig: Codable {
     var hasCompletedOnboarding: Bool = false
     var userName: String = ""
     var customMeetingTemplates: [CustomMeetingTemplate] = []
+    var hiddenBuiltInTemplateIDs: [String] = []
     var customWords: [CustomWord] = [
         CustomWord(word: "muesli", replacement: "muesli"),
     ]
@@ -585,6 +588,8 @@ struct AppConfig: Codable {
         case meetingTranscriptionModel = "meeting_transcription_model"
         case meetingSummaryBackend = "meeting_summary_backend"
         case defaultMeetingTemplateID = "default_meeting_template_id"
+        case autoTemplateTargetID = "auto_template_target_id"
+        case meetingTitlePrompt = "meeting_title_prompt"
         case whisperModel = "whisper_model"
         case idleTimeout = "idle_timeout"
         case autoRecordMeetings = "auto_record_meetings"
@@ -608,6 +613,7 @@ struct AppConfig: Codable {
         case hasCompletedOnboarding = "has_completed_onboarding"
         case userName = "user_name"
         case customMeetingTemplates = "custom_meeting_templates"
+        case hiddenBuiltInTemplateIDs = "hidden_built_in_template_ids"
         case customWords = "custom_words"
         case folderOrder = "folder_order"
         case soundEnabled = "sound_enabled"
@@ -644,6 +650,8 @@ struct AppConfig: Codable {
         meetingTranscriptionModel = (try? c.decode(String.self, forKey: .meetingTranscriptionModel)) ?? sttModel
         meetingSummaryBackend = (try? c.decode(String.self, forKey: .meetingSummaryBackend)) ?? defaults.meetingSummaryBackend
         defaultMeetingTemplateID = (try? c.decode(String.self, forKey: .defaultMeetingTemplateID)) ?? defaults.defaultMeetingTemplateID
+        autoTemplateTargetID = (try? c.decode(String.self, forKey: .autoTemplateTargetID)) ?? defaults.autoTemplateTargetID
+        meetingTitlePrompt = (try? c.decode(String.self, forKey: .meetingTitlePrompt)) ?? defaults.meetingTitlePrompt
         whisperModel = (try? c.decode(String.self, forKey: .whisperModel)) ?? defaults.whisperModel
         idleTimeout = (try? c.decode(Double.self, forKey: .idleTimeout)) ?? defaults.idleTimeout
         autoRecordMeetings = (try? c.decode(Bool.self, forKey: .autoRecordMeetings)) ?? defaults.autoRecordMeetings
@@ -668,6 +676,7 @@ struct AppConfig: Codable {
         hasCompletedOnboarding = (try? c.decode(Bool.self, forKey: .hasCompletedOnboarding)) ?? defaults.hasCompletedOnboarding
         userName = (try? c.decode(String.self, forKey: .userName)) ?? defaults.userName
         customMeetingTemplates = (try? c.decode([CustomMeetingTemplate].self, forKey: .customMeetingTemplates)) ?? defaults.customMeetingTemplates
+        hiddenBuiltInTemplateIDs = (try? c.decode([String].self, forKey: .hiddenBuiltInTemplateIDs)) ?? defaults.hiddenBuiltInTemplateIDs
         customWords = (try? c.decode([CustomWord].self, forKey: .customWords)) ?? defaults.customWords
         folderOrder = (try? c.decode([Int64].self, forKey: .folderOrder)) ?? defaults.folderOrder
         soundEnabled = (try? c.decode(Bool.self, forKey: .soundEnabled)) ?? defaults.soundEnabled

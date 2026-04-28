@@ -753,25 +753,106 @@ final class MuesliController: NSObject {
         MeetingTemplates.builtIns
     }
 
+    func visibleBuiltInMeetingTemplates() -> [MeetingTemplateDefinition] {
+        MeetingTemplates.visibleBuiltIns(hiddenIDs: config.hiddenBuiltInTemplateIDs)
+    }
+
     func customMeetingTemplates() -> [CustomMeetingTemplate] {
         config.customMeetingTemplates
+    }
+
+    func meetingTitlePrompt() -> String {
+        MeetingSummaryClient.resolvedTitleInstructions(config: config)
+    }
+
+    func updateMeetingTitlePrompt(_ prompt: String) {
+        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        updateConfig {
+            $0.meetingTitlePrompt = trimmed.isEmpty
+                ? MeetingSummaryClient.defaultTitleInstructions
+                : trimmed
+        }
+    }
+
+    func resetMeetingTitlePrompt() {
+        updateConfig {
+            $0.meetingTitlePrompt = MeetingSummaryClient.defaultTitleInstructions
+        }
+    }
+
+    func isBuiltInMeetingTemplateVisible(id: String) -> Bool {
+        !config.hiddenBuiltInTemplateIDs.contains(id)
+    }
+
+    func effectiveAutoMeetingTemplate() -> MeetingTemplateDefinition {
+        MeetingTemplates.resolveDefinition(
+            id: MeetingTemplates.autoID,
+            customTemplates: config.customMeetingTemplates,
+            autoTemplateTargetID: config.autoTemplateTargetID
+        )
     }
 
     func defaultMeetingTemplate() -> MeetingTemplateSnapshot {
         MeetingTemplates.resolveSnapshot(
             id: config.defaultMeetingTemplateID,
-            customTemplates: config.customMeetingTemplates
+            customTemplates: config.customMeetingTemplates,
+            autoTemplateTargetID: config.autoTemplateTargetID
         )
     }
 
     func meetingTemplateSnapshot(for meeting: MeetingRecord) -> MeetingTemplateSnapshot {
-        MeetingTemplates.snapshot(for: meeting, customTemplates: config.customMeetingTemplates)
+        MeetingTemplates.snapshot(
+            for: meeting,
+            customTemplates: config.customMeetingTemplates,
+            autoTemplateTargetID: config.autoTemplateTargetID
+        )
     }
 
     func updateDefaultMeetingTemplate(id: String) {
-        let resolved = MeetingTemplates.resolveSnapshot(id: id, customTemplates: config.customMeetingTemplates)
+        let resolved = MeetingTemplates.resolveExactSnapshot(id: id, customTemplates: config.customMeetingTemplates)
+            ?? MeetingTemplates.resolveExactSnapshot(id: MeetingTemplates.autoID, customTemplates: config.customMeetingTemplates)!
         updateConfig {
             $0.defaultMeetingTemplateID = resolved.id
+        }
+    }
+
+    func setAutoTemplateTarget(id: String?) {
+        let normalizedID = id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let resolvedID: String
+        if normalizedID.isEmpty || normalizedID == MeetingTemplates.autoID {
+            resolvedID = ""
+        } else if let exact = MeetingTemplates.resolveExactDefinition(id: normalizedID, customTemplates: config.customMeetingTemplates) {
+            resolvedID = exact.id == MeetingTemplates.autoID ? "" : exact.id
+        } else {
+            resolvedID = ""
+        }
+        updateConfig {
+            $0.autoTemplateTargetID = resolvedID
+        }
+    }
+
+    func useTemplateAsDefault(id: String) {
+        updateDefaultMeetingTemplate(id: id)
+        setAutoTemplateTarget(id: id)
+    }
+
+    func setBuiltInMeetingTemplateVisibility(id: String, isVisible: Bool) {
+        guard MeetingTemplates.builtInDefinition(id: id) != nil else { return }
+        updateConfig {
+            if isVisible {
+                $0.hiddenBuiltInTemplateIDs.removeAll { $0 == id }
+            } else if !$0.hiddenBuiltInTemplateIDs.contains(id) {
+                $0.hiddenBuiltInTemplateIDs.append(id)
+            }
+
+            if !isVisible {
+                if $0.defaultMeetingTemplateID == id {
+                    $0.defaultMeetingTemplateID = MeetingTemplates.autoID
+                }
+                if $0.autoTemplateTargetID == id {
+                    $0.autoTemplateTargetID = ""
+                }
+            }
         }
     }
 
@@ -807,6 +888,9 @@ final class MuesliController: NSObject {
             $0.customMeetingTemplates.removeAll { $0.id == id }
             if $0.defaultMeetingTemplateID == id {
                 $0.defaultMeetingTemplateID = MeetingTemplates.autoID
+            }
+            if $0.autoTemplateTargetID == id {
+                $0.autoTemplateTargetID = ""
             }
         }
     }
@@ -1359,10 +1443,16 @@ final class MuesliController: NSObject {
     }
 
     func applyMeetingTemplate(id: String, to meeting: MeetingRecord, completion: @escaping (Result<Void, Error>) -> Void) {
-        guard let templateSnapshot = MeetingTemplates.resolveExactSnapshot(
+        let templateSnapshot = MeetingTemplates.resolveSnapshot(
             id: id,
-            customTemplates: config.customMeetingTemplates
-        ) else {
+            customTemplates: config.customMeetingTemplates,
+            autoTemplateTargetID: config.autoTemplateTargetID
+        )
+        if id != MeetingTemplates.autoID,
+           MeetingTemplates.resolveExactSnapshot(
+                id: id,
+                customTemplates: config.customMeetingTemplates
+           ) == nil {
             completion(.failure(MeetingTemplateSelectionError.templateNoLongerExists))
             return
         }
@@ -1598,6 +1688,11 @@ final class MuesliController: NSObject {
 
     func renameFolder(id: Int64, name: String) {
         try? dictationStore.renameFolder(id: id, name: name)
+        syncAppState()
+    }
+
+    func updateFolderColor(id: Int64, colorHex: String?) {
+        try? dictationStore.updateFolderColor(id: id, colorHex: MeetingFolderColors.normalizedHex(colorHex))
         syncAppState()
     }
 

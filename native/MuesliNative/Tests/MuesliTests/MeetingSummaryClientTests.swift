@@ -45,6 +45,27 @@ struct MeetingSummaryClientTests {
         #expect(instructions.contains("## Action Items"))
     }
 
+    @Test("title instructions fall back to the built-in default")
+    func titleInstructionsFallbackToDefault() {
+        let config = AppConfig()
+
+        #expect(
+            MeetingSummaryClient.resolvedTitleInstructions(config: config)
+                == MeetingSummaryClient.defaultTitleInstructions
+        )
+    }
+
+    @Test("title instructions use the configured custom prompt")
+    func titleInstructionsUseConfiguredPrompt() {
+        var config = AppConfig()
+        config.meetingTitlePrompt = "Keep the title in Spanish."
+
+        #expect(
+            MeetingSummaryClient.resolvedTitleInstructions(config: config)
+                == "Keep the title in Spanish."
+        )
+    }
+
     @Test("summary instructions include custom template prompt verbatim")
     func promptIncludesCustomTemplate() {
         let instructions = MeetingSummaryClient.summaryInstructions(for: customTemplate)
