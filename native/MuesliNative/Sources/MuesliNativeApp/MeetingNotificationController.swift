@@ -13,6 +13,7 @@ final class MeetingNotificationController {
     private var onJoinOnly: (() -> Void)?
     private var onDismiss: (() -> Void)?
     private var onAutoDismiss: (() -> Void)?
+    private var currentLanguage: AppLanguage = .system
     private(set) var isVisible = false
     private(set) var currentPromptID: String?
     private(set) var shownAt: Date?
@@ -21,9 +22,10 @@ final class MeetingNotificationController {
 
     func show(
         promptID: String? = nil,
+        config: AppConfig,
         title: String,
         subtitle: String,
-        actionLabel: String = "Start Recording",
+        actionLabel: String? = nil,
         darkMode: Bool,
         meetingURL: URL? = nil,
         preferredScreen: NSScreen? = nil,
@@ -48,9 +50,11 @@ final class MeetingNotificationController {
         self.onJoinOnly = onJoinOnly
         self.onDismiss = onDismiss
         self.onAutoDismiss = onAutoDismiss
+        self.currentLanguage = config.resolvedAppLanguage
 
         let hasJoinButton = meetingURL != nil && onJoinAndRecord != nil
         let platform = explicitPlatform ?? meetingURL.flatMap { MeetingPlatform.detect(from: $0) }
+        let resolvedActionLabel = actionLabel ?? L10n.text(.meetingsPopupStartRecording, config: config)
 
         let width: CGFloat = 360
         let height: CGFloat = 70
@@ -152,7 +156,7 @@ final class MeetingNotificationController {
             subtitleLabel.frame.size.width = textMaxX - textX
 
             // Main "Join & Record" button
-            let joinButton = NSButton(title: "Join & Record", target: self, action: #selector(handleJoinAndRecord))
+            let joinButton = NSButton(title: L10n.text(.meetingsJoinAndRecord, config: config), target: self, action: #selector(handleJoinAndRecord))
             joinButton.font = .systemFont(ofSize: 11, weight: .medium)
             joinButton.frame = NSRect(x: buttonX, y: 20, width: buttonWidth, height: 28)
             joinButton.wantsLayer = true
@@ -176,7 +180,7 @@ final class MeetingNotificationController {
             contentView.addSubview(chevronButton)
         } else {
             // Single "Start Recording" button
-            let startButton = NSButton(title: actionLabel, target: self, action: #selector(handleStartRecording))
+            let startButton = NSButton(title: resolvedActionLabel, target: self, action: #selector(handleStartRecording))
             startButton.font = .systemFont(ofSize: 12, weight: .medium)
             startButton.frame = NSRect(x: width - 140, y: 20, width: 120, height: 30)
             startButton.wantsLayer = true
@@ -278,11 +282,11 @@ final class MeetingNotificationController {
 
     @objc private func handleChevronClick(_ sender: NSButton) {
         let menu = NSMenu()
-        let joinOnlyItem = NSMenuItem(title: "Join Only", action: #selector(handleJoinOnly), keyEquivalent: "")
+        let joinOnlyItem = NSMenuItem(title: L10n.text(.meetingsPopupJoinOnly, language: currentLanguage), action: #selector(handleJoinOnly), keyEquivalent: "")
         joinOnlyItem.target = self
         menu.addItem(joinOnlyItem)
 
-        let recordOnlyItem = NSMenuItem(title: "Record Only", action: #selector(handleStartRecording), keyEquivalent: "")
+        let recordOnlyItem = NSMenuItem(title: L10n.text(.meetingsPopupRecordOnly, language: currentLanguage), action: #selector(handleStartRecording), keyEquivalent: "")
         recordOnlyItem.target = self
         menu.addItem(recordOnlyItem)
 

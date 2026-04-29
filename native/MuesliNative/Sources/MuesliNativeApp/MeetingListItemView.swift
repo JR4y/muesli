@@ -25,12 +25,18 @@ struct MeetingListItemView: View {
         currentFolder?.name
     }
 
-    private var folderIconName: String {
-        MeetingFolderIcons.resolvedIconName(for: currentFolder)
+    private var folderButtonLabel: String {
+        currentFolderName ?? L10n.text(.meetingUnfiled, config: config)
     }
 
-    private var currentFolderColor: Color {
-        MeetingFolderColors.color(for: currentFolder, fallback: MuesliTheme.accent.opacity(0.8))
+    private var folderIconName: String {
+        currentFolder != nil ? MeetingFolderIcons.resolvedIconName(for: currentFolder) : "folder.badge.plus"
+    }
+
+    private var folderIconColor: Color {
+        currentFolder.map {
+            MeetingFolderColors.color(for: $0, fallback: MuesliTheme.accent.opacity(0.8))
+        } ?? MuesliTheme.textTertiary
     }
 
     private var hasAssociatedEvent: Bool {
@@ -47,13 +53,8 @@ struct MeetingListItemView: View {
 
                 Spacer(minLength: 4)
 
-                HStack(spacing: 6) {
-                    if !folders.isEmpty {
-                        folderMenuButton
-                    }
-                    if onDelete != nil {
-                        deleteButton
-                    }
+                if onDelete != nil {
+                    deleteButton
                 }
             }
 
@@ -72,24 +73,17 @@ struct MeetingListItemView: View {
                     Text("\u{2022}")
                         .font(MuesliTheme.caption())
                         .foregroundStyle(MuesliTheme.textTertiary)
-                    Image(systemName: "calendar.badge.checkmark")
+                    Image(systemName: "calendar")
                         .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(MuesliTheme.success)
+                        .foregroundStyle(MuesliTheme.textSecondary)
                         .help(L10n.text(.meetingCalendarLinked, config: config))
                 }
 
-                // Current folder badge
-                if let name = currentFolderName {
+                if !folders.isEmpty {
                     Text("\u{2022}")
                         .font(MuesliTheme.caption())
                         .foregroundStyle(MuesliTheme.textTertiary)
-                    HStack(spacing: 2) {
-                        Image(systemName: folderIconName)
-                            .font(.system(size: 9))
-                        Text(name)
-                            .font(MuesliTheme.caption())
-                    }
-                    .foregroundStyle(currentFolderColor)
+                    folderMenuButton
                 }
             }
 
@@ -100,14 +94,11 @@ struct MeetingListItemView: View {
         }
         .padding(MuesliTheme.spacing16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(isSelected ? MuesliTheme.surfaceSelected : MuesliTheme.backgroundRaised)
+        .background(MuesliTheme.backgroundRaised)
         .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerLarge))
         .overlay(
             RoundedRectangle(cornerRadius: MuesliTheme.cornerLarge)
-                .strokeBorder(
-                    isSelected ? MuesliTheme.accent.opacity(0.35) : MuesliTheme.surfaceBorder,
-                    lineWidth: 1
-                )
+                .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
         )
         .contentShape(Rectangle())
         .onTapGesture(perform: onSelect)
@@ -127,15 +118,24 @@ struct MeetingListItemView: View {
         Button {
             showFolderPopover.toggle()
         } label: {
-            Image(systemName: record.folderID != nil ? "folder.fill" : "folder.badge.plus")
-                .font(.system(size: 11))
-                .foregroundStyle(
-                    record.folderID != nil
-                        ? currentFolderColor
-                        : (isHovering ? MuesliTheme.textSecondary : MuesliTheme.textTertiary)
-                )
-                .frame(width: 24, height: 24)
-                .contentShape(Rectangle())
+            HStack(spacing: 6) {
+                Image(systemName: folderIconName)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(folderIconColor)
+                Text(folderButtonLabel)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(MuesliTheme.textSecondary)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(MuesliTheme.surfacePrimary)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
+            )
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .help(L10n.text(.meetingMoveToFolder, config: config))
@@ -251,7 +251,7 @@ struct MeetingListItemView: View {
     }
 
     private func formatTime(_ raw: String) -> String {
-        MeetingDateFormatting.formatMeetingTimestamp(raw)
+        MeetingDateFormatting.formatCompactMeetingTimestamp(raw)
     }
 
     private func formatDuration(_ seconds: Double) -> String {

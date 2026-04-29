@@ -71,12 +71,7 @@ struct MarkdownRichTextEditor: NSViewRepresentable {
             context.coordinator.apply(markdown: text, to: textView)
         }
         if let command {
-            context.coordinator.perform(command.kind, in: textView)
-            DispatchQueue.main.async {
-                if self.command?.id == command.id {
-                    self.command = nil
-                }
-            }
+            context.coordinator.schedule(command: command, in: textView)
         }
         if shouldFocus, !context.coordinator.didFocus {
             DispatchQueue.main.async {
@@ -100,6 +95,8 @@ struct MarkdownRichTextEditor: NSViewRepresentable {
         private var lastBindingMarkdown = ""
         private var pendingLocalMarkdown: String?
         private var bindingPublishWorkItem: DispatchWorkItem?
+        private var lastSelectedRange = NSRange(location: 0, length: 0)
+        private var lastAppliedCommandID: UUID?
 
         private let bodyFont = NSFont.systemFont(ofSize: 16)
         private let boldFont = NSFont.boldSystemFont(ofSize: 16)
@@ -121,6 +118,11 @@ struct MarkdownRichTextEditor: NSViewRepresentable {
             onTextChange?(markdown)
             scheduleBindingPublish(markdown)
             textView.needsDisplay = true
+        }
+
+        func textViewDidChangeSelection(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            lastSelectedRange = textView.selectedRange()
         }
 
         func shouldApplyExternalMarkdown(_ markdown: String) -> Bool {
@@ -158,11 +160,15 @@ struct MarkdownRichTextEditor: NSViewRepresentable {
             currentMarkdown = markdown
             lastBindingMarkdown = markdown
             pendingLocalMarkdown = nil
+            lastSelectedRange = textView.selectedRange()
             isApplying = false
             textView.needsDisplay = true
         }
 
         func perform(_ command: MarkdownEditorCommand.Kind, in textView: NSTextView) {
+            let safeRange = lastSelectedRange.clamped(to: textView.string.count)
+            textView.window?.makeFirstResponder(textView)
+            textView.setSelectedRange(safeRange)
             switch command {
             case .heading:
                 applyHeading(in: textView)
@@ -177,6 +183,7 @@ struct MarkdownRichTextEditor: NSViewRepresentable {
             let markdown = serializedMarkdown(from: textView)
             currentMarkdown = markdown
             pendingLocalMarkdown = markdown
+            lastSelectedRange = textView.selectedRange()
             onTextChange?(markdown)
             publishBinding(markdown)
             textView.needsDisplay = true
@@ -184,6 +191,18 @@ struct MarkdownRichTextEditor: NSViewRepresentable {
             DispatchQueue.main.async { [weak textView] in
                 guard let textView else { return }
                 textView.window?.makeFirstResponder(textView)
+            }
+        }
+
+        func schedule(command: MarkdownEditorCommand, in textView: NSTextView) {
+            guard lastAppliedCommandID != command.id else { return }
+            lastAppliedCommandID = command.id
+            DispatchQueue.main.async { [weak self, weak textView] in
+                guard let self, let textView else { return }
+                self.perform(command.kind, in: textView)
+                if self.command?.id == command.id {
+                    self.command = nil
+                }
             }
         }
 
@@ -543,6 +562,14 @@ private extension Array where Element == NSValue {
             let length = Swift.min(range.length, Swift.max(stringLength - location, 0))
             return NSValue(range: NSRange(location: location, length: length))
         }
+    }
+}
+
+private extension NSRange {
+    func clamped(to stringLength: Int) -> NSRange {
+        let location = Swift.min(self.location, stringLength)
+        let length = Swift.min(self.length, Swift.max(stringLength - location, 0))
+        return NSRange(location: location, length: length)
     }
 }
 

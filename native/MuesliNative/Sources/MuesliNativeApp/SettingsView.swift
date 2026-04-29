@@ -499,6 +499,12 @@ struct SettingsView: View {
                     }
                 }
                 Divider().background(MuesliTheme.surfaceBorder)
+                settingsRow(L10n.text(.settingsAutoRecordQuickNotes, config: appState.config)) {
+                    settingsSwitch(isOn: appState.config.autoRecordQuickNotes) { newValue in
+                        controller.updateConfig { $0.autoRecordQuickNotes = newValue }
+                    }
+                }
+                Divider().background(MuesliTheme.surfaceBorder)
                 settingsRow(L10n.text(.settingsNotifyWhenMeetingDetected, config: appState.config)) {
                     settingsSwitch(isOn: appState.config.showMeetingDetectionNotification) { newValue in
                         controller.updateConfig { $0.showMeetingDetectionNotification = newValue }

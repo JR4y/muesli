@@ -630,33 +630,6 @@ struct MeetingsView: View {
                                         .buttonStyle(.plain)
                                     }
 
-                                    Menu {
-                                        Button(L10n.text(.sidebarAllMeetings, config: appState.config)) {
-                                            controller.createMeetingFromCalendarEvent(event, folderID: nil)
-                                        }
-                                        Divider()
-                                        ForEach(appState.folders) { folder in
-                                            Button(folder.name) {
-                                                controller.createMeetingFromCalendarEvent(event, folderID: folder.id)
-                                            }
-                                        }
-                                    } label: {
-                                        Text(L10n.text(.meetingsAddToFolder, config: appState.config))
-                                            .font(.system(size: 10, weight: .medium))
-                                            .foregroundStyle(MuesliTheme.textSecondary)
-                                        .padding(.horizontal, 8)
-                                            .padding(.vertical, 3)
-                                            .background(MuesliTheme.surfacePrimary)
-                                            .clipShape(RoundedRectangle(cornerRadius: 4))
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 4)
-                                                    .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 0.5)
-                                            )
-                                    }
-                                    .menuStyle(.borderlessButton)
-                                    .fixedSize()
-
-                                    hideEventButton(event)
                                 }
                             }
                         }
@@ -718,22 +691,6 @@ struct MeetingsView: View {
             opacity: 1
         )
     }
-
-    private func hideEventButton(_ event: UnifiedCalendarEvent) -> some View {
-        Button {
-            withAnimation(.easeOut(duration: 0.2)) {
-                controller.hideCalendarEvent(event.id)
-            }
-        } label: {
-            Image(systemName: "xmark")
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(MuesliTheme.textSecondary.opacity(0.6))
-                .frame(width: 20, height: 20)
-        }
-        .buttonStyle(.plain)
-        .help(L10n.text(.meetingsHideFromComingUp, config: appState.config))
-    }
-
     @ViewBuilder
     private var browserHeader: some View {
         VStack(alignment: .leading, spacing: MuesliTheme.spacing8) {

@@ -534,6 +534,7 @@ struct AppConfig: Codable {
     var whisperModel: String = BackendOption.whisper.model
     var idleTimeout: Double = 120
     var autoRecordMeetings: Bool = false
+    var autoRecordQuickNotes: Bool = false
     var showMeetingDetectionNotification: Bool = true
     var meetingRecordingSavePolicy: MeetingRecordingSavePolicy = .never
     var darkMode: Bool = true
@@ -593,6 +594,7 @@ struct AppConfig: Codable {
         case whisperModel = "whisper_model"
         case idleTimeout = "idle_timeout"
         case autoRecordMeetings = "auto_record_meetings"
+        case autoRecordQuickNotes = "auto_record_quick_notes"
         case showMeetingDetectionNotification = "show_meeting_detection_notification"
         case meetingRecordingSavePolicy = "meeting_recording_save_policy"
         case darkMode = "dark_mode"
@@ -655,6 +657,7 @@ struct AppConfig: Codable {
         whisperModel = (try? c.decode(String.self, forKey: .whisperModel)) ?? defaults.whisperModel
         idleTimeout = (try? c.decode(Double.self, forKey: .idleTimeout)) ?? defaults.idleTimeout
         autoRecordMeetings = (try? c.decode(Bool.self, forKey: .autoRecordMeetings)) ?? defaults.autoRecordMeetings
+        autoRecordQuickNotes = (try? c.decode(Bool.self, forKey: .autoRecordQuickNotes)) ?? defaults.autoRecordQuickNotes
         showMeetingDetectionNotification = (try? c.decode(Bool.self, forKey: .showMeetingDetectionNotification)) ?? defaults.showMeetingDetectionNotification
         meetingRecordingSavePolicy = (try? c.decode(MeetingRecordingSavePolicy.self, forKey: .meetingRecordingSavePolicy)) ?? defaults.meetingRecordingSavePolicy
         darkMode = (try? c.decode(Bool.self, forKey: .darkMode)) ?? defaults.darkMode

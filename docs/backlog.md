@@ -45,6 +45,13 @@ Completed or largely completed:
 - `Dictionary`, `Models`, and `Shortcuts` now live inside `Settings` instead of cluttering the top-level sidebar
 - Meeting notification popups now follow the app theme instead of staying visually detached in a fixed dark style
 - The meetings browser header is cleaner, redundant folder summary chrome is removed, and folder editing now hangs off the folder icon beside the title
+- The meetings browser and meeting detail header both use cleaner folder/calendar metadata pills, and the detail header now exposes folder reassignment directly from the folder pill
+- Persistent active-row shading in the meetings browser was removed after validation because it made old selections feel visually stuck
+- Meeting notification popups now localize their visible titles, timing labels, and actions
+- The quick-note / live-notes surface now localizes placeholder copy, save state, editor helpers, and recording actions
+- Quick notes now default to note-only mode, with an independent `Auto-record Quick Notes` setting and the ability to start recording later from the same note
+- The dashboard `Quick Note` button now follows the configured app language
+- Manual-note editor toolbar commands were stabilized so formatting actions work reliably after button clicks
 
 Known limitation:
 
@@ -95,21 +102,21 @@ Pain points observed so far:
 - Button order and action priority need review
 - Several labels and sections feel too English-centric
 
-### 3. Secondary surface localization
+### 3. Residual copy cleanup
 
 Goal:
-finish the remaining visible copy gaps without turning this into a full redesign pass.
+finish the smaller hardcoded copy gaps that remain outside the main meetings flow.
 
 Tasks:
 
-- Localize meeting notification popup actions and labels
-- Localize the live notes / quick-note placeholder and related helper copy
-- Sweep smaller hardcoded English strings that still appear in secondary meeting surfaces
+- Sweep lower-priority hardcoded strings that still appear in alerts, onboarding, install/update, or failure states
+- Review whether any beta-only helper text still sounds too English-centric in real usage
+- Keep the localization pass incremental instead of reopening the main navigation/settings work
 
 Notes:
 
-- This is now a tighter follow-up pass, not a new localization foundation
-- It is especially worth doing because these remaining English strings already appear in daily beta usage
+- Meeting notification popups and the quick-note / live-notes surface are now localized
+- Remaining work here should stay small and opportunistic rather than becoming a redesign stream
 
 ### 4. Summary experience
 
@@ -127,40 +134,6 @@ Tasks:
 
 ## Next
 
-### 5. Calendar behavior and source control
-
-Goal:
-make calendar-driven meeting behavior feel trustworthy, predictable, and aligned
-with what the user actually sees in macOS Calendar.
-
-Possible scope:
-
-- review how local EventKit calendars are selected today
-- avoid duplicate upcoming meetings when the same event appears in multiple synced calendars
-- investigate whether event collection should respect the calendars the user has visible/enabled in Calendar
-- verify how "visible" calendars in the macOS Calendar app map to what EventKit exposes, and decide whether app-side filtering is needed
-- define a clearer source strategy for:
-  - local EventKit calendars
-  - optional Google OAuth calendars
-- consider showing calendar source identity and color in upcoming meetings and related UI
-- preserve or surface per-calendar colors where they help users understand which event source won or was deduplicated
-- decide whether users should be able to include/exclude specific calendars inside app settings
-- persist a useful snapshot of the associated calendar event inside the saved meeting record instead of relying only on `calendarEventID`
-- review whether additional attendee/invitee details should be expanded beyond the current stored snapshot
-
-Notes:
-
-- current behavior appears broad enough to surface duplicate events in some calendar setups
-- observed in real usage: the same meeting can appear repeated when it exists in two local calendars, even if only one seems visible in Calendar
-- first pass implemented: users can now enable/disable local calendars explicitly from Settings instead of relying on inferred visibility
-- second pass implemented: `Coming Up` already shows clearer calendar color/source cues, and notes can now be associated manually with nearby calendar events
-- third pass implemented: future meetings now persist a rich event snapshot, store attendee data, and surface that context in meeting detail
-- fourth pass implemented: the late-association picker now uses a proper loading state and local search across previous/current/next day windows
-- this area is product-significant because it affects prompts, auto-recording, and note creation
-- current limitation: older existing meetings were intentionally not backfilled with historical event snapshots
-- this means historical traceability is now strong for future meetings, but older notes still depend on what was already stored at the time
-- next review in this area should focus on duplicate handling, list-level visibility of associated events, and any extra attendee metadata worth surfacing
-
 Implemented so far in the summary/template area:
 
 - built-in templates can be hidden instead of always appearing in the picker
@@ -174,23 +147,7 @@ Still open in this area:
 - continue refining how manual notes and generated sections blend when the model does not integrate user-written notes naturally
 - improve title generation so the current meeting title is treated as first-class context and can be preserved when the model judges it already appropriate
 
-### 6. Personalization screen
-
-Goal:
-add a fork-specific settings area for user-facing customization.
-
-Possible scope:
-
-- Language selection (`es` / `en`)
-- Summary style preferences
-- Terminology overrides
-- User-facing naming preferences
-
-Important note:
-
-- This screen should complement localization, not replace it
-
-### 7. UX polish pass
+### 5. UX polish pass
 
 Goal:
 improve the day-to-day feel once structure and language are clearer.
@@ -210,11 +167,10 @@ Notes:
 - also worth exploring later: a direct shortcut from `Coming Up` into the relevant calendar area instead of only sync guidance
 - folders are now hierarchical and visually identifiable, but they are still single-assignment folders rather than multi-tag classification
 - meetings list now shows a subtle indicator when a note already has an associated calendar event
-- notification popups still contain hardcoded English UI copy and need a proper localization pass
 - in-meeting note capture could use a more discreet mode so starting a meeting does not always force the note window open in front of the user
-- the meeting detail action area still has some density and may need one more hierarchy pass after real usage
+- the meeting detail action area is cleaner than before, but it should still be watched in real usage to confirm the final control grouping feels stable
 
-### 8. In-meeting note handling
+### 6. In-meeting note handling
 
 Goal:
 make note capture during a live meeting feel quieter and less intrusive.
@@ -230,10 +186,10 @@ Notes:
 
 - current behavior feels more disruptive than tools like Granola during live meetings
 - this should be treated as a UX behavior change, not only a visual tweak
-- the live notes / quick-note surface still shows English placeholder/background text in beta usage
+- quick notes now support note-only start with an independent auto-record toggle, so the remaining problem is intrusiveness rather than missing control
 - the in-meeting notes window likely needs a broader UX pass beyond localization alone; it still feels like a rough utility surface rather than a polished live-meeting note mode
 
-### 9. Meeting copilot chat
+### 7. Meeting copilot chat
 
 Goal:
 add a chat experience inside meeting notes so the user can ask questions about a meeting and iterate on outputs with an LLM.
@@ -250,7 +206,7 @@ Notes:
 - This should feel like a meeting copilot, not just a raw API textbox
 - It will likely depend on the same provider strategy already used for summaries
 
-### 10. Visual direction and color system
+### 8. Visual direction and color system
 
 Goal:
 make the interface feel more intentional and more aligned with the preferred product identity.
@@ -265,7 +221,7 @@ Possible scope:
 
 ## Later
 
-### 11. Slash actions in meeting notes/chat
+### 9. Slash actions in meeting notes/chat
 
 Goal:
 trigger useful meeting actions with `/` commands from a notes or chat experience.
@@ -283,7 +239,7 @@ Notes:
 - This should come after the basic meeting chat exists
 - It should be fast, discoverable, and aligned with the final summary workflow
 
-### 11. Deeper custom screens
+### 10. Deeper custom screens
 
 Only consider larger custom screens if:
 
@@ -296,7 +252,6 @@ Until then, prefer targeted modifications over full replacements.
 
 - Should language selection follow system language by default?
 - Should summaries have separate templates for Spanish and English?
-- Should personalized terminology live in settings, templates, or both?
 - Should the meeting title prompt eventually move to a dedicated prompts surface if more system prompts appear?
 - Which screen is the best first target for visible UX improvement: sidebar, settings, or meeting detail?
 - Should meeting chat live inside the note editor, beside the transcript, or as a collapsible side panel?

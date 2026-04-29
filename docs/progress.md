@@ -114,6 +114,33 @@ This pass intentionally stopped short of multi-folder tagging. The implemented
 model is hierarchical navigation first, with one folder per meeting and parent
 folders inheriting visibility over descendant meetings.
 
+#### Meetings visual cleanup pass
+
+- `Coming Up` now hides the secondary `Add to folder` and dismiss controls so the row stays focused on the join/record action
+- the meetings list now uses the same compact localized date style as the meeting detail view
+- list-level calendar linkage now uses a neutral calendar icon instead of a success-colored badge
+- the folder pill in the meetings list now replaces the trailing folder button and keeps the assigned folder color on the icon only
+- the meeting detail folder pill now uses the persisted folder color on its icon and also opens the move/create-folder menu directly from the header
+- the meeting detail template control was tested as a pill/selector fusion and then intentionally reverted to a normal selector because the hybrid styling reduced clarity
+- `Show Recording` now sits beside the resummarize/template controls instead of feeling detached below them
+- persistent row-selection shading in the meetings browser was removed so opening a note no longer leaves the previous row visibly stuck in an active state
+
+This round was intentionally visual and interaction-focused. The goal was to
+make meetings feel calmer and more legible without changing the underlying
+recording, summary, or folder data model.
+
+#### Secondary-surface localization and quick-note behavior
+
+- meeting notification popups now localize their titles, timing copy, and action labels through `L10n.swift`
+- the live notes / quick-note surface now localizes save state, placeholder copy, editor helper buttons, and recording controls
+- the dashboard `Quick Note` button now also respects the configured app language instead of staying hardcoded in English
+- quick notes no longer start recording automatically by default; a dedicated `Settings > Meetings > Recording` toggle now controls that behavior independently from normal meetings
+- when a quick note opens in note-only mode, the same meeting can start recording later from inside the detail view without creating a second note
+- the embedded markdown editor was hardened so toolbar commands restore focus/selection before applying formatting, fixing the previous "button bounce" behavior seen in manual notes
+
+This pass closed the most visible remaining English-only surfaces in daily beta
+usage while also making quick notes feel safer as a lightweight capture mode.
+
 #### Validation
 
 - targeted Swift tests were re-run after the refactor and passed
@@ -122,6 +149,7 @@ folders inheriting visibility over descendant meetings.
 - real beta usage also confirmed a calendar-linked meeting example still associated the expected event context
 - real beta usage confirmed orphaned notes can now be linked again through the picker without misleading empty-state flashes
 - real beta usage validated the hierarchical folder tree, folder colors/icons, and meetings-list association indicator in the browser flow
+- real beta usage confirmed quick notes can open without auto-recording, start recording later from the same note, and now show localized editor copy throughout the flow
 - the window/titlebar experiment for replacing the native SwiftUI sidebar toggle was intentionally discarded, and the beta remains on the stable `NavigationSplitView` titlebar behavior
 ### 2026-04-27 to 2026-04-28
 
@@ -365,13 +393,15 @@ README "delivered features" section:
 - Reliable calendar association when starting from the `Meeting starting now` popup
 - Centralized normalization for malformed calendar event ids
 - Localized `Notes` / `Notas` section for protected written notes
+- Localized meeting notification popups and quick-note / live-notes editing surfaces
+- Quick notes can now default to note-only mode with an independent auto-record toggle
 
 ## Recommended next work
 
 1. Review remaining calendar edge cases around nearby suggestions and any residual non-calendar quick-start paths
 2. Decide whether Google Calendar configuration should remain hidden/disabled without credentials or be exposed more explicitly
 3. Continue improving summary/title quality now that template and title-prompt controls exist
-4. Continue UX polish for meeting detail, popup behavior, and in-meeting note handling
+4. Continue UX polish for meeting detail and in-meeting note handling, especially how aggressively the note window steals focus during live meetings
 5. Explore meeting-chat / copilot direction
 
 ## Editing note

@@ -78,13 +78,14 @@ struct DashboardRootView: View {
     }
 
     private var quickNoteToolbarButton: some View {
-        Button {
+        let language = AppLanguage.resolved(appState.config.appLanguage)
+        return Button {
             controller.startQuickNoteMeeting()
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "plus")
                     .font(.system(size: 11, weight: .semibold))
-                Text("Quick Note")
+                Text(L10n.text(.quickNoteButton, language: language))
                     .font(.system(size: 12, weight: .semibold))
                     .lineLimit(1)
             }
@@ -96,6 +97,6 @@ struct DashboardRootView: View {
         }
         .buttonStyle(.plain)
         .disabled(appState.isMeetingRecording)
-        .help("Start a quick meeting note")
+        .help(L10n.text(.quickNoteButtonHelp, language: language))
     }
 }

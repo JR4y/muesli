@@ -10,10 +10,10 @@ private enum ManualNotesSaveStatus {
     case saved
     case saving
 
-    var label: String {
+    func label(config: AppConfig) -> String {
         switch self {
-        case .saved: return "Saved"
-        case .saving: return "Saving..."
+        case .saved: return L10n.text(.meetingManualNotesSaved, config: config)
+        case .saving: return L10n.text(.meetingManualNotesSaving, config: config)
         }
     }
 }
@@ -46,6 +46,9 @@ struct MeetingDetailView: View {
     @State private var nearbyCalendarEvents: [UnifiedCalendarEvent] = []
     @State private var isLoadingNearbyCalendarEvents = false
     @State private var isAssociatedEventExpanded = true
+    @State private var showFolderPopover = false
+    @State private var showNewFolderPrompt = false
+    @State private var newFolderName = ""
 
     init(
         meeting: MeetingRecord?,
@@ -160,7 +163,7 @@ struct MeetingDetailView: View {
 
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .top, spacing: MuesliTheme.spacing24) {
-                    titleBlock(for: meeting, appliedTemplate: appliedTemplate)
+                    titleBlock(for: meeting)
                         .layoutPriority(1)
 
                     Spacer(minLength: MuesliTheme.spacing16)
@@ -170,7 +173,7 @@ struct MeetingDetailView: View {
                 }
 
                 VStack(alignment: .leading, spacing: MuesliTheme.spacing16) {
-                    titleBlock(for: meeting, appliedTemplate: appliedTemplate)
+                    titleBlock(for: meeting)
 
                     HStack {
                         Spacer(minLength: 0)
@@ -189,7 +192,7 @@ struct MeetingDetailView: View {
         .frame(maxWidth: .infinity, alignment: .center)
     }
 
-    private func titleBlock(for meeting: MeetingRecord, appliedTemplate: MeetingTemplateSnapshot) -> some View {
+    private func titleBlock(for meeting: MeetingRecord) -> some View {
         VStack(alignment: .leading, spacing: MuesliTheme.spacing8) {
             TextField(L10n.text(.meetingTitlePlaceholder, config: appState.config), text: $editableTitle)
                 .font(.system(size: 30, weight: .bold))
@@ -208,7 +211,6 @@ struct MeetingDetailView: View {
                     .foregroundStyle(MuesliTheme.textSecondary)
                     .lineLimit(1)
                 folderChip(for: meeting)
-                templateChip(for: appliedTemplate)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -222,20 +224,23 @@ struct MeetingDetailView: View {
                 if meeting.status == .recording {
                     stopRecordingButton
                     discardRecordingButton
-                } else if controller.canDeleteMeeting(meeting), meeting.status == .noteOnly || meeting.status == .failed {
+                } else if meeting.status == .noteOnly {
+                    startRecordingButton(for: meeting)
+                    if controller.canDeleteMeeting(meeting) {
+                        deleteButton
+                    }
+                } else if controller.canDeleteMeeting(meeting), meeting.status == .failed {
                     deleteButton
                 }
             }
         } else {
             VStack(alignment: .trailing, spacing: MuesliTheme.spacing8) {
                 HStack(spacing: MuesliTheme.spacing8) {
-                    summaryAction(for: meeting)
-                    templateMenu(for: meeting, appliedTemplate: appliedTemplate)
-                }
-                if hasRecordingAction(for: meeting) {
-                    HStack(spacing: MuesliTheme.spacing8) {
+                    if hasRecordingAction(for: meeting) {
                         recordingAction(for: meeting)
                     }
+                    summaryAction(for: meeting)
+                    templateMenu(for: meeting, appliedTemplate: appliedTemplate)
                 }
             }
         }
@@ -243,15 +248,76 @@ struct MeetingDetailView: View {
 
     @ViewBuilder
     private func folderChip(for meeting: MeetingRecord) -> some View {
-        if let folder = folder(for: meeting) {
-            HStack(spacing: 6) {
-                Image(systemName: MeetingFolderIcons.resolvedIconName(for: folder))
-                    .font(.system(size: 10, weight: .medium))
-                Text(appState.folderPath(for: folder.id))
-                    .font(.system(size: 12, weight: .medium))
-                    .lineLimit(1)
+        if currentFolderLabel(for: meeting) != nil {
+            Button {
+                showFolderPopover.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: currentFolderIconName(for: meeting))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(currentFolderIconColor(for: meeting))
+                    Text(currentFolderLabel(for: meeting) ?? "")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(MuesliTheme.textSecondary)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, MuesliTheme.spacing8)
+                .padding(.vertical, 4)
+                .background(MuesliTheme.surfacePrimary)
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule()
+                        .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
+                )
             }
-            .foregroundStyle(MeetingFolderColors.color(for: folder, fallback: MuesliTheme.accent))
+            .buttonStyle(.plain)
+            .help(L10n.text(.meetingMoveToFolder, config: appState.config))
+            .popover(isPresented: $showFolderPopover, arrowEdge: .bottom) {
+                VStack(alignment: .leading, spacing: 0) {
+                    folderPopoverRow(
+                        icon: "tray",
+                        label: L10n.text(.meetingUnfiled, config: appState.config),
+                        isActive: meeting.folderID == nil
+                    ) {
+                        controller.moveMeeting(id: meeting.id, toFolder: nil)
+                        showFolderPopover = false
+                    }
+                    Divider().padding(.vertical, 4)
+                    ForEach(appState.folders) { folder in
+                        folderPopoverRow(
+                            icon: "folder",
+                            label: folder.name,
+                            color: MeetingFolderColors.color(for: folder, fallback: MuesliTheme.textSecondary),
+                            isActive: meeting.folderID == folder.id
+                        ) {
+                            controller.moveMeeting(id: meeting.id, toFolder: folder.id)
+                            showFolderPopover = false
+                        }
+                    }
+                    Divider().padding(.vertical, 4)
+                    folderPopoverRow(
+                        icon: "folder.badge.plus",
+                        label: L10n.text(.meetingNewFolderEllipsis, config: appState.config)
+                    ) {
+                        showFolderPopover = false
+                        newFolderName = ""
+                        showNewFolderPrompt = true
+                    }
+                }
+                .padding(8)
+            }
+            .alert(L10n.text(.meetingNewFolderTitle, config: appState.config), isPresented: $showNewFolderPrompt) {
+                TextField(L10n.text(.sidebarFolderName, config: appState.config), text: $newFolderName)
+                Button(L10n.text(.meetingCreate, config: appState.config)) {
+                    let trimmed = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty {
+                        controller.createFolderAndMoveMeeting(name: trimmed, meetingID: meeting.id)
+                    }
+                }
+                Button(L10n.text(.sidebarCancel, config: appState.config), role: .cancel) {}
+            } message: {
+                Text(L10n.text(.meetingNewFolderMessage, config: appState.config))
+            }
         }
     }
 
@@ -269,6 +335,7 @@ struct MeetingDetailView: View {
                     command: $manualEditorCommand,
                     shouldFocus: isManualNotesEditable && meeting.status == .recording,
                     isEditable: isManualNotesEditable,
+                    placeholder: L10n.text(.meetingManualNotesPlaceholder, config: appState.config),
                     onTextChange: { notes in
                         guard isManualNotesEditable else { return }
                         saveManualNotes(meetingID: meeting.id, notes: notes)
@@ -664,15 +731,18 @@ struct MeetingDetailView: View {
                 controller.showMeetingTemplatesManager()
             }
         } label: {
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
                 Image(systemName: iconName(forSelectionOn: meeting, appliedTemplate: appliedTemplate))
-                    .font(.system(size: 10))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(MuesliTheme.textSecondary)
                 Text(labelForSelection(on: meeting, appliedTemplate: appliedTemplate))
                     .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(MuesliTheme.textSecondary)
+                    .lineLimit(1)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 9))
+                    .foregroundStyle(MuesliTheme.textTertiary)
             }
-            .foregroundStyle(MuesliTheme.textSecondary)
             .padding(.horizontal, MuesliTheme.spacing8)
             .padding(.vertical, 5)
             .background(MuesliTheme.surfacePrimary)
@@ -684,6 +754,36 @@ struct MeetingDetailView: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
+    }
+
+    @ViewBuilder
+    private func folderPopoverRow(
+        icon: String,
+        label: String,
+        color: Color = MuesliTheme.textSecondary,
+        isActive: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 11))
+                    .foregroundStyle(color)
+                    .frame(width: 16)
+                Text(label)
+                    .font(MuesliTheme.callout())
+                Spacer()
+                if isActive {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(MuesliTheme.accent)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -731,23 +831,23 @@ struct MeetingDetailView: View {
     private func manualNotesToolbar(for meeting: MeetingRecord) -> some View {
         HStack(spacing: MuesliTheme.spacing8) {
             if canEditManualNotes(for: meeting) {
-                Text(manualNotesSaveStatus.label)
+                Text(manualNotesSaveStatus.label(config: appState.config))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(MuesliTheme.textTertiary)
             }
 
             Spacer()
 
-            markdownToolbarButton(systemImage: "textformat.size", label: "Heading") {
+            markdownToolbarButton(systemImage: "textformat.size", label: L10n.text(.meetingManualToolbarHeading, config: appState.config)) {
                 manualEditorCommand = MarkdownEditorCommand(kind: .heading)
             }
-            markdownToolbarButton(systemImage: "bold", label: "Bold") {
+            markdownToolbarButton(systemImage: "bold", label: L10n.text(.meetingManualToolbarBold, config: appState.config)) {
                 manualEditorCommand = MarkdownEditorCommand(kind: .bold)
             }
-            markdownToolbarButton(systemImage: "list.bullet", label: "Bullet") {
+            markdownToolbarButton(systemImage: "list.bullet", label: L10n.text(.meetingManualToolbarBullet, config: appState.config)) {
                 manualEditorCommand = MarkdownEditorCommand(kind: .bullet)
             }
-            markdownToolbarButton(systemImage: "checklist", label: "Checkbox") {
+            markdownToolbarButton(systemImage: "checklist", label: L10n.text(.meetingManualToolbarCheckbox, config: appState.config)) {
                 manualEditorCommand = MarkdownEditorCommand(kind: .checkbox)
             }
         }
@@ -895,7 +995,7 @@ struct MeetingDetailView: View {
             HStack(spacing: 6) {
                 Image(systemName: "stop.fill")
                     .font(.system(size: 10, weight: .semibold))
-                Text("Stop Recording")
+                Text(L10n.text(.meetingStopRecording, config: appState.config))
                     .font(.system(size: 12, weight: .semibold))
             }
             .foregroundStyle(.white)
@@ -905,28 +1005,34 @@ struct MeetingDetailView: View {
             .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
         }
         .buttonStyle(.plain)
-        .help("Stop recording")
+        .help(L10n.text(.meetingStopRecordingHelp, config: appState.config))
+    }
+
+    private func startRecordingButton(for meeting: MeetingRecord) -> some View {
+        Button {
+            flushTitleSave(meetingID: meeting.id)
+            controller.startRecordingForExistingMeeting(id: meeting.id)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "record.circle")
+                    .font(.system(size: 10, weight: .semibold))
+                Text(L10n.text(.meetingStartRecording, config: appState.config))
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, MuesliTheme.spacing12)
+            .padding(.vertical, 8)
+            .background(MuesliTheme.accent)
+            .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
+        }
+        .buttonStyle(.plain)
+        .help(L10n.text(.meetingStartRecordingHelp, config: appState.config))
     }
 
     private var discardRecordingButton: some View {
-        iconButton("xmark", label: "Discard") {
+        iconButton("xmark", label: L10n.text(.meetingDiscard, config: appState.config)) {
             controller.discardMeetingRecording()
         }
-    }
-
-    @ViewBuilder
-    private func templateChip(for snapshot: MeetingTemplateSnapshot) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: iconName(for: snapshot))
-                .font(.system(size: 10))
-            Text(snapshot.name)
-                .font(.system(size: 11, weight: .medium))
-        }
-        .foregroundStyle(MuesliTheme.accent)
-        .padding(.horizontal, MuesliTheme.spacing8)
-        .padding(.vertical, 4)
-        .background(MuesliTheme.accentSubtle)
-        .clipShape(Capsule())
     }
 
     private var transcriptCTA: some View {
@@ -1267,6 +1373,30 @@ struct MeetingDetailView: View {
         let time = formatCompactTime(meeting.startTime)
         let duration = formatDuration(meeting.durationSeconds)
         return "\(time)  \u{2022}  \(duration)  \u{2022}  \(L10n.text(.meetingWords(count: meeting.wordCount), config: appState.config))"
+    }
+
+    private func currentFolderLabel(for meeting: MeetingRecord) -> String? {
+        if let folder = folder(for: meeting) {
+            return appState.folderPath(for: folder.id)
+        }
+        if !appState.folders.isEmpty {
+            return L10n.text(.meetingUnfiled, config: appState.config)
+        }
+        return nil
+    }
+
+    private func currentFolderIconName(for meeting: MeetingRecord) -> String {
+        if let folder = folder(for: meeting) {
+            return MeetingFolderIcons.resolvedIconName(for: folder)
+        }
+        return "folder.badge.plus"
+    }
+
+    private func currentFolderIconColor(for meeting: MeetingRecord) -> Color {
+        if let folder = folder(for: meeting) {
+            return MeetingFolderColors.color(for: folder, fallback: MuesliTheme.accent.opacity(0.8))
+        }
+        return MuesliTheme.textTertiary
     }
 
     private func formatTime(_ raw: String) -> String {

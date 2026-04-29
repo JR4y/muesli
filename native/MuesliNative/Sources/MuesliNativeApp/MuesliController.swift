@@ -1199,7 +1199,8 @@ final class MuesliController: NSObject {
         isShowingCalendarNotification = true
 
         meetingNotification.show(
-            title: "Meeting starting now",
+            config: config,
+            title: L10n.text(.meetingsPopupStartingNowTitle, config: config),
             subtitle: title,
             darkMode: config.darkMode,
             meetingURL: meetingURL,
@@ -2246,7 +2247,90 @@ final class MuesliController: NSObject {
     }
 
     func startQuickNoteMeeting() {
-        startForegroundMeetingRecording(title: "Meeting")
+        if config.autoRecordQuickNotes {
+            startForegroundMeetingRecording(title: "Meeting")
+            return
+        }
+
+        let templateSnapshot = defaultMeetingTemplate()
+        let meetingID: Int64
+        do {
+            meetingID = try dictationStore.createNoteOnlyMeeting(
+                title: "Meeting",
+                calendarEventID: nil,
+                startTime: Date(),
+                selectedTemplateID: templateSnapshot.id,
+                selectedTemplateName: templateSnapshot.name,
+                selectedTemplateKind: templateSnapshot.kind,
+                selectedTemplatePrompt: templateSnapshot.prompt
+            )
+            syncAppState()
+            showMeetingDocument(id: meetingID)
+        } catch {
+            fputs("[muesli-native] failed to create quick note: \(error)\n", stderr)
+            presentErrorAlert(title: "Quick Note", message: error.localizedDescription)
+            return
+        }
+
+        presentHistoryWindow()
+    }
+
+    func startRecordingForExistingMeeting(id: Int64) {
+        guard !isMeetingRecording(), !isStartingMeetingRecording else { return }
+        guard let meeting = meeting(id: id) else { return }
+
+        let previousStatus = meeting.status
+        try? dictationStore.updateMeetingStatus(id: id, status: .recording)
+        activeMeetingID = id
+        syncAppState()
+
+        isStartingMeetingRecording = true
+        beginMeetingActivity(reason: "Recording and transcribing a meeting")
+        meetingMonitor.suppressWhileActive()
+        meetingMonitor.refreshState()
+        updateMeetingNotificationVisibility()
+        statusBarController?.setStatus("Starting meeting: \(meeting.title)")
+        statusBarController?.refresh()
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await self.startMeetingRecordingWithSystemAudioRecovery(
+                    title: meeting.title,
+                    calendarEventID: meeting.calendarEventID,
+                    calendarEventSnapshot: meeting.calendarEventSnapshot,
+                    meetingID: id
+                )
+            } catch {
+                fputs("[muesli-native] failed to start meeting from note: \(error)\n", stderr)
+                self.resolveExistingMeetingAfterStartFailure(id: id, previousStatus: previousStatus)
+                self.meetingMonitor.resumeAfterCooldown()
+                self.meetingMonitor.refreshState()
+                self.statusBarController?.setStatus("Idle")
+                self.statusBarController?.refresh()
+                self.setState(.idle)
+                self.endMeetingActivity()
+
+                let isSystemAudioError = error is CoreAudioSystemRecorder.RecorderError
+                let alert = NSAlert()
+                alert.alertStyle = .warning
+                if isSystemAudioError {
+                    alert.messageText = "System audio capture failed"
+                    alert.informativeText = "Could not start system audio recording. Open System Settings > Privacy & Security > Screen & System Audio Recording and enable \(AppIdentity.displayName) under \"System Audio Recording Only\".\n\nError: \(error.localizedDescription)"
+                    alert.addButton(withTitle: "Open System Settings")
+                    alert.addButton(withTitle: "OK")
+                    if alert.runModal() == .alertFirstButtonReturn {
+                        CoreAudioSystemRecorder.openSystemAudioSettings()
+                    }
+                } else {
+                    alert.messageText = "Meeting failed to start"
+                    alert.informativeText = error.localizedDescription
+                    alert.runModal()
+                }
+            }
+            self.isStartingMeetingRecording = false
+            self.updateMeetingNotificationVisibility()
+        }
     }
 
     private func startMeetingRecordingWithSystemAudioRecovery(
@@ -2444,6 +2528,14 @@ final class MuesliController: NSObject {
         syncAppState()
     }
 
+    private func resolveExistingMeetingAfterStartFailure(id: Int64, previousStatus: MeetingStatus) {
+        try? dictationStore.updateMeetingStatus(id: id, status: previousStatus)
+        if activeMeetingID == id {
+            activeMeetingID = nil
+        }
+        syncAppState()
+    }
+
     private func resolveLiveMeetingAfterStopFailure(id: Int64) {
         let manualNotes = manualNotesForLiveMeeting(id: id)
         if manualNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -2555,9 +2647,10 @@ final class MuesliController: NSObject {
                 self.presentedMeetingCandidate = nil
                 let savedMeetingID = completedMeetingID
                 self.meetingNotification.show(
-                    title: "Transcription complete",
+                    config: self.config,
+                    title: L10n.text(.meetingsPopupTranscriptionCompleteTitle, config: self.config),
                     subtitle: meetingTitle,
-                    actionLabel: "View Notes",
+                    actionLabel: L10n.text(.meetingsPopupViewNotes, config: self.config),
                     darkMode: self.config.darkMode,
                     onStartRecording: { [weak self] in
                         guard let self else { return }
@@ -2854,7 +2947,8 @@ final class MuesliController: NSObject {
         let preferredScreen = meetingSourceWindowLocator.screen(for: candidate)
         meetingNotification.show(
             promptID: candidate.id,
-            title: "Meeting detected",
+            config: config,
+            title: L10n.text(.meetingsPopupDetectedTitle, config: config),
             subtitle: title,
             darkMode: config.darkMode,
             preferredScreen: preferredScreen,
@@ -3277,16 +3371,17 @@ final class MuesliController: NSObject {
         let minutesUntil = Int(ceil(event.startDate.timeIntervalSinceNow / 60))
         let timeLabel: String
         if minutesUntil > 0 {
-            timeLabel = "starts in \(minutesUntil) min"
+            timeLabel = L10n.text(.meetingsPopupStartsInMinutes(count: minutesUntil), config: config)
         } else if minutesUntil == 0 {
-            timeLabel = "starting now"
+            timeLabel = L10n.text(.meetingsPopupStartingNow, config: config)
         } else {
-            timeLabel = "started \(abs(minutesUntil)) min ago"
+            timeLabel = L10n.text(.meetingsPopupStartedMinutesAgo(count: abs(minutesUntil)), config: config)
         }
 
         let title = event.title
         meetingNotification.show(
-            title: "Upcoming meeting",
+            config: config,
+            title: L10n.text(.meetingsPopupUpcomingTitle, config: config),
             subtitle: "\(title) · \(timeLabel)",
             darkMode: config.darkMode,
             meetingURL: meetingURL,
@@ -3330,9 +3425,10 @@ final class MuesliController: NSObject {
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.isMeetingRecording() else { return }
                 self.meetingNotification.show(
-                    title: "Meeting ended",
-                    subtitle: "\(title) · scheduled time is over",
-                    actionLabel: "Stop Recording",
+                    config: self.config,
+                    title: L10n.text(.meetingsPopupEndedTitle, config: self.config),
+                    subtitle: "\(title) · \(L10n.text(.meetingsPopupScheduledTimeOver, config: self.config))",
+                    actionLabel: L10n.text(.meetingStopRecording, config: self.config),
                     darkMode: self.config.darkMode,
                     dismissAfter: 45,
                     onStartRecording: { [weak self] in

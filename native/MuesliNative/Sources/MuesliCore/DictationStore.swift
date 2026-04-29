@@ -582,6 +582,48 @@ public final class DictationStore {
         return sqlite3_last_insert_rowid(db)
     }
 
+    @discardableResult
+    public func createNoteOnlyMeeting(
+        title: String,
+        calendarEventID: String?,
+        calendarEventSnapshot: MeetingCalendarEventSnapshot? = nil,
+        startTime: Date,
+        selectedTemplateID: String? = nil,
+        selectedTemplateName: String? = nil,
+        selectedTemplateKind: MeetingTemplateKind? = nil,
+        selectedTemplatePrompt: String? = nil
+    ) throws -> Int64 {
+        let db = try openDatabase()
+        defer { sqlite3_close(db) }
+
+        let sql = """
+        INSERT INTO meetings
+        (title, calendar_event_id, calendar_event_snapshot, start_time, end_time, duration_seconds, raw_transcript, formatted_notes, mic_audio_path, system_audio_path, saved_recording_path, meeting_status, manual_notes, word_count, selected_template_id, selected_template_name, selected_template_kind, selected_template_prompt, source)
+        VALUES (?, ?, ?, ?, NULL, 0, '', '', NULL, NULL, NULL, ?, '', 0, ?, ?, ?, ?, 'meeting')
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw lastError(db)
+        }
+        defer { sqlite3_finalize(statement) }
+
+        let startString = ISO8601DateFormatter().string(from: startTime)
+        sqlite3_bind_text(statement, 1, (title as NSString).utf8String, -1, nil)
+        bindOptionalText(calendarEventID, at: 2, statement: statement)
+        bindOptionalText(Self.encodeCalendarEventSnapshot(calendarEventSnapshot), at: 3, statement: statement)
+        sqlite3_bind_text(statement, 4, (startString as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(statement, 5, (MeetingStatus.noteOnly.rawValue as NSString).utf8String, -1, nil)
+        bindOptionalText(selectedTemplateID, at: 6, statement: statement)
+        bindOptionalText(selectedTemplateName, at: 7, statement: statement)
+        bindOptionalText(selectedTemplateKind?.rawValue, at: 8, statement: statement)
+        bindOptionalText(selectedTemplatePrompt, at: 9, statement: statement)
+
+        guard sqlite3_step(statement) == SQLITE_DONE else {
+            throw lastError(db)
+        }
+        return sqlite3_last_insert_rowid(db)
+    }
+
     public func dictationStats() throws -> DictationStats {
         let db = try openDatabase()
         defer { sqlite3_close(db) }

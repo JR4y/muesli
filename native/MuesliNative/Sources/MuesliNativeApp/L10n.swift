@@ -94,6 +94,19 @@ enum L10nKey {
     case meetingsCollapsedHint
     case meetingsCalendarSyncHint
     case meetingsJoinAndRecord
+    case meetingsPopupUpcomingTitle
+    case meetingsPopupStartingNowTitle
+    case meetingsPopupStartRecording
+    case meetingsPopupJoinOnly
+    case meetingsPopupRecordOnly
+    case meetingsPopupStartsInMinutes(count: Int)
+    case meetingsPopupStartingNow
+    case meetingsPopupStartedMinutesAgo(count: Int)
+    case meetingsPopupDetectedTitle
+    case meetingsPopupTranscriptionCompleteTitle
+    case meetingsPopupViewNotes
+    case meetingsPopupEndedTitle
+    case meetingsPopupScheduledTimeOver
     case meetingsAddToFolder
     case meetingsHideFromComingUp
     case meetingsCount(count: Int)
@@ -150,9 +163,21 @@ enum L10nKey {
     case meetingTitlePlaceholder
     case meetingNotes
     case meetingTranscript
+    case meetingManualNotesSaved
+    case meetingManualNotesSaving
+    case meetingManualNotesPlaceholder
+    case meetingManualToolbarHeading
+    case meetingManualToolbarBold
+    case meetingManualToolbarBullet
+    case meetingManualToolbarCheckbox
+    case meetingStartRecording
+    case meetingStartRecordingHelp
     case meetingSummarizing
     case meetingDone
     case meetingEdit
+    case meetingStopRecording
+    case meetingStopRecordingHelp
+    case meetingDiscard
     case meetingShowRecording
     case meetingManageTemplates
     case meetingCopy
@@ -241,6 +266,7 @@ enum L10nKey {
     case settingsTemplates
     case settingsRecordingSection
     case settingsAutoRecordCalendarMeetings
+    case settingsAutoRecordQuickNotes
     case settingsNotifyWhenMeetingDetected
     case settingsSaveMeetingRecording
     case settingsAdvancedSection
@@ -286,6 +312,8 @@ enum L10nKey {
     case settingsApiKeyConfigured
     case settingsLoadingModels
     case settingsLoadModels
+    case quickNoteButton
+    case quickNoteButtonHelp
     case settingsRecordingSaveNever
     case settingsRecordingSavePrompt
     case settingsRecordingSaveAlways
@@ -485,6 +513,32 @@ enum L10n {
             return "Add Google to macOS Calendar for real-time sync"
         case .meetingsJoinAndRecord:
             return "Join & Record"
+        case .meetingsPopupUpcomingTitle:
+            return "Upcoming meeting"
+        case .meetingsPopupStartingNowTitle:
+            return "Meeting starting now"
+        case .meetingsPopupStartRecording:
+            return "Start Recording"
+        case .meetingsPopupJoinOnly:
+            return "Join Only"
+        case .meetingsPopupRecordOnly:
+            return "Record Only"
+        case .meetingsPopupStartsInMinutes(let count):
+            return "starts in \(count) min"
+        case .meetingsPopupStartingNow:
+            return "starting now"
+        case .meetingsPopupStartedMinutesAgo(let count):
+            return "started \(count) min ago"
+        case .meetingsPopupDetectedTitle:
+            return "Meeting detected"
+        case .meetingsPopupTranscriptionCompleteTitle:
+            return "Transcription complete"
+        case .meetingsPopupViewNotes:
+            return "View Notes"
+        case .meetingsPopupEndedTitle:
+            return "Meeting ended"
+        case .meetingsPopupScheduledTimeOver:
+            return "scheduled time is over"
         case .meetingsAddToFolder:
             return "Add to folder"
         case .meetingsHideFromComingUp:
@@ -597,12 +651,36 @@ enum L10n {
             return "Notes"
         case .meetingTranscript:
             return "Transcript"
+        case .meetingManualNotesSaved:
+            return "Saved"
+        case .meetingManualNotesSaving:
+            return "Saving..."
+        case .meetingManualNotesPlaceholder:
+            return "Write notes here..."
+        case .meetingManualToolbarHeading:
+            return "Heading"
+        case .meetingManualToolbarBold:
+            return "Bold"
+        case .meetingManualToolbarBullet:
+            return "Bullet"
+        case .meetingManualToolbarCheckbox:
+            return "Checkbox"
+        case .meetingStartRecording:
+            return "Start Recording"
+        case .meetingStartRecordingHelp:
+            return "Start recording for this note"
         case .meetingSummarizing:
             return "Summarizing..."
         case .meetingDone:
             return "Done"
         case .meetingEdit:
             return "Edit"
+        case .meetingStopRecording:
+            return "Stop Recording"
+        case .meetingStopRecordingHelp:
+            return "Stop recording"
+        case .meetingDiscard:
+            return "Discard"
         case .meetingShowRecording:
             return "Show Recording"
         case .meetingManageTemplates:
@@ -779,6 +857,8 @@ enum L10n {
             return "Recording"
         case .settingsAutoRecordCalendarMeetings:
             return "Auto-record calendar meetings"
+        case .settingsAutoRecordQuickNotes:
+            return "Auto-record Quick Notes"
         case .settingsNotifyWhenMeetingDetected:
             return "Notify when meeting detected"
         case .settingsSaveMeetingRecording:
@@ -869,6 +949,10 @@ enum L10n {
             return "Loading models"
         case .settingsLoadModels:
             return "Load"
+        case .quickNoteButton:
+            return "Quick Note"
+        case .quickNoteButtonHelp:
+            return "Start a quick meeting note"
         case .settingsRecordingSaveNever:
             return "Never"
         case .settingsRecordingSavePrompt:
@@ -1139,6 +1223,32 @@ enum L10n {
             return "Agrega Google al Calendario de macOS para sincronizacion en tiempo real"
         case .meetingsJoinAndRecord:
             return "Entrar y grabar"
+        case .meetingsPopupUpcomingTitle:
+            return "Proxima reunion"
+        case .meetingsPopupStartingNowTitle:
+            return "La reunion empieza ahora"
+        case .meetingsPopupStartRecording:
+            return "Empezar a grabar"
+        case .meetingsPopupJoinOnly:
+            return "Solo entrar"
+        case .meetingsPopupRecordOnly:
+            return "Solo grabar"
+        case .meetingsPopupStartsInMinutes(let count):
+            return "empieza en \(count) min"
+        case .meetingsPopupStartingNow:
+            return "empieza ahora"
+        case .meetingsPopupStartedMinutesAgo(let count):
+            return "empezo hace \(count) min"
+        case .meetingsPopupDetectedTitle:
+            return "Reunion detectada"
+        case .meetingsPopupTranscriptionCompleteTitle:
+            return "Transcripcion completada"
+        case .meetingsPopupViewNotes:
+            return "Ver notas"
+        case .meetingsPopupEndedTitle:
+            return "La reunion ha terminado"
+        case .meetingsPopupScheduledTimeOver:
+            return "el tiempo programado ha terminado"
         case .meetingsAddToFolder:
             return "Agregar a carpeta"
         case .meetingsHideFromComingUp:
@@ -1251,12 +1361,36 @@ enum L10n {
             return "Notas"
         case .meetingTranscript:
             return "Transcripcion"
+        case .meetingManualNotesSaved:
+            return "Guardado"
+        case .meetingManualNotesSaving:
+            return "Guardando..."
+        case .meetingManualNotesPlaceholder:
+            return "Escribe notas aqui..."
+        case .meetingManualToolbarHeading:
+            return "Titulo"
+        case .meetingManualToolbarBold:
+            return "Negrita"
+        case .meetingManualToolbarBullet:
+            return "Vinetas"
+        case .meetingManualToolbarCheckbox:
+            return "Checklist"
+        case .meetingStartRecording:
+            return "Empezar a grabar"
+        case .meetingStartRecordingHelp:
+            return "Empezar a grabar para esta nota"
         case .meetingSummarizing:
             return "Resumiendo..."
         case .meetingDone:
             return "Listo"
         case .meetingEdit:
             return "Editar"
+        case .meetingStopRecording:
+            return "Detener grabacion"
+        case .meetingStopRecordingHelp:
+            return "Detener grabacion"
+        case .meetingDiscard:
+            return "Descartar"
         case .meetingShowRecording:
             return "Mostrar grabacion"
         case .meetingManageTemplates:
@@ -1433,6 +1567,8 @@ enum L10n {
             return "Grabacion"
         case .settingsAutoRecordCalendarMeetings:
             return "Grabar automaticamente reuniones del calendario"
+        case .settingsAutoRecordQuickNotes:
+            return "Grabar automaticamente Quick Notes"
         case .settingsNotifyWhenMeetingDetected:
             return "Avisar al detectar una reunion"
         case .settingsSaveMeetingRecording:
@@ -1523,6 +1659,10 @@ enum L10n {
             return "Cargando modelos"
         case .settingsLoadModels:
             return "Cargar"
+        case .quickNoteButton:
+            return "Nota rapida"
+        case .quickNoteButtonHelp:
+            return "Crear una nota rapida de reunion"
         case .settingsRecordingSaveNever:
             return "Nunca"
         case .settingsRecordingSavePrompt:
