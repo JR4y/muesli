@@ -25,8 +25,16 @@ struct MeetingListItemView: View {
         currentFolder?.name
     }
 
+    private var folderIconName: String {
+        MeetingFolderIcons.resolvedIconName(for: currentFolder)
+    }
+
     private var currentFolderColor: Color {
         MeetingFolderColors.color(for: currentFolder, fallback: MuesliTheme.accent.opacity(0.8))
+    }
+
+    private var hasAssociatedEvent: Bool {
+        record.calendarEventSnapshot != nil || !(record.calendarEventID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
     }
 
     var body: some View {
@@ -60,13 +68,23 @@ struct MeetingListItemView: View {
                     .font(MuesliTheme.caption())
                     .foregroundStyle(MuesliTheme.textSecondary)
 
+                if hasAssociatedEvent {
+                    Text("\u{2022}")
+                        .font(MuesliTheme.caption())
+                        .foregroundStyle(MuesliTheme.textTertiary)
+                    Image(systemName: "calendar.badge.checkmark")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(MuesliTheme.success)
+                        .help(L10n.text(.meetingCalendarLinked, config: config))
+                }
+
                 // Current folder badge
                 if let name = currentFolderName {
                     Text("\u{2022}")
                         .font(MuesliTheme.caption())
                         .foregroundStyle(MuesliTheme.textTertiary)
                     HStack(spacing: 2) {
-                        Image(systemName: "folder")
+                        Image(systemName: folderIconName)
                             .font(.system(size: 9))
                         Text(name)
                             .font(MuesliTheme.caption())

@@ -92,13 +92,21 @@ public final class DictationStore {
         CREATE TABLE IF NOT EXISTS meeting_folders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
+            parent_folder_id INTEGER REFERENCES meeting_folders(id),
             color_hex TEXT,
+            icon_name TEXT,
             sort_order INTEGER NOT NULL DEFAULT 0,
             created_at TEXT DEFAULT (datetime('now'))
         );
         """
         try exec(foldersSQL, db: db)
+        if sqlite3_exec(db, "ALTER TABLE meeting_folders ADD COLUMN parent_folder_id INTEGER REFERENCES meeting_folders(id)", nil, nil, nil) != SQLITE_OK {
+            // Column may already exist.
+        }
         if sqlite3_exec(db, "ALTER TABLE meeting_folders ADD COLUMN color_hex TEXT", nil, nil, nil) != SQLITE_OK {
+            // Column may already exist.
+        }
+        if sqlite3_exec(db, "ALTER TABLE meeting_folders ADD COLUMN icon_name TEXT", nil, nil, nil) != SQLITE_OK {
             // Column may already exist.
         }
 
@@ -131,6 +139,7 @@ public final class DictationStore {
         if sqlite3_exec(db, "ALTER TABLE meetings ADD COLUMN manual_notes TEXT NOT NULL DEFAULT ''", nil, nil, nil) != SQLITE_OK {
             // Column may already exist.
         }
+        let _ = sqlite3_exec(db, "CREATE INDEX IF NOT EXISTS idx_meeting_folders_parent ON meeting_folders(parent_folder_id)", nil, nil, nil)
         let _ = sqlite3_exec(db, "CREATE INDEX IF NOT EXISTS idx_meetings_folder ON meetings(folder_id)", nil, nil, nil)
     }
 
@@ -286,7 +295,19 @@ public final class DictationStore {
 
         var sql: String
         if folderID != nil {
-            sql = "SELECT \(Self.meetingColumns) FROM meetings WHERE folder_id = ? ORDER BY id DESC"
+            sql = """
+            WITH RECURSIVE folder_tree(id) AS (
+                SELECT id FROM meeting_folders WHERE id = ?
+                UNION ALL
+                SELECT child.id
+                FROM meeting_folders child
+                JOIN folder_tree parent ON child.parent_folder_id = parent.id
+            )
+            SELECT \(Self.meetingColumns)
+            FROM meetings
+            WHERE folder_id IN (SELECT id FROM folder_tree)
+            ORDER BY id DESC
+            """
         } else {
             sql = "SELECT \(Self.meetingColumns) FROM meetings ORDER BY id DESC"
         }
@@ -941,16 +962,28 @@ public final class DictationStore {
     }
 
     @discardableResult
-    public func createFolder(name: String) throws -> Int64 {
+    public func createFolder(
+        name: String,
+        parentFolderID: Int64? = nil,
+        colorHex: String? = nil,
+        iconName: String? = nil
+    ) throws -> Int64 {
         let db = try openDatabase()
         defer { sqlite3_close(db) }
-        let sql = "INSERT INTO meeting_folders (name, color_hex) VALUES (?, NULL)"
+        let sql = "INSERT INTO meeting_folders (name, parent_folder_id, color_hex, icon_name) VALUES (?, ?, ?, ?)"
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
             throw lastError(db)
         }
         defer { sqlite3_finalize(statement) }
         sqlite3_bind_text(statement, 1, (name as NSString).utf8String, -1, nil)
+        if let parentFolderID {
+            sqlite3_bind_int64(statement, 2, parentFolderID)
+        } else {
+            sqlite3_bind_null(statement, 2)
+        }
+        bindOptionalText(colorHex, at: 3, statement: statement)
+        bindOptionalText(iconName, at: 4, statement: statement)
         guard sqlite3_step(statement) == SQLITE_DONE else {
             throw lastError(db)
         }
@@ -958,39 +991,65 @@ public final class DictationStore {
     }
 
     public func renameFolder(id: Int64, name: String) throws {
+        guard let existing = try listFolders().first(where: { $0.id == id }) else { return }
+        try updateFolder(
+            id: id,
+            name: name,
+            parentFolderID: existing.parentFolderID,
+            colorHex: existing.colorHex,
+            iconName: existing.iconName
+        )
+    }
+
+    public func updateFolder(
+        id: Int64,
+        name: String,
+        parentFolderID: Int64?,
+        colorHex: String?,
+        iconName: String?
+    ) throws {
         let db = try openDatabase()
         defer { sqlite3_close(db) }
-        let sql = "UPDATE meeting_folders SET name = ? WHERE id = ?"
+        let sql = "UPDATE meeting_folders SET name = ?, parent_folder_id = ?, color_hex = ?, icon_name = ? WHERE id = ?"
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
             throw lastError(db)
         }
         defer { sqlite3_finalize(statement) }
         sqlite3_bind_text(statement, 1, (name as NSString).utf8String, -1, nil)
-        sqlite3_bind_int64(statement, 2, id)
+        if let parentFolderID {
+            sqlite3_bind_int64(statement, 2, parentFolderID)
+        } else {
+            sqlite3_bind_null(statement, 2)
+        }
+        bindOptionalText(colorHex, at: 3, statement: statement)
+        bindOptionalText(iconName, at: 4, statement: statement)
+        sqlite3_bind_int64(statement, 5, id)
         guard sqlite3_step(statement) == SQLITE_DONE else {
             throw lastError(db)
         }
     }
 
     public func updateFolderColor(id: Int64, colorHex: String?) throws {
-        let db = try openDatabase()
-        defer { sqlite3_close(db) }
-        let sql = "UPDATE meeting_folders SET color_hex = ? WHERE id = ?"
-        var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
-            throw lastError(db)
-        }
-        defer { sqlite3_finalize(statement) }
-        if let colorHex, !colorHex.isEmpty {
-            sqlite3_bind_text(statement, 1, (colorHex as NSString).utf8String, -1, nil)
-        } else {
-            sqlite3_bind_null(statement, 1)
-        }
-        sqlite3_bind_int64(statement, 2, id)
-        guard sqlite3_step(statement) == SQLITE_DONE else {
-            throw lastError(db)
-        }
+        guard let existing = try listFolders().first(where: { $0.id == id }) else { return }
+        try updateFolder(
+            id: id,
+            name: existing.name,
+            parentFolderID: existing.parentFolderID,
+            colorHex: colorHex,
+            iconName: existing.iconName
+        )
+    }
+
+    public func updateFolderIcon(id: Int64, iconName: String?) throws {
+        guard let existing = try listFolders().first(where: { $0.id == id }) else { return }
+        try updateFolder(
+            id: id,
+            name: existing.name,
+            parentFolderID: existing.parentFolderID,
+            colorHex: existing.colorHex,
+            iconName: iconName,
+        )
     }
 
     public func deleteFolder(id: Int64) throws {
@@ -1001,6 +1060,18 @@ public final class DictationStore {
         }
 
         do {
+            var parentFolderID: Int64?
+            var s0: OpaquePointer?
+            guard sqlite3_prepare_v2(db, "SELECT parent_folder_id FROM meeting_folders WHERE id = ? LIMIT 1", -1, &s0, nil) == SQLITE_OK else {
+                throw lastError(db)
+            }
+            defer { sqlite3_finalize(s0) }
+            sqlite3_bind_int64(s0, 1, id)
+            if sqlite3_step(s0) == SQLITE_ROW,
+               sqlite3_column_type(s0, 0) != SQLITE_NULL {
+                parentFolderID = sqlite3_column_int64(s0, 0)
+            }
+
             var s1: OpaquePointer?
             guard sqlite3_prepare_v2(db, "UPDATE meetings SET folder_id = NULL WHERE folder_id = ?", -1, &s1, nil) == SQLITE_OK else {
                 throw lastError(db)
@@ -1012,12 +1083,27 @@ public final class DictationStore {
             }
 
             var s2: OpaquePointer?
-            guard sqlite3_prepare_v2(db, "DELETE FROM meeting_folders WHERE id = ?", -1, &s2, nil) == SQLITE_OK else {
+            guard sqlite3_prepare_v2(db, "UPDATE meeting_folders SET parent_folder_id = ? WHERE parent_folder_id = ?", -1, &s2, nil) == SQLITE_OK else {
                 throw lastError(db)
             }
             defer { sqlite3_finalize(s2) }
-            sqlite3_bind_int64(s2, 1, id)
+            if let parentFolderID {
+                sqlite3_bind_int64(s2, 1, parentFolderID)
+            } else {
+                sqlite3_bind_null(s2, 1)
+            }
+            sqlite3_bind_int64(s2, 2, id)
             guard sqlite3_step(s2) == SQLITE_DONE else {
+                throw lastError(db)
+            }
+
+            var s3: OpaquePointer?
+            guard sqlite3_prepare_v2(db, "DELETE FROM meeting_folders WHERE id = ?", -1, &s3, nil) == SQLITE_OK else {
+                throw lastError(db)
+            }
+            defer { sqlite3_finalize(s3) }
+            sqlite3_bind_int64(s3, 1, id)
+            guard sqlite3_step(s3) == SQLITE_DONE else {
                 throw lastError(db)
             }
 
@@ -1033,7 +1119,7 @@ public final class DictationStore {
     public func listFolders() throws -> [MeetingFolder] {
         let db = try openDatabase()
         defer { sqlite3_close(db) }
-        let sql = "SELECT id, name, color_hex, created_at FROM meeting_folders ORDER BY id ASC"
+        let sql = "SELECT id, name, parent_folder_id, color_hex, icon_name, created_at FROM meeting_folders ORDER BY created_at ASC, id ASC"
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
             throw lastError(db)
@@ -1044,8 +1130,10 @@ public final class DictationStore {
             rows.append(MeetingFolder(
                 id: sqlite3_column_int64(statement, 0),
                 name: stringColumn(statement, index: 1),
-                colorHex: sqlite3_column_type(statement, 2) == SQLITE_NULL ? nil : stringColumn(statement, index: 2),
-                createdAt: stringColumn(statement, index: 3)
+                parentFolderID: sqlite3_column_type(statement, 2) == SQLITE_NULL ? nil : sqlite3_column_int64(statement, 2),
+                colorHex: sqlite3_column_type(statement, 3) == SQLITE_NULL ? nil : stringColumn(statement, index: 3),
+                iconName: sqlite3_column_type(statement, 4) == SQLITE_NULL ? nil : stringColumn(statement, index: 4),
+                createdAt: stringColumn(statement, index: 5)
             ))
         }
         return rows

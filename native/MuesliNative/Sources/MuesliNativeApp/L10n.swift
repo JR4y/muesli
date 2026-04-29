@@ -60,6 +60,7 @@ enum L10nKey {
     case sidebarNewMeetingFolder
     case sidebarAllMeetings
     case sidebarRename
+    case sidebarAddSubfolder
     case sidebarFolderName
     case sidebarNewFolder
     case sidebarFolderColor
@@ -98,6 +99,14 @@ enum L10nKey {
     case meetingsCount(count: Int)
     case meetingsHeaderHint
     case meetingsManageTemplates
+    case meetingsEditFolder
+    case meetingsNewSubfolder
+    case meetingsFolderEditorTitle
+    case meetingsFolderParent
+    case meetingsFolderRoot
+    case meetingsFolderAppearance
+    case meetingsFolderIcon
+    case meetingsFolderSave
     case meetingsEmptyTitle
     case meetingsEmptyFolderTitle
     case meetingsEmptyMessage
@@ -408,6 +417,8 @@ enum L10n {
             return "All Meetings"
         case .sidebarRename:
             return "Rename"
+        case .sidebarAddSubfolder:
+            return "Add Subfolder"
         case .sidebarFolderName:
             return "Folder name"
         case .sidebarNewFolder:
@@ -484,6 +495,22 @@ enum L10n {
             return "Open a meeting to review notes, transcript, and template-driven summaries"
         case .meetingsManageTemplates:
             return "Manage Templates"
+        case .meetingsEditFolder:
+            return "Edit Folder"
+        case .meetingsNewSubfolder:
+            return "New Subfolder"
+        case .meetingsFolderEditorTitle:
+            return "Folder Details"
+        case .meetingsFolderParent:
+            return "Parent folder"
+        case .meetingsFolderRoot:
+            return "Root level"
+        case .meetingsFolderAppearance:
+            return "Appearance"
+        case .meetingsFolderIcon:
+            return "Icon"
+        case .meetingsFolderSave:
+            return "Save"
         case .meetingsEmptyTitle:
             return "No meetings yet"
         case .meetingsEmptyFolderTitle:
@@ -1044,6 +1071,8 @@ enum L10n {
             return "Todas las reuniones"
         case .sidebarRename:
             return "Renombrar"
+        case .sidebarAddSubfolder:
+            return "Agregar subcarpeta"
         case .sidebarFolderName:
             return "Nombre de la carpeta"
         case .sidebarNewFolder:
@@ -1120,6 +1149,22 @@ enum L10n {
             return "Abre una reunion para revisar notas, transcripcion y resumenes basados en plantillas"
         case .meetingsManageTemplates:
             return "Gestionar plantillas"
+        case .meetingsEditFolder:
+            return "Editar carpeta"
+        case .meetingsNewSubfolder:
+            return "Nueva subcarpeta"
+        case .meetingsFolderEditorTitle:
+            return "Detalles de la carpeta"
+        case .meetingsFolderParent:
+            return "Carpeta padre"
+        case .meetingsFolderRoot:
+            return "Nivel raiz"
+        case .meetingsFolderAppearance:
+            return "Apariencia"
+        case .meetingsFolderIcon:
+            return "Icono"
+        case .meetingsFolderSave:
+            return "Guardar"
         case .meetingsEmptyTitle:
             return "Aun no hay reuniones"
         case .meetingsEmptyFolderTitle:

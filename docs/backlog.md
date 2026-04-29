@@ -34,7 +34,7 @@ Completed or largely completed:
 - Custom summary templates now appear before built-ins
 - `Auto` template can now target the user's chosen default template
 - `Coming Up` now supports collapse/expand
-- Meeting folders now support accent colors and clearer note association visibility
+- Meeting folders now support nested hierarchy, curated accent colors/icons, and clearer note association visibility
 - Meeting title prompt is now editable from `Manage Templates`
 - Future meetings now persist associated calendar event snapshots
 - Event snapshots now include attendee data and are shown in meeting detail
@@ -44,6 +44,7 @@ Completed or largely completed:
 - Calendar popup flows now normalize malformed event ids and repair reuse paths instead of duplicating meetings
 - `Dictionary`, `Models`, and `Shortcuts` now live inside `Settings` instead of cluttering the top-level sidebar
 - Meeting notification popups now follow the app theme instead of staying visually detached in a fixed dark style
+- The meetings browser header is cleaner, redundant folder summary chrome is removed, and folder editing now hangs off the folder icon beside the title
 
 Known limitation:
 
@@ -207,8 +208,8 @@ Notes:
 - first ergonomic pass can stay small: keep the new collapse/expand behavior
 - next likely step: paginate or cap long `Coming Up` lists so the meetings browser stays visible without excessive scrolling
 - also worth exploring later: a direct shortcut from `Coming Up` into the relevant calendar area instead of only sync guidance
-- folders now have a useful low-impact color accent system, but they are still single-assignment folders rather than tags or nested structures
-- meetings list should eventually show a subtle indicator when a note already has an associated calendar event, ideally before the folder marker
+- folders are now hierarchical and visually identifiable, but they are still single-assignment folders rather than multi-tag classification
+- meetings list now shows a subtle indicator when a note already has an associated calendar event
 - notification popups still contain hardcoded English UI copy and need a proper localization pass
 - in-meeting note capture could use a more discreet mode so starting a meeting does not always force the note window open in front of the user
 - the meeting detail action area still has some density and may need one more hierarchy pass after real usage

@@ -245,9 +245,9 @@ struct MeetingDetailView: View {
     private func folderChip(for meeting: MeetingRecord) -> some View {
         if let folder = folder(for: meeting) {
             HStack(spacing: 6) {
-                Image(systemName: "folder.fill")
+                Image(systemName: MeetingFolderIcons.resolvedIconName(for: folder))
                     .font(.system(size: 10, weight: .medium))
-                Text(folder.name)
+                Text(appState.folderPath(for: folder.id))
                     .font(.system(size: 12, weight: .medium))
                     .lineLimit(1)
             }

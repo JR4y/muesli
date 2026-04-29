@@ -5,6 +5,11 @@ struct DashboardRootView: View {
     let appState: AppState
     let controller: MuesliController
 
+    private var showsMeetingsToolbarActions: Bool {
+        guard !appState.isSearchActive, appState.selectedTab == .meetings else { return false }
+        return true
+    }
+
     var body: some View {
         NavigationSplitView {
             SidebarView(appState: appState, controller: controller)
@@ -63,5 +68,34 @@ struct DashboardRootView: View {
         }
         .frame(minWidth: 900, minHeight: 600)
         .preferredColorScheme(appState.config.darkMode ? .dark : .light)
+        .toolbar {
+            if showsMeetingsToolbarActions {
+                ToolbarItem(placement: .primaryAction) {
+                    quickNoteToolbarButton
+                }
+            }
+        }
+    }
+
+    private var quickNoteToolbarButton: some View {
+        Button {
+            controller.startQuickNoteMeeting()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .font(.system(size: 11, weight: .semibold))
+                Text("Quick Note")
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(MuesliTheme.backgroundBase)
+            .padding(.horizontal, MuesliTheme.spacing12)
+            .padding(.vertical, 8)
+            .background(appState.isMeetingRecording ? MuesliTheme.surfacePrimary : MuesliTheme.accent)
+            .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
+        }
+        .buttonStyle(.plain)
+        .disabled(appState.isMeetingRecording)
+        .help("Start a quick meeting note")
     }
 }

@@ -106,4 +106,44 @@ final class AppState {
         guard selectedMeetingRecord?.id == id else { return nil }
         return selectedMeetingRecord
     }
+
+    var selectedFolder: MeetingFolder? {
+        guard let selectedFolderID else { return nil }
+        return folder(id: selectedFolderID)
+    }
+
+    func folder(id: Int64?) -> MeetingFolder? {
+        guard let id else { return nil }
+        return folders.first(where: { $0.id == id })
+    }
+
+    func childFolders(of parentFolderID: Int64?) -> [MeetingFolder] {
+        folders.filter { $0.parentFolderID == parentFolderID }
+    }
+
+    func hasChildFolders(_ folderID: Int64) -> Bool {
+        folders.contains(where: { $0.parentFolderID == folderID })
+    }
+
+    func descendantFolderIDs(of folderID: Int64) -> Set<Int64> {
+        var descendants = Set<Int64>()
+        var pending = [folderID]
+        while let next = pending.popLast() {
+            for child in childFolders(of: next) where descendants.insert(child.id).inserted {
+                pending.append(child.id)
+            }
+        }
+        return descendants
+    }
+
+    func folderPath(for folderID: Int64, separator: String = " / ") -> String {
+        guard let folder = folder(id: folderID) else { return "" }
+        var names = [folder.name]
+        var currentParentID = folder.parentFolderID
+        while let parent = self.folder(id: currentParentID) {
+            names.append(parent.name)
+            currentParentID = parent.parentFolderID
+        }
+        return names.reversed().joined(separator: separator)
+    }
 }

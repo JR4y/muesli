@@ -278,13 +278,24 @@ public struct MeetingCalendarEventAttendee: Codable, Equatable, Sendable, Identi
 public struct MeetingFolder: Identifiable, Codable, Sendable {
     public let id: Int64
     public var name: String
+    public let parentFolderID: Int64?
     public let colorHex: String?
+    public let iconName: String?
     public let createdAt: String
 
-    public init(id: Int64, name: String, colorHex: String? = nil, createdAt: String) {
+    public init(
+        id: Int64,
+        name: String,
+        parentFolderID: Int64? = nil,
+        colorHex: String? = nil,
+        iconName: String? = nil,
+        createdAt: String
+    ) {
         self.id = id
         self.name = name
+        self.parentFolderID = parentFolderID
         self.colorHex = colorHex
+        self.iconName = iconName
         self.createdAt = createdAt
     }
 }

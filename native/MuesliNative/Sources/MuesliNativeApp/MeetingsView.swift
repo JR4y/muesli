@@ -16,6 +16,159 @@ enum MeetingBrowserFilter: Hashable {
     }
 }
 
+private struct FolderEditorSheet: View {
+    let folder: MeetingFolder
+    let folders: [MeetingFolder]
+    let config: AppConfig
+    let onSave: (String, Int64?, String?, String?) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var name: String
+    @State private var parentFolderID: Int64?
+    @State private var colorHex: String?
+    @State private var iconName: String
+
+    init(
+        folder: MeetingFolder,
+        folders: [MeetingFolder],
+        config: AppConfig,
+        onSave: @escaping (String, Int64?, String?, String?) -> Void
+    ) {
+        self.folder = folder
+        self.folders = folders
+        self.config = config
+        self.onSave = onSave
+        _name = State(initialValue: folder.name)
+        _parentFolderID = State(initialValue: folder.parentFolderID)
+        _colorHex = State(initialValue: folder.colorHex)
+        _iconName = State(initialValue: MeetingFolderIcons.resolvedIconName(for: folder))
+    }
+
+    private var disallowedParentIDs: Set<Int64> {
+        var ids = Set<Int64>([folder.id])
+        var pending = [folder.id]
+        while let next = pending.popLast() {
+            for child in folders where child.parentFolderID == next && ids.insert(child.id).inserted {
+                pending.append(child.id)
+            }
+        }
+        return ids
+    }
+
+    private var availableParents: [MeetingFolder] {
+        folders.filter { !disallowedParentIDs.contains($0.id) }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: MuesliTheme.spacing16) {
+                Text(L10n.text(.meetingsFolderEditorTitle, config: config))
+                    .font(MuesliTheme.title3())
+                    .foregroundStyle(MuesliTheme.textPrimary)
+
+                VStack(alignment: .leading, spacing: MuesliTheme.spacing8) {
+                    Text(L10n.text(.sidebarFolderName, config: config))
+                        .font(MuesliTheme.caption())
+                        .foregroundStyle(MuesliTheme.textSecondary)
+                    TextField(L10n.text(.sidebarFolderName, config: config), text: $name)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                VStack(alignment: .leading, spacing: MuesliTheme.spacing8) {
+                    Text(L10n.text(.meetingsFolderParent, config: config))
+                        .font(MuesliTheme.caption())
+                        .foregroundStyle(MuesliTheme.textSecondary)
+                    Picker("", selection: $parentFolderID) {
+                        Text(L10n.text(.meetingsFolderRoot, config: config)).tag(Int64?.none)
+                        ForEach(availableParents) { candidate in
+                            Text(candidate.name).tag(Int64?.some(candidate.id))
+                        }
+                    }
+                    .labelsHidden()
+                }
+
+                VStack(alignment: .leading, spacing: MuesliTheme.spacing8) {
+                    Text(L10n.text(.meetingsFolderAppearance, config: config))
+                        .font(MuesliTheme.caption())
+                        .foregroundStyle(MuesliTheme.textSecondary)
+
+                    LazyVGrid(columns: Array(repeating: GridItem(.fixed(28), spacing: 8), count: 8), spacing: 8) {
+                        ForEach(MeetingFolderColors.all) { option in
+                            Button {
+                                colorHex = option.hex
+                            } label: {
+                                Circle()
+                                    .fill(option.swatchColor)
+                                    .frame(width: 20, height: 20)
+                                    .overlay(
+                                        Circle()
+                                            .strokeBorder(
+                                                MeetingFolderColors.normalizedHex(colorHex) == option.hex ? MuesliTheme.textPrimary : Color.clear,
+                                                lineWidth: 2
+                                            )
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .help(L10n.text(option.labelKey, config: config))
+                        }
+                    }
+
+                    Text(L10n.text(.meetingsFolderIcon, config: config))
+                        .font(MuesliTheme.caption())
+                        .foregroundStyle(MuesliTheme.textSecondary)
+                        .padding(.top, 4)
+
+                    LazyVGrid(columns: Array(repeating: GridItem(.fixed(34), spacing: 8), count: 8), spacing: 8) {
+                        ForEach(MeetingFolderIcons.all) { option in
+                            Button {
+                                iconName = option.symbolName
+                            } label: {
+                                Image(systemName: option.symbolName)
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundStyle(MeetingFolderColors.color(for: previewFolder(option.symbolName), fallback: MuesliTheme.accent))
+                                    .frame(width: 34, height: 30)
+                                    .background(MuesliTheme.surfacePrimary)
+                                    .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
+                                            .strokeBorder(iconName == option.symbolName ? MuesliTheme.accent : MuesliTheme.surfaceBorder, lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                HStack {
+                    Spacer()
+                    Button(L10n.text(.sidebarCancel, config: config), role: .cancel) {
+                        dismiss()
+                    }
+                    Button(L10n.text(.meetingsFolderSave, config: config)) {
+                        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmed.isEmpty else { return }
+                        onSave(trimmed, parentFolderID, colorHex, iconName)
+                        dismiss()
+                    }
+                }
+            }
+            .padding(24)
+        }
+        .frame(minWidth: 520, minHeight: 480)
+        .background(MuesliTheme.backgroundBase)
+    }
+
+    private func previewFolder(_ symbolName: String) -> MeetingFolder {
+        MeetingFolder(
+            id: folder.id,
+            name: folder.name,
+            parentFolderID: folder.parentFolderID,
+            colorHex: colorHex,
+            iconName: symbolName,
+            createdAt: folder.createdAt
+        )
+    }
+}
+
 enum MeetingBrowserSort: Hashable {
     case newestFirst
     case oldestFirst
@@ -136,6 +289,7 @@ struct MeetingsView: View {
     @State private var selectedFilter: MeetingBrowserFilter = .all
     @State private var selectedSort: MeetingBrowserSort = .newestFirst
     @State private var isComingUpExpanded = true
+    @State private var isFolderEditorPresented = false
 
     private var scopedMeetings: [MeetingRecord] {
         appState.meetingRows
@@ -152,6 +306,10 @@ struct MeetingsView: View {
     private var currentFolderName: String {
         guard let folderID = appState.selectedFolderID else { return L10n.text(.sidebarAllMeetings, config: appState.config) }
         return appState.folders.first(where: { $0.id == folderID })?.name ?? L10n.text(.sidebarAllMeetings, config: appState.config)
+    }
+
+    private var selectedFolder: MeetingFolder? {
+        appState.selectedFolder
     }
 
     private var currentDocumentMeeting: MeetingRecord? {
@@ -194,6 +352,24 @@ struct MeetingsView: View {
                 controller: controller,
                 onClose: { appState.isMeetingTemplatesManagerPresented = false }
             )
+        }
+        .sheet(isPresented: $isFolderEditorPresented) {
+            if let selectedFolder {
+                FolderEditorSheet(
+                    folder: selectedFolder,
+                    folders: appState.folders,
+                    config: appState.config,
+                    onSave: { name, parentFolderID, colorHex, iconName in
+                        controller.updateFolder(
+                            id: selectedFolder.id,
+                            name: name,
+                            parentFolderID: parentFolderID,
+                            colorHex: colorHex,
+                            iconName: iconName
+                        )
+                    }
+                )
+            }
         }
     }
 
@@ -583,10 +759,25 @@ struct MeetingsView: View {
 
     @ViewBuilder
     private var browserHeaderTitle: some View {
-        Text(currentFolderName)
-            .font(.system(size: 30, weight: .bold))
-            .foregroundStyle(MuesliTheme.textPrimary)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        HStack(spacing: MuesliTheme.spacing12) {
+            if let selectedFolder {
+                Button {
+                    isFolderEditorPresented = true
+                } label: {
+                    Image(systemName: MeetingFolderIcons.resolvedIconName(for: selectedFolder))
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(MeetingFolderColors.color(for: selectedFolder, fallback: MuesliTheme.accent))
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(L10n.text(.meetingsEditFolder, config: appState.config))
+            }
+            Text(currentFolderName)
+                .font(.system(size: 30, weight: .bold))
+                .foregroundStyle(MuesliTheme.textPrimary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -597,14 +788,16 @@ struct MeetingsView: View {
                 .foregroundStyle(MuesliTheme.textSecondary)
                 .fixedSize()
 
-            Text("\u{2022}")
-                .font(MuesliTheme.callout())
-                .foregroundStyle(MuesliTheme.textTertiary)
-                .fixedSize()
+            if selectedFolder == nil {
+                Text("\u{2022}")
+                    .font(MuesliTheme.callout())
+                    .foregroundStyle(MuesliTheme.textTertiary)
+                    .fixedSize()
 
-            Text(L10n.text(.meetingsHeaderHint, config: appState.config))
-                .font(MuesliTheme.callout())
-                .foregroundStyle(MuesliTheme.textTertiary)
+                Text(L10n.text(.meetingsHeaderHint, config: appState.config))
+                    .font(MuesliTheme.callout())
+                    .foregroundStyle(MuesliTheme.textTertiary)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -612,27 +805,6 @@ struct MeetingsView: View {
     @ViewBuilder
     private var browserHeaderActions: some View {
         HStack(spacing: MuesliTheme.spacing8) {
-            Button {
-                controller.startQuickNoteMeeting()
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 11, weight: .semibold))
-                    Text("Quick Note")
-                        .font(.system(size: 12, weight: .semibold))
-                        .lineLimit(1)
-                }
-                .foregroundStyle(MuesliTheme.backgroundBase)
-                .padding(.horizontal, MuesliTheme.spacing12)
-                .padding(.vertical, 8)
-                .background(appState.isMeetingRecording ? MuesliTheme.surfacePrimary : MuesliTheme.accent)
-                .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
-            }
-            .buttonStyle(.plain)
-            .disabled(appState.isMeetingRecording)
-            .help("Start a quick meeting note")
-            .fixedSize()
-
             sortButton
             dateFilterButton
 

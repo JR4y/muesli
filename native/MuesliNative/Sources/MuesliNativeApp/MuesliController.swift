@@ -540,24 +540,16 @@ final class MuesliController: NSObject {
         appState.dictationRows = rows
         appState.hasMoreDictations = rows.count >= appState.dictationPageSize
         appState.meetingRows = (try? dictationStore.recentMeetings(limit: 200, folderID: appState.selectedFolderID)) ?? []
+        let allFolders = (try? dictationStore.listFolders()) ?? []
         let counts = (try? dictationStore.meetingCounts()) ?? (total: 0, byFolder: [:])
         appState.totalMeetingCount = counts.total
-        appState.meetingCountsByFolder = counts.byFolder
+        appState.folders = allFolders
+        appState.meetingCountsByFolder = aggregatedFolderCounts(directCounts: counts.byFolder, folders: allFolders)
         if let selectedMeetingID = appState.selectedMeetingID {
             appState.selectedMeetingRecord = appState.meetingRows.first(where: { $0.id == selectedMeetingID })
                 ?? meeting(id: selectedMeetingID)
         } else {
             appState.selectedMeetingRecord = nil
-        }
-        let allFolders = (try? dictationStore.listFolders()) ?? []
-        if config.folderOrder.isEmpty && !allFolders.isEmpty {
-            updateConfig { $0.folderOrder = allFolders.map(\.id) }
-        }
-        let order = config.folderOrder
-        appState.folders = allFolders.sorted { a, b in
-            let ai = order.firstIndex(of: a.id) ?? Int.max
-            let bi = order.firstIndex(of: b.id) ?? Int.max
-            return ai < bi
         }
         appState.dictationStats = dictationStats()
         appState.meetingStats = meetingStats()
@@ -577,6 +569,24 @@ final class MuesliController: NSObject {
         if appState.hiddenCalendarEventIDs != persisted {
             appState.hiddenCalendarEventIDs = persisted
         }
+    }
+
+    private func aggregatedFolderCounts(directCounts: [Int64: Int], folders: [MeetingFolder]) -> [Int64: Int] {
+        let childrenByParent = Dictionary(grouping: folders, by: \.parentFolderID)
+
+        func totalCount(for folderID: Int64) -> Int {
+            let direct = directCounts[folderID] ?? 0
+            let childTotal = (childrenByParent[folderID] ?? []).reduce(0) { partial, child in
+                partial + totalCount(for: child.id)
+            }
+            return direct + childTotal
+        }
+
+        var aggregated: [Int64: Int] = [:]
+        for folder in folders {
+            aggregated[folder.id] = totalCount(for: folder.id)
+        }
+        return aggregated
     }
 
     func recoverStaleLiveMeetings() {
@@ -1812,8 +1822,18 @@ final class MuesliController: NSObject {
     // MARK: - Folder Management
 
     @discardableResult
-    func createFolder(name: String) -> Int64? {
-        let id = try? dictationStore.createFolder(name: name)
+    func createFolder(
+        name: String,
+        parentFolderID: Int64? = nil,
+        colorHex: String? = nil,
+        iconName: String? = nil
+    ) -> Int64? {
+        let id = try? dictationStore.createFolder(
+            name: name,
+            parentFolderID: parentFolderID,
+            colorHex: MeetingFolderColors.normalizedHex(colorHex),
+            iconName: MeetingFolderIcons.normalized(iconName)
+        )
         syncAppState()
         return id
     }
@@ -1828,13 +1848,25 @@ final class MuesliController: NSObject {
         syncAppState()
     }
 
-    func reorderFolders(ids: [Int64]) {
-        updateConfig { $0.folderOrder = ids }
+    func updateFolder(
+        id: Int64,
+        name: String,
+        parentFolderID: Int64?,
+        colorHex: String?,
+        iconName: String?
+    ) {
+        try? dictationStore.updateFolder(
+            id: id,
+            name: name,
+            parentFolderID: parentFolderID,
+            colorHex: MeetingFolderColors.normalizedHex(colorHex),
+            iconName: MeetingFolderIcons.normalized(iconName)
+        )
         syncAppState()
     }
 
-    func createFolderAndMoveMeeting(name: String, meetingID: Int64) {
-        guard let folderID = try? dictationStore.createFolder(name: name) else { return }
+    func createFolderAndMoveMeeting(name: String, meetingID: Int64, parentFolderID: Int64? = nil) {
+        guard let folderID = try? dictationStore.createFolder(name: name, parentFolderID: parentFolderID) else { return }
         try? dictationStore.moveMeeting(id: meetingID, toFolder: folderID)
         syncAppState()
     }

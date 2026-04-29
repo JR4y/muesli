@@ -15,14 +15,14 @@ struct MeetingFolderColorOption: Identifiable {
 enum MeetingFolderColors {
     static let all: [MeetingFolderColorOption] = [
         MeetingFolderColorOption(id: "none", labelKey: .sidebarFolderNoColor, hex: nil),
-        MeetingFolderColorOption(id: "red", labelKey: .sidebarFolderColorRed, hex: "ff3b30"),
-        MeetingFolderColorOption(id: "orange", labelKey: .sidebarFolderColorOrange, hex: "ff9500"),
-        MeetingFolderColorOption(id: "yellow", labelKey: .sidebarFolderColorYellow, hex: "ffcc00"),
-        MeetingFolderColorOption(id: "green", labelKey: .sidebarFolderColorGreen, hex: "34c759"),
-        MeetingFolderColorOption(id: "blue", labelKey: .sidebarFolderColorBlue, hex: "007aff"),
-        MeetingFolderColorOption(id: "purple", labelKey: .sidebarFolderColorPurple, hex: "af52de"),
-        MeetingFolderColorOption(id: "pink", labelKey: .sidebarFolderColorPink, hex: "ff2d55"),
-        MeetingFolderColorOption(id: "brown", labelKey: .sidebarFolderColorBrown, hex: "a2845e"),
+        MeetingFolderColorOption(id: "red", labelKey: .sidebarFolderColorRed, hex: "e03e3e"),
+        MeetingFolderColorOption(id: "orange", labelKey: .sidebarFolderColorOrange, hex: "d9730d"),
+        MeetingFolderColorOption(id: "yellow", labelKey: .sidebarFolderColorYellow, hex: "dfab01"),
+        MeetingFolderColorOption(id: "green", labelKey: .sidebarFolderColorGreen, hex: "0f7b6c"),
+        MeetingFolderColorOption(id: "blue", labelKey: .sidebarFolderColorBlue, hex: "337ea9"),
+        MeetingFolderColorOption(id: "purple", labelKey: .sidebarFolderColorPurple, hex: "9065b0"),
+        MeetingFolderColorOption(id: "pink", labelKey: .sidebarFolderColorPink, hex: "ad1a72"),
+        MeetingFolderColorOption(id: "brown", labelKey: .sidebarFolderColorBrown, hex: "64473a"),
     ]
 
     static func color(for folder: MeetingFolder?, fallback: Color = MuesliTheme.accent) -> Color {

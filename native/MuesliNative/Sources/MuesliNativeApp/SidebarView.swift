@@ -15,8 +15,8 @@ struct SidebarView: View {
     @State private var renamingFolderName = ""
     @State private var folderToDelete: MeetingFolder?
     @State private var showDeleteConfirmation = false
-    @State private var draggingFolderID: Int64?
-    @State private var dragOrderedFolders: [MeetingFolder]?
+    @State private var expandedFolderIDs = Set<Int64>()
+    @State private var hasInitializedFolderExpansion = false
     @FocusState private var isSearchFieldFocused: Bool
 
     private var searchTextBinding: Binding<String> {
@@ -116,11 +116,11 @@ struct SidebarView: View {
             if tab == .meetings {
                 meetingsExpanded = true
             }
-            // Reset drag state if user navigates away during a drag
-            if draggingFolderID != nil {
-                draggingFolderID = nil
-                dragOrderedFolders = nil
-            }
+        }
+        .onChange(of: appState.folders.map(\.id)) { _, ids in
+            guard !hasInitializedFolderExpansion else { return }
+            expandedFolderIDs = Set(ids)
+            hasInitializedFolderExpansion = true
         }
         .alert(
             "\(L10n.text(.sidebarDelete, config: appState.config)) \"\(folderToDelete?.name ?? "")\"?",
@@ -258,7 +258,7 @@ struct SidebarView: View {
                 }
                 .buttonStyle(.plain)
 
-                Button(action: createNewFolder) {
+                Button(action: { createNewFolder() }) {
                     Image(systemName: "folder.badge.plus")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(isSelected ? MuesliTheme.textSecondary : MuesliTheme.textTertiary)
@@ -286,57 +286,8 @@ struct SidebarView: View {
                         controller.showMeetingsHome()
                     }
 
-                    ForEach(dragOrderedFolders ?? appState.folders) { folder in
-                        if renamingFolderID == folder.id {
-                            folderRenameField(folder: folder)
-                        } else {
-                            meetingFilterRow(
-                                icon: "folder",
-                                iconColor: MeetingFolderColors.color(for: folder, fallback: MuesliTheme.accent),
-                                label: folder.name,
-                                count: appState.meetingCountsByFolder[folder.id] ?? 0,
-                                isSelected: appState.selectedTab == .meetings && appState.selectedFolderID == folder.id
-                            ) {
-                                controller.showMeetingsHome(folderID: folder.id)
-                            }
-                            .opacity(draggingFolderID == folder.id ? 0.1 : 1)
-                            .onDrag {
-                                draggingFolderID = folder.id
-                                dragOrderedFolders = appState.folders
-                                return NSItemProvider(object: "\(folder.id)" as NSString)
-                            }
-                            .onDrop(of: [.text], delegate: FolderDropDelegate(
-                                folderID: folder.id,
-                                dragOrderedFolders: $dragOrderedFolders,
-                                draggingFolderID: $draggingFolderID,
-                                commitOrder: { ids in controller.reorderFolders(ids: ids) }
-                            ))
-                            .contextMenu {
-                                Button(L10n.text(.sidebarRename, config: appState.config)) {
-                                    renamingFolderID = folder.id
-                                    renamingFolderName = folder.name
-                                }
-                                Menu(L10n.text(.sidebarFolderColor, config: appState.config)) {
-                                    ForEach(MeetingFolderColors.all) { option in
-                                        Button {
-                                            controller.updateFolderColor(id: folder.id, colorHex: option.hex)
-                                        } label: {
-                                            HStack(spacing: 8) {
-                                                Circle()
-                                                    .fill(option.swatchColor)
-                                                    .frame(width: 9, height: 9)
-                                                Text(L10n.text(option.labelKey, config: appState.config))
-                                            }
-                                        }
-                                    }
-                                }
-                                Divider()
-                                Button(L10n.text(.sidebarDelete, config: appState.config), role: .destructive) {
-                                    folderToDelete = folder
-                                    showDeleteConfirmation = true
-                                }
-                            }
-                        }
+                    ForEach(rootFolders) { folder in
+                        folderTree(folder, depth: 0)
                     }
                 }
                 .padding(.horizontal, sidebarRowOuterPadding)
@@ -472,10 +423,100 @@ struct SidebarView: View {
         .onTapGesture(perform: action)
     }
 
+    private func folderTree(_ folder: MeetingFolder, depth: Int) -> AnyView {
+        AnyView(
+            VStack(alignment: .leading, spacing: 2) {
+                if renamingFolderID == folder.id {
+                    folderRenameField(folder: folder, depth: depth)
+                } else {
+                    folderTreeRow(folder: folder, depth: depth)
+                        .contextMenu {
+                            Button(L10n.text(.sidebarRename, config: appState.config)) {
+                                renamingFolderID = folder.id
+                                renamingFolderName = folder.name
+                            }
+                            Button(L10n.text(.sidebarAddSubfolder, config: appState.config)) {
+                                createNewFolder(parentFolderID: folder.id)
+                            }
+                            Divider()
+                            Button(L10n.text(.sidebarDelete, config: appState.config), role: .destructive) {
+                                folderToDelete = folder
+                                showDeleteConfirmation = true
+                            }
+                        }
+                }
+
+                if appState.hasChildFolders(folder.id), isFolderExpanded(folder.id) {
+                    ForEach(appState.childFolders(of: folder.id)) { child in
+                        folderTree(child, depth: depth + 1)
+                    }
+                }
+            }
+        )
+    }
+
     @ViewBuilder
-    private func folderRenameField(folder: MeetingFolder) -> some View {
+    private func folderTreeRow(folder: MeetingFolder, depth: Int) -> some View {
+        let hasChildren = appState.hasChildFolders(folder.id)
+        let isSelected = appState.selectedTab == .meetings && appState.selectedFolderID == folder.id
+
         HStack(spacing: MuesliTheme.spacing8) {
-            Image(systemName: "folder")
+            Color.clear
+                .frame(width: CGFloat(depth) * 12, height: 1)
+
+            if hasChildren {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        toggleFolderExpansion(folder.id)
+                    }
+                } label: {
+                    Image(systemName: isFolderExpanded(folder.id) ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(MuesliTheme.textTertiary)
+                        .frame(width: 12, height: 12)
+                }
+                .buttonStyle(.plain)
+            } else {
+                Color.clear
+                    .frame(width: 12, height: 12)
+            }
+
+            Image(systemName: MeetingFolderIcons.resolvedIconName(for: folder))
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(MeetingFolderColors.color(for: folder, fallback: MuesliTheme.accent))
+                .frame(width: sidebarIconColumnWidth)
+
+            Text(folder.name)
+                .font(MuesliTheme.callout())
+                .foregroundStyle(isSelected ? MuesliTheme.textPrimary : MuesliTheme.textSecondary)
+                .lineLimit(1)
+
+            Spacer()
+
+            Text(formattedCount(appState.meetingCountsByFolder[folder.id] ?? 0))
+                .font(MuesliTheme.caption())
+                .monospacedDigit()
+                .foregroundStyle(MuesliTheme.textTertiary)
+                .frame(minWidth: meetingsTrailingColumnWidth, alignment: .center)
+        }
+        .padding(.horizontal, sidebarRowHorizontalPadding)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
+                .fill(isSelected ? MuesliTheme.surfaceSelected.opacity(0.6) : Color.clear)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            controller.showMeetingsHome(folderID: folder.id)
+        }
+    }
+
+    @ViewBuilder
+    private func folderRenameField(folder: MeetingFolder, depth: Int) -> some View {
+        HStack(spacing: MuesliTheme.spacing8) {
+            Color.clear
+                .frame(width: CGFloat(depth) * 12 + 12, height: 1)
+            Image(systemName: MeetingFolderIcons.resolvedIconName(for: folder))
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(MeetingFolderColors.color(for: folder, fallback: MuesliTheme.accent))
                 .frame(width: sidebarIconColumnWidth)
@@ -507,46 +548,35 @@ struct SidebarView: View {
         return "\(count / 1000)k"
     }
 
-    private func createNewFolder() {
+    private var rootFolders: [MeetingFolder] {
+        appState.childFolders(of: nil)
+    }
+
+    private func isFolderExpanded(_ folderID: Int64) -> Bool {
+        expandedFolderIDs.contains(folderID)
+    }
+
+    private func toggleFolderExpansion(_ folderID: Int64) {
+        if isFolderExpanded(folderID) {
+            expandedFolderIDs.remove(folderID)
+        } else {
+            expandedFolderIDs.insert(folderID)
+        }
+    }
+
+    private func createNewFolder(parentFolderID: Int64? = nil) {
         let newFolderName = L10n.text(.sidebarNewFolder, config: appState.config)
-        if let id = controller.createFolder(name: newFolderName) {
+        if let id = controller.createFolder(name: newFolderName, parentFolderID: parentFolderID) {
             withAnimation(.easeInOut(duration: 0.15)) {
                 meetingsExpanded = true
             }
+            if let parentFolderID {
+                expandedFolderIDs.insert(parentFolderID)
+            }
+            expandedFolderIDs.insert(id)
             renamingFolderID = id
             renamingFolderName = newFolderName
             controller.showMeetingsHome(folderID: id)
         }
-    }
-}
-
-private struct FolderDropDelegate: DropDelegate {
-    let folderID: Int64
-    @Binding var dragOrderedFolders: [MeetingFolder]?
-    @Binding var draggingFolderID: Int64?
-    let commitOrder: ([Int64]) -> Void
-
-    func dropEntered(info: DropInfo) {
-        guard let dragID = draggingFolderID, dragID != folderID,
-              var folders = dragOrderedFolders else { return }
-        guard let fromIndex = folders.firstIndex(where: { $0.id == dragID }),
-              let toIndex = folders.firstIndex(where: { $0.id == folderID }) else { return }
-        withAnimation(.easeInOut(duration: 0.15)) {
-            folders.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: toIndex > fromIndex ? toIndex + 1 : toIndex)
-            dragOrderedFolders = folders
-        }
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        if let folders = dragOrderedFolders {
-            commitOrder(folders.map(\.id))
-        }
-        draggingFolderID = nil
-        dragOrderedFolders = nil
-        return true
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
     }
 }

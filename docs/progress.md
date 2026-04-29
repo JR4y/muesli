@@ -90,6 +90,30 @@ This was an important quality pass because it improved both readability of the
 meeting detail screen and trust in the late-association flow for older orphaned
 notes.
 
+#### Hierarchical folders and meeting browser polish
+
+- folders now support parent-child hierarchy while keeping a single canonical folder assignment per meeting
+- selecting a parent folder now scopes the meeting browser to that full subtree rather than only direct children
+- folders now support both curated accent colors and curated SF Symbol icons for quicker visual recognition
+- the folder editor now allows updating name, parent, color, and icon from the meetings browser
+- the sidebar now renders folders as an indented tree with expand/collapse behavior and subfolder creation from the context menu
+- the meeting detail view now shows the full folder path instead of only the leaf folder name
+- the meetings list now shows a subtle associated-calendar indicator before the folder marker when a note is already linked to an event
+- the meetings browser header was simplified by removing redundant folder summary chrome and moving folder editing to the folder icon beside the title
+- the custom folder palette was tuned to a more muted product direction during validation:
+  - `e03e3e`
+  - `d9730d`
+  - `dfab01`
+  - `0f7b6c`
+  - `337ea9`
+  - `9065b0`
+  - `ad1a72`
+  - `64473a`
+
+This pass intentionally stopped short of multi-folder tagging. The implemented
+model is hierarchical navigation first, with one folder per meeting and parent
+folders inheriting visibility over descendant meetings.
+
 #### Validation
 
 - targeted Swift tests were re-run after the refactor and passed
@@ -97,6 +121,8 @@ notes.
 - real beta usage confirmed that themed popups now respect app styling
 - real beta usage also confirmed a calendar-linked meeting example still associated the expected event context
 - real beta usage confirmed orphaned notes can now be linked again through the picker without misleading empty-state flashes
+- real beta usage validated the hierarchical folder tree, folder colors/icons, and meetings-list association indicator in the browser flow
+- the window/titlebar experiment for replacing the native SwiftUI sidebar toggle was intentionally discarded, and the beta remains on the stable `NavigationSplitView` titlebar behavior
 ### 2026-04-27 to 2026-04-28
 
 This was the first major fork setup and product-shaping pass.
