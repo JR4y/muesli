@@ -445,7 +445,7 @@ final class MuesliController: NSObject {
     }
 
     private func resolvedCalendarEventSnapshot(id: String?) -> MeetingCalendarEventSnapshot? {
-        guard let id, !id.isEmpty else { return nil }
+        guard let id = Self.normalizedCalendarEventID(id), !id.isEmpty else { return nil }
         if let event = appState.upcomingCalendarEvents.first(where: { $0.id == id }) {
             return calendarEventSnapshot(from: event)
         }
@@ -455,6 +455,21 @@ final class MuesliController: NSObject {
             return calendarEventSnapshot(from: currentEvent)
         }
         return nil
+    }
+
+    private func existingMeeting(forCalendarEventID calendarEventID: String) -> MeetingRecord? {
+        if let exact = try? dictationStore.meetingByCalendarEventID(calendarEventID) {
+            return exact
+        }
+
+        guard let normalized = Self.normalizedCalendarEventID(calendarEventID) else {
+            return nil
+        }
+
+        let recent = (try? dictationStore.recentMeetings(limit: 500)) ?? []
+        return recent.first { meeting in
+            Self.normalizedCalendarEventID(meeting.calendarEventID) == normalized
+        }
     }
 
     func dictationStats() -> DictationStats {
@@ -1073,6 +1088,22 @@ final class MuesliController: NSObject {
         "\(id)|\(Int(startDate.timeIntervalSince1970))"
     }
 
+    static func normalizedCalendarEventID(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let parts = trimmed.split(separator: "|", omittingEmptySubsequences: false)
+        guard parts.count >= 2,
+              let last = parts.last,
+              TimeInterval(last) != nil else {
+            return trimmed
+        }
+
+        let base = parts.dropLast().joined(separator: "|").trimmingCharacters(in: .whitespacesAndNewlines)
+        return base.isEmpty ? trimmed : base
+    }
+
     private func checkUpcomingCalendarNotifications() {
         guard !isMeetingRecording(),
               !isStartingMeetingRecording else { return }
@@ -1118,7 +1149,12 @@ final class MuesliController: NSObject {
                     DispatchQueue.main.async { [weak self] in
                         guard let self, !self.isMeetingRecording() else { return }
                         self.meetingStartingNowTimers.removeValue(forKey: key)
-                        self.showMeetingStartingNowNotification(title: title, calendarEventID: key, meetingURL: meetingURL, endDate: endDate)
+                        self.showMeetingStartingNowNotification(
+                            title: title,
+                            calendarEventID: event.id,
+                            meetingURL: meetingURL,
+                            endDate: endDate
+                        )
                     }
                 }
             }
@@ -1814,12 +1850,17 @@ final class MuesliController: NSObject {
 
     func createMeetingFromCalendarEvent(_ event: UnifiedCalendarEvent, folderID: Int64?) {
         // Check ALL folders for existing meeting with this calendar event ID
-        if let existing = try? dictationStore.meetingByCalendarEventID(event.id) {
+        if let existing = existingMeeting(forCalendarEventID: event.id) {
+            try? dictationStore.updateMeetingCalendarEvent(
+                id: existing.id,
+                calendarEventID: event.id,
+                snapshot: calendarEventSnapshot(from: event)
+            )
             if let folderID {
                 try? dictationStore.moveMeeting(id: existing.id, toFolder: folderID)
             }
             syncAppState()
-            fputs("[muesli-native] calendar event already exists as meeting \(existing.id), moved to folder\n", stderr)
+            fputs("[muesli-native] calendar event already exists as meeting \(existing.id), reused existing row\n", stderr)
             return
         }
 
@@ -2050,7 +2091,8 @@ final class MuesliController: NSObject {
         let hiddenLocalCalendarIDs = Set(config.hiddenLocalCalendarIDs)
         let activeCalendarEvent = calendarMonitor.currentEvent(excluding: hiddenLocalCalendarIDs)
         let activeUnifiedEvent = calendarMonitor.currentUnifiedEvent(excluding: hiddenLocalCalendarIDs)
-        let resolvedCalendarEventID = calendarEventID ?? activeCalendarEvent?.id
+        let normalizedCalendarEventID = Self.normalizedCalendarEventID(calendarEventID)
+        let resolvedCalendarEventID = normalizedCalendarEventID ?? activeCalendarEvent?.id
         let resolvedTitle: String
         if title == "Meeting", let calendarTitle = activeCalendarEvent?.title {
             resolvedTitle = calendarTitle
@@ -2058,7 +2100,7 @@ final class MuesliController: NSObject {
             resolvedTitle = title
         }
         let resolvedSnapshot: MeetingCalendarEventSnapshot?
-        if let explicitID = calendarEventID,
+        if let explicitID = normalizedCalendarEventID,
            let snapshot = resolvedCalendarEventSnapshot(id: explicitID) {
             resolvedSnapshot = snapshot
         } else if let activeUnifiedEvent,

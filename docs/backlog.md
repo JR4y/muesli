@@ -40,6 +40,7 @@ Completed or largely completed:
 - Event snapshots now include attendee data and are shown in meeting detail
 - `Coming Up` join-and-record now associates the selected calendar event immediately
 - Manual written notes now render as a localized top-level `Notes` / `Notas` section
+- Calendar popup flows now normalize malformed event ids and repair reuse paths instead of duplicating meetings
 
 Known limitation:
 
@@ -151,6 +152,7 @@ Still open in this area:
 - improve title-language behavior so Spanish transcripts produce Spanish titles more reliably
 - keep reviewing hardcoded English defaults in the title-generation and summary base prompts
 - continue refining how manual notes and generated sections blend when the model does not integrate user-written notes naturally
+- improve title generation so the current meeting title is treated as first-class context and can be preserved when the model judges it already appropriate
 
 ### 5. Personalization screen
 
@@ -187,8 +189,29 @@ Notes:
 - next likely step: paginate or cap long `Coming Up` lists so the meetings browser stays visible without excessive scrolling
 - also worth exploring later: a direct shortcut from `Coming Up` into the relevant calendar area instead of only sync guidance
 - folders now have a useful low-impact color accent system, but they are still single-assignment folders rather than tags or nested structures
+- notification popups still need to be visually aligned with the active app theme; they currently remain dark even in lighter themes
+- in-meeting note capture could use a more discreet mode so starting a meeting does not always force the note window open in front of the user
+- the meeting detail action area still has too many buttons and needs a clearer grouping / hierarchy
+- the associated calendar event block in meeting detail still needs layout polish because its position shifts too much as the note window width changes
 
-### 7. Meeting copilot chat
+### 7. In-meeting note handling
+
+Goal:
+make note capture during a live meeting feel quieter and less intrusive.
+
+Possible scope:
+
+- consider not opening the full note automatically when a meeting recording starts
+- rely on the smaller floating indicator as the primary in-meeting control surface
+- add a subtle affordance to expand/open the note only when the user actually needs it
+- preserve easy access to manual notes without forcing the main note window into focus
+
+Notes:
+
+- current behavior feels more disruptive than tools like Granola during live meetings
+- this should be treated as a UX behavior change, not only a visual tweak
+
+### 8. Meeting copilot chat
 
 Goal:
 add a chat experience inside meeting notes so the user can ask questions about a meeting and iterate on outputs with an LLM.
@@ -205,7 +228,7 @@ Notes:
 - This should feel like a meeting copilot, not just a raw API textbox
 - It will likely depend on the same provider strategy already used for summaries
 
-### 8. Visual direction and color system
+### 9. Visual direction and color system
 
 Goal:
 make the interface feel more intentional and more aligned with the preferred product identity.
@@ -216,10 +239,11 @@ Possible scope:
 - Reduce default look-and-feel that does not match the desired UX direction
 - Improve contrast and emphasis for important actions
 - Bring better consistency across sidebar, settings, meetings, and onboarding
+- bring popup/notification surfaces into the same theme language as the rest of the app
 
 ## Later
 
-### 9. Slash actions in meeting notes/chat
+### 10. Slash actions in meeting notes/chat
 
 Goal:
 trigger useful meeting actions with `/` commands from a notes or chat experience.
@@ -237,7 +261,7 @@ Notes:
 - This should come after the basic meeting chat exists
 - It should be fast, discoverable, and aligned with the final summary workflow
 
-### 10. Deeper custom screens
+### 11. Deeper custom screens
 
 Only consider larger custom screens if:
 
