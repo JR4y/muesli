@@ -34,11 +34,23 @@ struct DashboardRootView: View {
                     case .meetings:
                         MeetingsView(appState: appState, controller: controller)
                     case .dictionary:
-                        DictionaryView(appState: appState, controller: controller)
+                        SettingsView(appState: appState, controller: controller)
+                            .onAppear {
+                                appState.selectedSettingsPane = .dictionary
+                                appState.selectedTab = .settings
+                            }
                     case .models:
-                        ModelsView(appState: appState, controller: controller)
+                        SettingsView(appState: appState, controller: controller)
+                            .onAppear {
+                                appState.selectedSettingsPane = .models
+                                appState.selectedTab = .settings
+                            }
                     case .shortcuts:
-                        ShortcutsView(appState: appState, controller: controller)
+                        SettingsView(appState: appState, controller: controller)
+                            .onAppear {
+                                appState.selectedSettingsPane = .shortcuts
+                                appState.selectedTab = .settings
+                            }
                     case .settings:
                         SettingsView(appState: appState, controller: controller)
                     case .about:

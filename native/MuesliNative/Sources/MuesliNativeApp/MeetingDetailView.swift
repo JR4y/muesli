@@ -19,6 +19,8 @@ private enum ManualNotesSaveStatus {
 }
 
 struct MeetingDetailView: View {
+    private let detailColumnWidth: CGFloat = 860
+
     let meeting: MeetingRecord?
     let controller: MuesliController
     let appState: AppState
@@ -42,6 +44,8 @@ struct MeetingDetailView: View {
     @State private var showDeleteConfirmation = false
     @State private var isCalendarEventPickerPresented = false
     @State private var nearbyCalendarEvents: [UnifiedCalendarEvent] = []
+    @State private var isLoadingNearbyCalendarEvents = false
+    @State private var isAssociatedEventExpanded = true
 
     init(
         meeting: MeetingRecord?,
@@ -154,70 +158,23 @@ struct MeetingDetailView: View {
                 .buttonStyle(.plain)
             }
 
-            HStack(alignment: .top, spacing: MuesliTheme.spacing24) {
-                VStack(alignment: .leading, spacing: MuesliTheme.spacing8) {
-                    TextField(L10n.text(.meetingTitlePlaceholder, config: appState.config), text: $editableTitle)
-                        .font(.system(size: 30, weight: .bold))
-                        .foregroundStyle(MuesliTheme.textPrimary)
-                        .textFieldStyle(.plain)
-                        .onSubmit {
-                            controller.updateMeetingTitle(id: meeting.id, title: editableTitle)
-                        }
-                        .onChange(of: editableTitle) { _, _ in
-                            debounceSaveTitle(meetingID: meeting.id)
-                        }
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: MuesliTheme.spacing24) {
+                    titleBlock(for: meeting, appliedTemplate: appliedTemplate)
+                        .layoutPriority(1)
 
-                    HStack(spacing: MuesliTheme.spacing8) {
-                        Text(formatMeta(meeting))
-                            .font(MuesliTheme.callout())
-                            .foregroundStyle(MuesliTheme.textSecondary)
-                        folderChip(for: meeting)
-                        calendarAssociationControl(for: meeting)
-                        templateChip(for: appliedTemplate)
-                    }
+                    Spacer(minLength: MuesliTheme.spacing16)
+
+                    headerActions(for: meeting, appliedTemplate: appliedTemplate)
+                        .fixedSize()
                 }
 
-                Spacer(minLength: MuesliTheme.spacing16)
+                VStack(alignment: .leading, spacing: MuesliTheme.spacing16) {
+                    titleBlock(for: meeting, appliedTemplate: appliedTemplate)
 
-                VStack(alignment: .trailing, spacing: 10) {
-                    if showsManualNotesEditor(for: meeting) {
-                        HStack(spacing: MuesliTheme.spacing8) {
-                            statusChip(for: meeting)
-                            if meeting.status == .recording {
-                                stopRecordingButton
-                                discardRecordingButton
-                            } else if controller.canDeleteMeeting(meeting), meeting.status == .noteOnly || meeting.status == .failed {
-                                deleteButton
-                            }
-                        }
-                    } else {
-                        documentModePicker
-
-                        ViewThatFits(in: .horizontal) {
-                            HStack(spacing: MuesliTheme.spacing8) {
-                                templateMenu(for: meeting, appliedTemplate: appliedTemplate)
-                                recordingAction(for: meeting)
-                                summaryAction(for: meeting)
-                                editButton(for: meeting)
-                                if controller.canDeleteMeeting(meeting) {
-                                    deleteButton
-                                }
-                            }
-
-                            VStack(alignment: .trailing, spacing: MuesliTheme.spacing8) {
-                                HStack(spacing: MuesliTheme.spacing8) {
-                                    templateMenu(for: meeting, appliedTemplate: appliedTemplate)
-                                    recordingAction(for: meeting)
-                                    summaryAction(for: meeting)
-                                }
-                                HStack(spacing: MuesliTheme.spacing8) {
-                                    editButton(for: meeting)
-                                    if controller.canDeleteMeeting(meeting) {
-                                        deleteButton
-                                    }
-                                }
-                            }
-                        }
+                    HStack {
+                        Spacer(minLength: 0)
+                        headerActions(for: meeting, appliedTemplate: appliedTemplate)
                     }
                 }
             }
@@ -226,10 +183,62 @@ struct MeetingDetailView: View {
                 transcriptCTA
             }
         }
-        .frame(maxWidth: 980, alignment: .leading)
+        .frame(maxWidth: detailColumnWidth, alignment: .leading)
         .padding(.horizontal, 40)
         .padding(.vertical, 24)
         .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private func titleBlock(for meeting: MeetingRecord, appliedTemplate: MeetingTemplateSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: MuesliTheme.spacing8) {
+            TextField(L10n.text(.meetingTitlePlaceholder, config: appState.config), text: $editableTitle)
+                .font(.system(size: 30, weight: .bold))
+                .foregroundStyle(MuesliTheme.textPrimary)
+                .textFieldStyle(.plain)
+                .onSubmit {
+                    controller.updateMeetingTitle(id: meeting.id, title: editableTitle)
+                }
+                .onChange(of: editableTitle) { _, _ in
+                    debounceSaveTitle(meetingID: meeting.id)
+                }
+
+            HStack(spacing: MuesliTheme.spacing8) {
+                Text(formatMeta(meeting))
+                    .font(MuesliTheme.callout())
+                    .foregroundStyle(MuesliTheme.textSecondary)
+                    .lineLimit(1)
+                folderChip(for: meeting)
+                templateChip(for: appliedTemplate)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func headerActions(for meeting: MeetingRecord, appliedTemplate: MeetingTemplateSnapshot) -> some View {
+        if showsManualNotesEditor(for: meeting) {
+            HStack(spacing: MuesliTheme.spacing8) {
+                statusChip(for: meeting)
+                if meeting.status == .recording {
+                    stopRecordingButton
+                    discardRecordingButton
+                } else if controller.canDeleteMeeting(meeting), meeting.status == .noteOnly || meeting.status == .failed {
+                    deleteButton
+                }
+            }
+        } else {
+            VStack(alignment: .trailing, spacing: MuesliTheme.spacing8) {
+                HStack(spacing: MuesliTheme.spacing8) {
+                    summaryAction(for: meeting)
+                    templateMenu(for: meeting, appliedTemplate: appliedTemplate)
+                }
+                if hasRecordingAction(for: meeting) {
+                    HStack(spacing: MuesliTheme.spacing8) {
+                        recordingAction(for: meeting)
+                    }
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -265,7 +274,7 @@ struct MeetingDetailView: View {
                         saveManualNotes(meetingID: meeting.id, notes: notes)
                     }
                 )
-                .frame(maxWidth: 980, maxHeight: .infinity, alignment: .topLeading)
+                .frame(maxWidth: detailColumnWidth, maxHeight: .infinity, alignment: .topLeading)
                 .background(MuesliTheme.backgroundBase)
                 .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
                 .overlay(
@@ -288,7 +297,7 @@ struct MeetingDetailView: View {
                     .scrollContentBackground(.hidden)
                     .padding(MuesliTheme.spacing24)
                     .background(MuesliTheme.backgroundBase)
-                    .frame(maxWidth: 980, maxHeight: .infinity, alignment: .topLeading)
+                    .frame(maxWidth: detailColumnWidth, maxHeight: .infinity, alignment: .topLeading)
                     .onChange(of: editableNotes) { _, _ in
                         debounceSaveNotes(meetingID: meeting.id)
                     }
@@ -313,6 +322,7 @@ struct MeetingDetailView: View {
                         .allowsHitTesting(documentMode == .transcript)
                         .accessibilityHidden(documentMode != .transcript)
                 }
+                .frame(maxWidth: detailColumnWidth, maxHeight: .infinity, alignment: .topLeading)
             }
             .padding(.horizontal, 40)
             .padding(.top, 12)
@@ -349,32 +359,38 @@ struct MeetingDetailView: View {
 
                     Spacer(minLength: MuesliTheme.spacing12)
 
-                    if let meetingURL = snapshot.meetingURL,
-                       let url = URL(string: meetingURL) {
-                        Link(destination: url) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "video")
-                                    .font(.system(size: 10, weight: .semibold))
-                                Text(L10n.text(.meetingOpenJoinLink, config: appState.config))
-                                    .font(.system(size: 11, weight: .semibold))
-                            }
-                            .foregroundStyle(MuesliTheme.textPrimary)
-                            .padding(.horizontal, MuesliTheme.spacing12)
-                            .padding(.vertical, 7)
-                            .background(
-                                RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
-                                    .fill(MuesliTheme.accent.opacity(0.18))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
-                                    .strokeBorder(MuesliTheme.accent.opacity(0.35), lineWidth: 1)
-                            )
+                    HStack(spacing: MuesliTheme.spacing8) {
+                        if snapshot.attendees.isEmpty == false {
+                            collapseAssociatedEventButton
                         }
-                        .buttonStyle(.plain)
+
+                        if let meetingURL = snapshot.meetingURL,
+                           let url = URL(string: meetingURL) {
+                            Link(destination: url) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "video")
+                                        .font(.system(size: 10, weight: .semibold))
+                                    Text(L10n.text(.meetingOpenJoinLink, config: appState.config))
+                                        .font(.system(size: 11, weight: .semibold))
+                                }
+                                .foregroundStyle(MuesliTheme.textPrimary)
+                                .padding(.horizontal, MuesliTheme.spacing12)
+                                .padding(.vertical, 7)
+                                .background(
+                                    RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
+                                        .fill(MuesliTheme.accent.opacity(0.18))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
+                                        .strokeBorder(MuesliTheme.accent.opacity(0.35), lineWidth: 1)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                 }
 
-                if !snapshot.attendees.isEmpty {
+                if isAssociatedEventExpanded && !snapshot.attendees.isEmpty {
                     Divider()
                         .background(MuesliTheme.surfaceBorder)
 
@@ -428,8 +444,33 @@ struct MeetingDetailView: View {
                     }
                 }
             }
-            .padding(MuesliTheme.spacing16)
-            .frame(maxWidth: 980, alignment: .leading)
+            .padding(MuesliTheme.spacing24)
+            .frame(maxWidth: detailColumnWidth, alignment: .leading)
+            .background(MuesliTheme.backgroundRaised)
+            .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerMedium))
+            .overlay(
+                RoundedRectangle(cornerRadius: MuesliTheme.cornerMedium)
+                    .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
+            )
+        } else {
+            VStack(alignment: .leading, spacing: MuesliTheme.spacing12) {
+                Text(L10n.text(.meetingAssociatedEvent, config: appState.config))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(MuesliTheme.textTertiary)
+                    .textCase(.uppercase)
+
+                HStack(alignment: .center, spacing: MuesliTheme.spacing12) {
+                    Text(L10n.text(.meetingSelectCalendarEventHint, config: appState.config))
+                        .font(MuesliTheme.body())
+                        .foregroundStyle(MuesliTheme.textSecondary)
+
+                    Spacer(minLength: MuesliTheme.spacing12)
+
+                    calendarAssociationControl(for: meeting)
+                }
+            }
+            .padding(MuesliTheme.spacing24)
+            .frame(maxWidth: detailColumnWidth, alignment: .leading)
             .background(MuesliTheme.backgroundRaised)
             .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerMedium))
             .overlay(
@@ -475,7 +516,7 @@ struct MeetingDetailView: View {
             }
             .padding(.horizontal, MuesliTheme.spacing8)
         } else {
-            iconButton("sparkles", label: primarySummaryActionLabel(for: meeting)) {
+            compactIconButton("sparkles", label: primarySummaryActionLabel(for: meeting)) {
                 isSummarizing = true
                 let completion: (Result<Void, Error>) -> Void = { [meeting] result in
                     isSummarizing = false
@@ -519,50 +560,52 @@ struct MeetingDetailView: View {
 
     @ViewBuilder
     private func calendarAssociationControl(for meeting: MeetingRecord) -> some View {
-        if meeting.calendarEventID == nil {
-            Button {
-                nearbyCalendarEvents = controller.suggestedCalendarEvents(for: meeting)
-                isCalendarEventPickerPresented = true
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "calendar.badge.plus")
-                        .font(.system(size: 10))
-                    Text(L10n.text(.meetingAssociateEvent, config: appState.config))
-                        .font(.system(size: 11, weight: .medium))
-                }
-                .foregroundStyle(MuesliTheme.textSecondary)
-                .padding(.horizontal, MuesliTheme.spacing8)
-                .padding(.vertical, 4)
-                .background(MuesliTheme.surfacePrimary)
-                .clipShape(Capsule())
-                .overlay(
-                    Capsule()
-                        .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
-                )
-            }
-            .buttonStyle(.plain)
-        } else {
+        Button {
+            presentCalendarAssociationPicker(for: meeting)
+            isCalendarEventPickerPresented = true
+        } label: {
             HStack(spacing: 5) {
-                Image(systemName: "calendar.badge.checkmark")
+                Image(systemName: "calendar.badge.plus")
                     .font(.system(size: 10))
-                Text(L10n.text(.meetingCalendarLinked, config: appState.config))
+                Text(L10n.text(.meetingAssociateEvent, config: appState.config))
                     .font(.system(size: 11, weight: .medium))
             }
-            .foregroundStyle(MuesliTheme.success)
+            .foregroundStyle(MuesliTheme.textSecondary)
             .padding(.horizontal, MuesliTheme.spacing8)
             .padding(.vertical, 4)
-            .background(MuesliTheme.success.opacity(0.12))
+            .background(MuesliTheme.surfacePrimary)
             .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func presentCalendarAssociationPicker(for meeting: MeetingRecord) {
+        nearbyCalendarEvents = []
+        isLoadingNearbyCalendarEvents = true
+
+        Task {
+            let events = await controller.suggestedCalendarEvents(for: meeting)
+            guard loadedMeetingID == meeting.id else { return }
+            nearbyCalendarEvents = events
+            isLoadingNearbyCalendarEvents = false
         }
     }
 
     @ViewBuilder
     private func recordingAction(for meeting: MeetingRecord) -> some View {
         if let savedRecordingPath = meeting.savedRecordingPath {
-            iconButton("folder", label: L10n.text(.meetingShowRecording, config: appState.config)) {
+            compactIconButton("folder", label: L10n.text(.meetingShowRecording, config: appState.config)) {
                 controller.revealMeetingRecordingInFinder(path: savedRecordingPath)
             }
         }
+    }
+
+    private func hasRecordingAction(for meeting: MeetingRecord) -> Bool {
+        meeting.savedRecordingPath != nil
     }
 
     @ViewBuilder
@@ -646,7 +689,15 @@ struct MeetingDetailView: View {
     @ViewBuilder
     private func contentToolbar(for meeting: MeetingRecord) -> some View {
         HStack {
+            documentModePicker
+
             Spacer()
+
+            editButton(for: meeting)
+
+            if controller.canDeleteMeeting(meeting) {
+                deleteButton
+            }
 
             exportMenu(for: meeting)
 
@@ -673,7 +724,7 @@ struct MeetingDetailView: View {
             }
             .buttonStyle(.plain)
         }
-        .frame(maxWidth: 980, alignment: .leading)
+        .frame(maxWidth: detailColumnWidth, alignment: .leading)
     }
 
     @ViewBuilder
@@ -700,7 +751,7 @@ struct MeetingDetailView: View {
                 manualEditorCommand = MarkdownEditorCommand(kind: .checkbox)
             }
         }
-        .frame(maxWidth: 980, alignment: .leading)
+        .frame(maxWidth: detailColumnWidth, alignment: .leading)
     }
 
     @ViewBuilder
@@ -808,6 +859,24 @@ struct MeetingDetailView: View {
             )
         }
         .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func compactIconButton(_ systemImage: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(MuesliTheme.textSecondary)
+                .frame(width: 30, height: 28)
+                .background(MuesliTheme.surfacePrimary)
+                .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
+                .overlay(
+                    RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
+                        .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .help(label)
     }
 
     private var deleteButton: some View {
@@ -1075,7 +1144,15 @@ struct MeetingDetailView: View {
                 .font(MuesliTheme.callout())
                 .foregroundStyle(MuesliTheme.textSecondary)
 
-            if nearbyCalendarEvents.isEmpty {
+            if isLoadingNearbyCalendarEvents {
+                VStack {
+                    ProgressView()
+                        .controlSize(.regular)
+                }
+                .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
+                .background(MuesliTheme.backgroundRaised)
+                .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerMedium))
+            } else if nearbyCalendarEvents.isEmpty {
                 Text(L10n.text(.meetingNoNearbyCalendarEvents, config: appState.config))
                     .font(MuesliTheme.body())
                     .foregroundStyle(MuesliTheme.textSecondary)
@@ -1169,6 +1246,7 @@ struct MeetingDetailView: View {
         if previousMeetingID != meeting?.id {
             editableManualNotes = meeting?.manualNotes ?? ""
             manualNotesSaveStatus = .saved
+            isAssociatedEventExpanded = true
         } else {
             syncManualNotesState(with: meeting)
         }
@@ -1186,7 +1264,7 @@ struct MeetingDetailView: View {
     }
 
     private func formatMeta(_ meeting: MeetingRecord) -> String {
-        let time = formatTime(meeting.startTime)
+        let time = formatCompactTime(meeting.startTime)
         let duration = formatDuration(meeting.durationSeconds)
         return "\(time)  \u{2022}  \(duration)  \u{2022}  \(L10n.text(.meetingWords(count: meeting.wordCount), config: appState.config))"
     }
@@ -1195,10 +1273,17 @@ struct MeetingDetailView: View {
         MeetingDateFormatting.formatMeetingTimestamp(raw)
     }
 
+    private func formatCompactTime(_ raw: String) -> String {
+        MeetingDateFormatting.formatCompactMeetingTimestamp(raw)
+    }
+
     private func formatDuration(_ seconds: Double) -> String {
         let rounded = Int(seconds.rounded())
         if rounded >= 3600 {
             return "\(rounded / 3600)h \((rounded % 3600) / 60)m"
+        }
+        if rounded >= 300 {
+            return "\(rounded / 60)m"
         }
         if rounded >= 60 {
             let m = rounded / 60
@@ -1343,6 +1428,32 @@ struct MeetingDetailView: View {
         )
     }
 
+    private var collapseAssociatedEventButton: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                isAssociatedEventExpanded.toggle()
+            }
+        } label: {
+            Image(systemName: isAssociatedEventExpanded ? "chevron.up" : "chevron.down")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(MuesliTheme.textSecondary)
+                .frame(width: 28, height: 28)
+                .background(MuesliTheme.surfacePrimary)
+                .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
+                .overlay(
+                    RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
+                        .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .help(
+            L10n.text(
+                isAssociatedEventExpanded ? .meetingsCollapseComingUp : .meetingsExpandComingUp,
+                config: appState.config
+            )
+        )
+    }
+
     private static let calendarEventTimeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "dd/MM HH:mm"
@@ -1370,10 +1481,10 @@ private struct MeetingTranscriptView: View {
             Text(transcript)
                 .font(.system(size: 13, design: .monospaced))
                 .foregroundStyle(MuesliTheme.textPrimary)
-                .frame(maxWidth: 860, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .textSelection(.enabled)
                 .padding(MuesliTheme.spacing24)
-                .frame(maxWidth: .infinity, alignment: .center)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

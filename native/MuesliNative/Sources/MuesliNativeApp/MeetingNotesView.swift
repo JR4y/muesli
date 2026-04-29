@@ -12,9 +12,9 @@ struct MeetingNotesView: View {
                     markdownLine(line.trimmingCharacters(in: .whitespaces))
                 }
             }
-            .frame(maxWidth: 860, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(MuesliTheme.spacing24)
-            .frame(maxWidth: .infinity, alignment: .center)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .textSelection(.enabled)
         }
     }

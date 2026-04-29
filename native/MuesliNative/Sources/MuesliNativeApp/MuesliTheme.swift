@@ -187,6 +187,62 @@ enum MuesliTheme {
         adaptiveNSColor(pair: palette.backgroundBase)
     }
 
+    static func nsBackgroundDeepColor(darkMode: Bool) -> NSColor {
+        staticNSColor(pair: palette.backgroundDeep, darkMode: darkMode)
+    }
+
+    static func nsBackgroundBaseColor(darkMode: Bool) -> NSColor {
+        staticNSColor(pair: palette.backgroundBase, darkMode: darkMode)
+    }
+
+    static func nsBackgroundRaisedColor(darkMode: Bool) -> NSColor {
+        staticNSColor(pair: palette.backgroundRaised, darkMode: darkMode)
+    }
+
+    static func nsBackgroundHoverColor(darkMode: Bool) -> NSColor {
+        staticNSColor(pair: palette.backgroundHover, darkMode: darkMode)
+    }
+
+    static func nsSurfacePrimaryColor(darkMode: Bool) -> NSColor {
+        staticNSColor(pair: palette.surfacePrimary, darkMode: darkMode)
+    }
+
+    static func nsSurfaceSelectedColor(darkMode: Bool) -> NSColor {
+        staticNSColor(pair: palette.surfaceSelected, darkMode: darkMode)
+    }
+
+    static func nsSurfaceBorderColor(darkMode: Bool) -> NSColor {
+        let alpha = darkMode ? palette.surfaceBorderDarkAlpha : palette.surfaceBorderLightAlpha
+        let base = darkMode ? NSColor.white : NSColor.black
+        return base.withAlphaComponent(alpha)
+    }
+
+    static func nsTextPrimaryColor(darkMode: Bool) -> NSColor {
+        let alpha = darkMode ? palette.textPrimaryDarkAlpha : palette.textPrimaryLightAlpha
+        let base = darkMode ? NSColor.white : NSColor.black
+        return base.withAlphaComponent(alpha)
+    }
+
+    static func nsTextSecondaryColor(darkMode: Bool) -> NSColor {
+        let alpha = darkMode ? palette.textSecondaryDarkAlpha : palette.textSecondaryLightAlpha
+        let base = darkMode ? NSColor.white : NSColor.black
+        return base.withAlphaComponent(alpha)
+    }
+
+    static func nsTextTertiaryColor(darkMode: Bool) -> NSColor {
+        let alpha = darkMode ? palette.textTertiaryDarkAlpha : palette.textTertiaryLightAlpha
+        let base = darkMode ? NSColor.white : NSColor.black
+        return base.withAlphaComponent(alpha)
+    }
+
+    static func nsAccentColor(darkMode: Bool) -> NSColor {
+        if let hex = accentOverrideHex, !hex.isEmpty,
+           let value = UInt64(hex.replacingOccurrences(of: "#", with: ""), radix: 16) {
+            return nsColor(hex: Int(value))
+        }
+        return nsColor(hex: darkMode ? defaultAccentDarkHex : defaultAccentLightHex)
+    }
+
     private static func adaptive(pair: ThemeColorPair) -> Color {
         Color.adaptive(dark: pair.dark, light: pair.light)
     }
@@ -201,6 +257,19 @@ enum MuesliTheme {
                 alpha: 1.0
             )
         }
+    }
+
+    private static func staticNSColor(pair: ThemeColorPair, darkMode: Bool) -> NSColor {
+        nsColor(hex: darkMode ? pair.dark : pair.light)
+    }
+
+    private static func nsColor(hex: Int) -> NSColor {
+        NSColor(
+            red: CGFloat((hex >> 16) & 0xFF) / 255.0,
+            green: CGFloat((hex >> 8) & 0xFF) / 255.0,
+            blue: CGFloat(hex & 0xFF) / 255.0,
+            alpha: 1.0
+        )
     }
 }
 

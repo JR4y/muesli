@@ -494,7 +494,11 @@ final class MeetingSession {
         onProgress?(.generatingTitle)
         if let liveTitle = await userEditedLiveTitle() {
             generatedTitle = liveTitle
-        } else if let autoTitle = await MeetingSummaryClient.generateTitle(transcript: rawTranscript, config: config),
+        } else if let autoTitle = await MeetingSummaryClient.generateTitle(
+            transcript: rawTranscript,
+            config: config,
+            associatedCalendarEventTitle: trustedAssociatedCalendarEventTitle()
+        ),
            !autoTitle.isEmpty {
             generatedTitle = autoTitle
             fputs("[meeting] auto-generated title: \(generatedTitle)\n", stderr)
@@ -558,6 +562,11 @@ final class MeetingSession {
         guard !trimmedCandidate.isEmpty else { return nil }
         guard trimmedCandidate != trimmedOriginal else { return nil }
         return trimmedCandidate
+    }
+
+    private func trustedAssociatedCalendarEventTitle() -> String? {
+        let trimmed = calendarEventSnapshot?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     /// Called by VAD on speech boundaries or max-duration fallback.

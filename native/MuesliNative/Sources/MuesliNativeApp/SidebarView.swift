@@ -102,9 +102,6 @@ struct SidebarView: View {
 
             meetingsSection
             sidebarItem(tab: .dictations, icon: "mic.fill", label: L10n.text(.sidebarDictations, config: appState.config))
-            sidebarItem(tab: .dictionary, icon: "character.book.closed", label: L10n.text(.sidebarDictionary, config: appState.config))
-            sidebarItem(tab: .models, icon: "square.and.arrow.down", label: L10n.text(.sidebarModels, config: appState.config))
-            sidebarItem(tab: .shortcuts, icon: "keyboard", label: L10n.text(.sidebarShortcuts, config: appState.config))
 
             Spacer()
 

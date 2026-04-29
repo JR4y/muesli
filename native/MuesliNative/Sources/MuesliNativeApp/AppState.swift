@@ -12,6 +12,18 @@ enum DashboardTab: String, CaseIterable {
     case about
 }
 
+enum SettingsPane: String, CaseIterable, Identifiable {
+    case general
+    case dictation
+    case meetings
+    case appearance
+    case dictionary
+    case models
+    case shortcuts
+
+    var id: String { rawValue }
+}
+
 enum MeetingsNavigationState: Equatable {
     case browser
     case document(Int64)
@@ -83,6 +95,7 @@ final class AppState {
 
     // Navigation
     var selectedTab: DashboardTab = .meetings
+    var selectedSettingsPane: SettingsPane = .general
 
     // Computed
     var selectedMeeting: MeetingRecord? {

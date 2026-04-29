@@ -8,7 +8,7 @@ It is intended to serve three purposes at once:
 - make it easy to resume work without losing context
 - prepare a clean base for future beta release notes and README feature updates
 
-Last updated: `2026-04-28`
+Last updated: `2026-04-29`
 Working branch: `beta`
 Dev app: `MuesliBeta.app`
 
@@ -27,6 +27,76 @@ Git workflow currently documented and aligned:
 
 ## Incremental history
 
+### 2026-04-29
+
+This pass focused on keeping the fork aligned with upstream while continuing
+to shape the beta app into a cleaner daily-use product.
+
+#### Upstream sync and branch hygiene
+
+- `vendor` was advanced to the author's latest `upstream/main`
+- upstream changes were merged into `beta` through the fork workflow without app-level conflicts
+- the current `beta` work was committed cleanly before continuing integration
+- a dedicated mergework branch was used first so upstream integration could be reviewed safely before fast-forwarding `beta`
+
+The upstream delta turned out to be small for product behavior in this fork:
+it mainly added repository automation and updated the upstream preprod Sparkle
+feed, without touching the native app runtime used in daily beta testing.
+
+#### Local beta app build path
+
+- the fork's local beta build path is now explicitly codified in `scripts/beta-test.sh`
+- local beta builds now install as `MuesliBeta.app`
+- local beta builds keep using the fork bundle id `com.jr4y.muesli.beta`
+- local beta builds now disable Sparkle feed lookup instead of inheriting the author's `appcast.xml` or `appcast-preprod.xml`
+- `docs/fork-workflow.md` now documents that `release-preprod.sh` is upstream-oriented infrastructure, not the day-to-day beta build path for this fork
+
+This matters because the previous beta install had been pointing at the
+author's production Sparkle feed, which was not the intended behavior for a
+local fork build under active development.
+
+#### Sidebar and settings information architecture
+
+- `Dictionary`, `Models`, and `Shortcuts` were removed from the top level of the sidebar
+- those areas now live as dedicated panes inside `Settings`
+- the main sidebar is now more focused on daily-use surfaces rather than utility/configuration screens
+- compatibility paths were preserved so existing code that tries to open those areas can redirect into the correct settings pane instead of breaking
+
+This was intentionally kept incremental rather than replacing the whole
+navigation model, so the fork stays easier to maintain as upstream grows.
+
+#### Themed meeting popups
+
+- meeting notification popups now respect the app's current light/dark mode
+- popup surfaces now follow the active theme palette instead of staying on a fixed dark look
+- popup accent/progress colors now follow the app accent more closely
+
+This closes an important visual consistency gap because the popup had remained
+stylistically detached from the rest of the app even after the theme system was
+introduced.
+
+#### Meeting detail UX and calendar association polish
+
+- the meeting detail sidebar/header area was reorganized so title, actions, and content align more consistently
+- notes/transcript content now shares the same visual column as the associated event panel
+- the associated event chip below the title was removed in favor of keeping event actions inside the event panel itself
+- the associated event panel can now collapse when attendee detail makes it too tall
+- old notes with a `calendar_event_id` but no persisted snapshot can now still show the `Associate event` action instead of getting stuck in a half-linked state
+- nearby calendar suggestions now prioritize the note's own local date context instead of behaving like a pure "future events" helper
+- local suggestion search now looks across the previous day, the same day, and the following day
+- the event association picker now shows a loading state while querying calendars instead of briefly claiming no nearby events exist
+
+This was an important quality pass because it improved both readability of the
+meeting detail screen and trust in the late-association flow for older orphaned
+notes.
+
+#### Validation
+
+- targeted Swift tests were re-run after the refactor and passed
+- `MuesliBeta.app` was rebuilt and reinstalled from the current `beta`
+- real beta usage confirmed that themed popups now respect app styling
+- real beta usage also confirmed a calendar-linked meeting example still associated the expected event context
+- real beta usage confirmed orphaned notes can now be linked again through the picker without misleading empty-state flashes
 ### 2026-04-27 to 2026-04-28
 
 This was the first major fork setup and product-shaping pass.

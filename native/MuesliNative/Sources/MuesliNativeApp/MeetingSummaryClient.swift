@@ -597,16 +597,24 @@ enum MeetingSummaryClient {
         return nil
     }
 
-    static func generateTitle(transcript: String, config: AppConfig) async -> String? {
+    static func generateTitle(
+        transcript: String,
+        config: AppConfig,
+        associatedCalendarEventTitle: String? = nil
+    ) async -> String? {
         let backend = (config.meetingSummaryBackend.isEmpty ? MeetingSummaryBackendOption.openAI.backend : config.meetingSummaryBackend).lowercased()
         let titleInstructions = resolvedTitleInstructions(config: config)
 
         // Use a short prefix of the transcript for title generation (save tokens)
         let truncated = String(transcript.prefix(1500))
+        let userPrompt = titleGenerationUserPrompt(
+            transcript: truncated,
+            associatedCalendarEventTitle: associatedCalendarEventTitle
+        )
 
         if backend == MeetingSummaryBackendOption.chatGPT.backend {
             return await generateTitleWithChatGPT(
-                transcript: truncated,
+                userPrompt: userPrompt,
                 config: config,
                 titleInstructions: titleInstructions
             )
@@ -622,7 +630,7 @@ enum MeetingSummaryClient {
                 apiKey: apiKey,
                 model: model,
                 systemPrompt: titleInstructions,
-                userPrompt: truncated,
+                userPrompt: userPrompt,
                 maxTokens: nil,
                 extraHeaders: ["X-OpenRouter-Title": AppIdentity.displayName]
             )
@@ -635,7 +643,7 @@ enum MeetingSummaryClient {
                 apiKey: apiKey,
                 model: model,
                 systemPrompt: titleInstructions,
-                userPrompt: truncated,
+                userPrompt: userPrompt,
                 maxTokens: nil,
                 extraHeaders: [:]
             )
@@ -645,6 +653,25 @@ enum MeetingSummaryClient {
     static func resolvedTitleInstructions(config: AppConfig) -> String {
         let trimmed = config.meetingTitlePrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? defaultTitleInstructions : trimmed
+    }
+
+    private static func titleGenerationUserPrompt(
+        transcript: String,
+        associatedCalendarEventTitle: String?
+    ) -> String {
+        let trimmedCalendarTitle = associatedCalendarEventTitle?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        if trimmedCalendarTitle.isEmpty {
+            return transcript
+        }
+
+        return """
+        Associated calendar event title: \(trimmedCalendarTitle)
+
+        Transcript excerpt:
+        \(transcript)
+        """
     }
 
     private static func callChatCompletions(
@@ -702,7 +729,7 @@ enum MeetingSummaryClient {
     }
 
     private static func generateTitleWithChatGPT(
-        transcript: String,
+        userPrompt: String,
         config: AppConfig,
         titleInstructions: String
     ) async -> String? {
@@ -710,7 +737,7 @@ enum MeetingSummaryClient {
             let model = config.chatGPTModel.isEmpty ? defaultChatGPTModel : config.chatGPTModel
             let result = try await callWHAM(
                 systemPrompt: titleInstructions,
-                userPrompt: transcript,
+                userPrompt: userPrompt,
                 model: model
             )
             let title = result?.trimmingCharacters(in: .whitespacesAndNewlines.union(.init(charactersIn: "\"")))

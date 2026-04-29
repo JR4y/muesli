@@ -34,6 +34,14 @@ enum MeetingDateFormatting {
         return formatter
     }()
 
+    private static let compactMeetingTimestampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.timeZone = .current
+        formatter.setLocalizedDateFormatFromTemplate("d MMM HH:mm")
+        return formatter
+    }()
+
     static func parse(_ raw: String) -> Date? {
         isoParsers.lazy.compactMap { $0.date(from: raw) }.first
             ?? localParsers.lazy.compactMap { $0.date(from: raw) }.first
@@ -45,5 +53,12 @@ enum MeetingDateFormatting {
             return clean.count > 16 ? String(clean.prefix(16)) : clean
         }
         return meetingTimestampFormatter.string(from: date)
+    }
+
+    static func formatCompactMeetingTimestamp(_ raw: String) -> String {
+        guard let date = parse(raw) else {
+            return formatMeetingTimestamp(raw)
+        }
+        return compactMeetingTimestampFormatter.string(from: date)
     }
 }

@@ -35,15 +35,6 @@ struct SettingsView: View {
         }
     }
 
-    private enum SettingsPane: String, CaseIterable, Identifiable {
-        case general
-        case dictation
-        case meetings
-        case appearance
-
-        var id: String { rawValue }
-    }
-
     let appState: AppState
     let controller: MuesliController
 
@@ -53,7 +44,6 @@ struct SettingsView: View {
     @State private var isSigningInGoogleCal = false
     @State private var pendingDataDestruction: PendingDataDestruction?
     @State private var isPreviewingClip = false
-    @State private var selectedPane: SettingsPane = .general
     @State private var downloadedBackendOptions: [BackendOption] = []
     @State private var downloadedPostProcOptions: [PostProcessorOption] = []
     @State private var permissionPollTimer: Timer?
@@ -84,16 +74,11 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: MuesliTheme.spacing24) {
-                Text(L10n.text(.settingsTitle, config: appState.config))
-                    .font(MuesliTheme.title1())
-                    .foregroundStyle(MuesliTheme.textPrimary)
-
-                settingsPanePicker
-                paneContent
-            }
-            .padding(MuesliTheme.spacing32)
+        VStack(alignment: .leading, spacing: 0) {
+            settingsHeader
+            settingsPanePicker
+            paneContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .background(MuesliTheme.backgroundBase)
         .onAppear {
@@ -185,18 +170,47 @@ struct SettingsView: View {
         L10n.text(.settingsCustomIndicatorPosition, config: appState.config)
     }
 
+    private var settingsHeader: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(L10n.text(.settingsTitle, config: appState.config))
+                .font(MuesliTheme.title1())
+                .foregroundStyle(MuesliTheme.textPrimary)
+        }
+        .padding(.horizontal, MuesliTheme.spacing32)
+        .padding(.top, MuesliTheme.spacing32)
+        .padding(.bottom, MuesliTheme.spacing20)
+    }
+
     private var settingsPanePicker: some View {
-        HStack {
-            Spacer()
-            Picker("", selection: $selectedPane) {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: MuesliTheme.spacing8) {
                 ForEach(SettingsPane.allCases) { pane in
-                    Text(paneTitle(pane)).tag(pane)
+                    let isSelected = appState.selectedSettingsPane == pane
+                    Button {
+                        appState.selectedSettingsPane = pane
+                    } label: {
+                        Text(paneTitle(pane))
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(isSelected ? MuesliTheme.textPrimary : MuesliTheme.textSecondary)
+                            .padding(.horizontal, MuesliTheme.spacing12)
+                            .padding(.vertical, MuesliTheme.spacing8)
+                            .background(
+                                Capsule()
+                                    .fill(isSelected ? MuesliTheme.surfaceSelected : MuesliTheme.surfacePrimary.opacity(0.55))
+                            )
+                            .overlay(
+                                Capsule()
+                                    .strokeBorder(
+                                        isSelected ? MuesliTheme.accent.opacity(0.3) : MuesliTheme.surfaceBorder,
+                                        lineWidth: 1
+                                    )
+                            )
+                    }
+                    .buttonStyle(.plain)
                 }
             }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .frame(width: 560)
-            Spacer()
+            .padding(.horizontal, MuesliTheme.spacing32)
+            .padding(.bottom, MuesliTheme.spacing20)
         }
     }
 
@@ -210,20 +224,43 @@ struct SettingsView: View {
             return L10n.text(.settingsPaneMeetings, config: appState.config)
         case .appearance:
             return L10n.text(.settingsPaneAppearance, config: appState.config)
+        case .dictionary:
+            return L10n.text(.dictionaryTitle, config: appState.config)
+        case .models:
+            return L10n.text(.sidebarModels, config: appState.config)
+        case .shortcuts:
+            return L10n.text(.shortcutsTitle, config: appState.config)
         }
     }
 
     @ViewBuilder
     private var paneContent: some View {
-        switch selectedPane {
+        switch appState.selectedSettingsPane {
         case .general:
-            generalSettingsPane
+            settingsScrollPane { generalSettingsPane }
         case .dictation:
-            dictationSettingsPane
+            settingsScrollPane { dictationSettingsPane }
         case .meetings:
-            meetingsSettingsPane
+            settingsScrollPane { meetingsSettingsPane }
         case .appearance:
-            appearanceSettingsPane
+            settingsScrollPane { appearanceSettingsPane }
+        case .dictionary:
+            DictionaryView(appState: appState, controller: controller)
+        case .models:
+            ModelsView(appState: appState, controller: controller)
+        case .shortcuts:
+            ShortcutsView(appState: appState, controller: controller)
+        }
+    }
+
+    private func settingsScrollPane<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: MuesliTheme.spacing24) {
+                content()
+            }
+            .padding(.horizontal, MuesliTheme.spacing32)
+            .padding(.bottom, MuesliTheme.spacing32)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

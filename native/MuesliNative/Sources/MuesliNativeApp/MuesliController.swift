@@ -389,36 +389,55 @@ final class MuesliController: NSObject {
         return try? dictationStore.meeting(id: id)
     }
 
-    func suggestedCalendarEvents(for meeting: MeetingRecord) -> [UnifiedCalendarEvent] {
-        guard let meetingStartDate = Self.iso8601DateFormatter.date(from: meeting.startTime) else { return [] }
-
+    func suggestedCalendarEvents(for meeting: MeetingRecord) async -> [UnifiedCalendarEvent] {
         let hiddenLocalCalendarIDs = Set(config.hiddenLocalCalendarIDs)
-        let rangeStart = meetingStartDate.addingTimeInterval(-2 * 60 * 60)
-        let rangeEnd = meetingStartDate.addingTimeInterval(6 * 60 * 60)
+        return await Task.detached(priority: .userInitiated) {
+            Self.suggestedLocalCalendarEvents(
+                meetingStartTime: meeting.startTime,
+                hiddenLocalCalendarIDs: hiddenLocalCalendarIDs
+            )
+        }.value
+    }
 
-        let localEvents = calendarMonitor.events(
+    nonisolated private static func suggestedLocalCalendarEvents(
+        meetingStartTime: String,
+        hiddenLocalCalendarIDs: Set<String>
+    ) -> [UnifiedCalendarEvent] {
+        let formatter = ISO8601DateFormatter()
+        guard let meetingStartDate = formatter.date(from: meetingStartTime) else { return [] }
+
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: meetingStartDate)
+        guard let rangeStart = calendar.date(byAdding: .day, value: -1, to: dayStart),
+              let rangeEnd = calendar.date(byAdding: .day, value: 2, to: dayStart) else {
+            return []
+        }
+
+        let events = CalendarMonitor().events(
             from: rangeStart,
             to: rangeEnd,
             excluding: hiddenLocalCalendarIDs
         )
 
-        let googleEvents = appState.upcomingCalendarEvents.filter { event in
-            event.source == .googleCalendar
-                && event.endDate >= rangeStart
-                && event.startDate <= rangeEnd
-        }
+        return events.sorted { lhs, rhs in
+            let lhsSameDay = calendar.isDate(lhs.startDate, inSameDayAs: meetingStartDate)
+            let rhsSameDay = calendar.isDate(rhs.startDate, inSameDayAs: meetingStartDate)
+            if lhsSameDay != rhsSameDay {
+                return lhsSameDay && !rhsSameDay
+            }
 
-        var mergedByID: [String: UnifiedCalendarEvent] = [:]
-        for event in localEvents + googleEvents {
-            mergedByID[event.id] = event
-        }
-
-        return mergedByID.values.sorted { lhs, rhs in
             let lhsOverlaps = lhs.startDate <= meetingStartDate && lhs.endDate >= meetingStartDate
             let rhsOverlaps = rhs.startDate <= meetingStartDate && rhs.endDate >= meetingStartDate
             if lhsOverlaps != rhsOverlaps {
                 return lhsOverlaps && !rhsOverlaps
             }
+
+            let lhsDayDistance = abs(calendar.dateComponents([.day], from: calendar.startOfDay(for: lhs.startDate), to: dayStart).day ?? 0)
+            let rhsDayDistance = abs(calendar.dateComponents([.day], from: calendar.startOfDay(for: rhs.startDate), to: dayStart).day ?? 0)
+            if lhsDayDistance != rhsDayDistance {
+                return lhsDayDistance < rhsDayDistance
+            }
+
             let lhsDelta = abs(lhs.startDate.timeIntervalSince(meetingStartDate))
             let rhsDelta = abs(rhs.startDate.timeIntervalSince(meetingStartDate))
             if lhsDelta != rhsDelta {
@@ -728,7 +747,8 @@ final class MuesliController: NSObject {
         if enabled {
             guard normalizePostProcessorSelectionForAvailability() != nil else {
                 updateConfig { $0.enablePostProcessor = false }
-                appState.selectedTab = .models
+                appState.selectedSettingsPane = .models
+                appState.selectedTab = .settings
                 return
             }
         }
@@ -1171,6 +1191,7 @@ final class MuesliController: NSObject {
         meetingNotification.show(
             title: "Meeting starting now",
             subtitle: title,
+            darkMode: config.darkMode,
             meetingURL: meetingURL,
             dismissAfter: 30,
             onStartRecording: { [weak self] in
@@ -2505,6 +2526,7 @@ final class MuesliController: NSObject {
                     title: "Transcription complete",
                     subtitle: meetingTitle,
                     actionLabel: "View Notes",
+                    darkMode: self.config.darkMode,
                     onStartRecording: { [weak self] in
                         guard let self else { return }
                         if let savedMeetingID {
@@ -2802,6 +2824,7 @@ final class MuesliController: NSObject {
             promptID: candidate.id,
             title: "Meeting detected",
             subtitle: title,
+            darkMode: config.darkMode,
             preferredScreen: preferredScreen,
             platform: MeetingPlatform(candidate.platform),
             onStartRecording: { [weak self] in
@@ -3233,6 +3256,7 @@ final class MuesliController: NSObject {
         meetingNotification.show(
             title: "Upcoming meeting",
             subtitle: "\(title) · \(timeLabel)",
+            darkMode: config.darkMode,
             meetingURL: meetingURL,
             onStartRecording: { [weak self] in
                 guard let self else { return }
@@ -3277,6 +3301,7 @@ final class MuesliController: NSObject {
                     title: "Meeting ended",
                     subtitle: "\(title) · scheduled time is over",
                     actionLabel: "Stop Recording",
+                    darkMode: self.config.darkMode,
                     dismissAfter: 45,
                     onStartRecording: { [weak self] in
                         self?.stopMeetingRecording()

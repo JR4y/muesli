@@ -24,6 +24,7 @@ final class MeetingNotificationController {
         title: String,
         subtitle: String,
         actionLabel: String = "Start Recording",
+        darkMode: Bool,
         meetingURL: URL? = nil,
         preferredScreen: NSScreen? = nil,
         platform explicitPlatform: MeetingPlatform? = nil,
@@ -74,19 +75,25 @@ final class MeetingNotificationController {
         panel.hidesOnDeactivate = false
         panel.ignoresMouseEvents = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        panel.appearance = NSAppearance(named: darkMode ? .darkAqua : .aqua)
 
         let contentView = NSView(frame: NSRect(origin: .zero, size: NSSize(width: width, height: height)))
         contentView.wantsLayer = true
+        contentView.appearance = panel.appearance
         contentView.layer?.cornerRadius = 12
         contentView.layer?.masksToBounds = true
-        contentView.layer?.backgroundColor = NSColor(red: 0.10, green: 0.10, blue: 0.12, alpha: 0.97).cgColor
+        contentView.layer?.backgroundColor = MuesliTheme.nsBackgroundRaisedColor(darkMode: darkMode)
+            .withAlphaComponent(0.97)
+            .cgColor
         contentView.layer?.borderWidth = 1
-        contentView.layer?.borderColor = NSColor.white.withAlphaComponent(0.10).cgColor
+        contentView.layer?.borderColor = MuesliTheme.nsSurfaceBorderColor(darkMode: darkMode).cgColor
 
         // Countdown progress bar at bottom
         let progressBar = CALayer()
         progressBar.frame = CGRect(x: 0, y: 0, width: width, height: 3)
-        progressBar.backgroundColor = NSColor(red: 0.3, green: 0.6, blue: 1.0, alpha: 0.8).cgColor
+        progressBar.backgroundColor = MuesliTheme.nsAccentColor(darkMode: darkMode)
+            .withAlphaComponent(0.85)
+            .cgColor
         contentView.layer?.addSublayer(progressBar)
         self.progressLayer = progressBar
 
@@ -118,14 +125,14 @@ final class MeetingNotificationController {
         // Title label
         let titleLabel = NSTextField(labelWithString: title)
         titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        titleLabel.textColor = .white
+        titleLabel.textColor = MuesliTheme.nsTextPrimaryColor(darkMode: darkMode)
         titleLabel.frame = NSRect(x: textX, y: 40, width: 180, height: 18)
         contentView.addSubview(titleLabel)
 
         // Subtitle label
         let subtitleLabel = NSTextField(labelWithString: subtitle)
         subtitleLabel.font = .systemFont(ofSize: 11)
-        subtitleLabel.textColor = NSColor.white.withAlphaComponent(0.55)
+        subtitleLabel.textColor = MuesliTheme.nsTextSecondaryColor(darkMode: darkMode)
         subtitleLabel.frame = NSRect(x: textX, y: 20, width: 180, height: 16)
         contentView.addSubview(subtitleLabel)
 
@@ -136,8 +143,9 @@ final class MeetingNotificationController {
             let totalWidth = buttonWidth + chevronWidth
             let buttonX = width - totalWidth - 10
             let textMaxX = buttonX - 8
-            let greenColor = NSColor(red: 0.20, green: 0.72, blue: 0.53, alpha: 1.0)
-            let greenDarker = NSColor(red: 0.15, green: 0.58, blue: 0.42, alpha: 1.0)
+            let accentColor = MuesliTheme.nsAccentColor(darkMode: darkMode)
+            let accentDarker = accentColor.blended(withFraction: 0.18, of: .black) ?? accentColor
+            let buttonTextColor = highContrastTextColor(for: accentColor)
 
             // Clamp text labels so they don't overlap the button
             titleLabel.frame.size.width = textMaxX - textX
@@ -148,11 +156,11 @@ final class MeetingNotificationController {
             joinButton.font = .systemFont(ofSize: 11, weight: .medium)
             joinButton.frame = NSRect(x: buttonX, y: 20, width: buttonWidth, height: 28)
             joinButton.wantsLayer = true
-            joinButton.layer?.backgroundColor = greenColor.cgColor
+            joinButton.layer?.backgroundColor = accentColor.cgColor
             joinButton.layer?.cornerRadius = 6
             joinButton.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMinXMaxYCorner]
             joinButton.isBordered = false
-            joinButton.contentTintColor = .white
+            joinButton.contentTintColor = buttonTextColor
             contentView.addSubview(joinButton)
 
             // Chevron dropdown button
@@ -160,11 +168,11 @@ final class MeetingNotificationController {
             chevronButton.font = .systemFont(ofSize: 9, weight: .medium)
             chevronButton.frame = NSRect(x: buttonX + buttonWidth, y: 20, width: chevronWidth, height: 28)
             chevronButton.wantsLayer = true
-            chevronButton.layer?.backgroundColor = greenDarker.cgColor
+            chevronButton.layer?.backgroundColor = accentDarker.cgColor
             chevronButton.layer?.cornerRadius = 6
             chevronButton.layer?.maskedCorners = [.layerMaxXMinYCorner, .layerMaxXMaxYCorner]
             chevronButton.isBordered = false
-            chevronButton.contentTintColor = NSColor.white.withAlphaComponent(0.8)
+            chevronButton.contentTintColor = buttonTextColor.withAlphaComponent(0.8)
             contentView.addSubview(chevronButton)
         } else {
             // Single "Start Recording" button
@@ -172,10 +180,11 @@ final class MeetingNotificationController {
             startButton.font = .systemFont(ofSize: 12, weight: .medium)
             startButton.frame = NSRect(x: width - 140, y: 20, width: 120, height: 30)
             startButton.wantsLayer = true
-            startButton.layer?.backgroundColor = NSColor(red: 0.2, green: 0.5, blue: 1.0, alpha: 1.0).cgColor
+            let accentColor = MuesliTheme.nsAccentColor(darkMode: darkMode)
+            startButton.layer?.backgroundColor = accentColor.cgColor
             startButton.layer?.cornerRadius = 6
             startButton.isBordered = false
-            startButton.contentTintColor = .white
+            startButton.contentTintColor = highContrastTextColor(for: accentColor)
             contentView.addSubview(startButton)
         }
 
@@ -184,7 +193,7 @@ final class MeetingNotificationController {
         dismissButton.font = .systemFont(ofSize: 14, weight: .medium)
         dismissButton.frame = NSRect(x: width - 22, y: height - 20, width: 14, height: 14)
         dismissButton.isBordered = false
-        dismissButton.contentTintColor = NSColor.white.withAlphaComponent(0.35)
+        dismissButton.contentTintColor = MuesliTheme.nsTextTertiaryColor(darkMode: darkMode)
         contentView.addSubview(dismissButton)
 
         panel.contentView = contentView
@@ -335,6 +344,12 @@ final class MeetingNotificationController {
         return screens.filter { screen in
             seen.insert(ObjectIdentifier(screen)).inserted
         }
+    }
+
+    private func highContrastTextColor(for background: NSColor) -> NSColor {
+        let rgb = background.usingColorSpace(.deviceRGB) ?? background
+        let luminance = 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
+        return luminance > 0.45 ? NSColor.black.withAlphaComponent(0.88) : .white
     }
 }
 
