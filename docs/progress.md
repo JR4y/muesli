@@ -209,6 +209,22 @@ Two behavior fixes closed important daily-use gaps in the meetings flow:
 This keeps handwritten notes intact while making the final document structure
 feel consistent with the rest of the generated summary.
 
+#### Calendar incident hardening
+
+After more real-world beta usage, a serious calendar-linking incident was
+reviewed and fixed:
+
+- one real meeting was split into two rows because the recording row carried an invalid composite calendar id while a second empty row was later created from the dashboard
+- the broken database state was repaired manually by moving the calendar link back onto the saved meeting with transcript and deleting the empty duplicate
+- the root cause was traced to the `Meeting starting now` notification path, which was passing an internal deduplication key (`eventID|timestamp`) as if it were the real calendar event id
+- that notification path now passes the real event id
+- calendar ids are now normalized centrally so malformed values like `eventID|timestamp` can still be recovered instead of silently breaking association
+- creating a meeting from a calendar event now attempts to reuse and repair an existing meeting row that matches the normalized calendar id instead of always creating a new empty row
+
+This was an important stabilization pass because the calendar popups are not a
+minor UX detail in this fork; for normal meeting recordings they are expected
+to be the primary and trustworthy entry points.
+
 ## Current technical notes
 
 ### Permissions after reinstall
@@ -250,15 +266,17 @@ README "delivered features" section:
 - Persisted calendar event snapshots with attendee context for future meetings
 - Meeting detail event card with join link and attendee visibility
 - Reliable calendar association when starting from `Coming Up`
+- Reliable calendar association when starting from the `Meeting starting now` popup
+- Centralized normalization for malformed calendar event ids
 - Localized `Notes` / `Notas` section for protected written notes
 
 ## Recommended next work
 
-1. Review remaining calendar edge cases around nearby suggestions and historical expectations for old notes
+1. Review remaining calendar edge cases around nearby suggestions and any residual non-calendar quick-start paths
 2. Decide whether Google Calendar configuration should remain hidden/disabled without credentials or be exposed more explicitly
 3. Continue improving summary/title quality now that template and title-prompt controls exist
-4. Explore meeting-chat / copilot direction
-5. Continue UX polish through daily real usage, especially `Coming Up` pagination/capping
+4. Continue UX polish for meeting detail, popup behavior, and in-meeting note handling
+5. Explore meeting-chat / copilot direction
 
 ## Editing note
 

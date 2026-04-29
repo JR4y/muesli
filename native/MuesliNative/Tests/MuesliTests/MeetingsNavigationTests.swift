@@ -26,6 +26,23 @@ struct MeetingsNavigationTests {
         return store
     }
 
+    private func makeCalendarEvent(id: String, title: String = "Calendar Event") -> UnifiedCalendarEvent {
+        let start = Date()
+        return UnifiedCalendarEvent(
+            id: id,
+            title: title,
+            startDate: start,
+            endDate: start.addingTimeInterval(1800),
+            isAllDay: false,
+            source: .eventKit,
+            meetingURL: URL(string: "https://teams.microsoft.com/l/meetup-join/example"),
+            calendarID: "calendar-1",
+            calendarName: "Calendario",
+            calendarSourceTitle: "Infoavan",
+            calendarColorHex: "CB30E0"
+        )
+    }
+
     @Test("app state defaults meetings to browser mode")
     func meetingsDefaultToBrowser() {
         let appState = AppState()
@@ -102,6 +119,48 @@ struct MeetingsNavigationTests {
 
         #expect(controller.appState.selectedFolderID == nil)
         #expect(controller.appState.meetingsNavigationState == .browser)
+    }
+
+    @Test("calendar event ids strip notification timestamps")
+    func normalizedCalendarEventIDStripsTimestampSuffix() {
+        #expect(MuesliController.normalizedCalendarEventID("event-123|1777444200") == "event-123")
+        #expect(MuesliController.normalizedCalendarEventID("event-123") == "event-123")
+        #expect(MuesliController.normalizedCalendarEventID(nil) == nil)
+    }
+
+    @Test("createMeetingFromCalendarEvent reuses rows with normalized calendar ids")
+    func createMeetingFromCalendarEventReusesNormalizedRows() throws {
+        let store = try makeStore()
+        let start = Date()
+        let controller = MuesliController(
+            runtime: RuntimePaths(
+                repoRoot: FileManager.default.temporaryDirectory,
+                menuIcon: nil,
+                appIcon: nil,
+                bundlePath: nil
+            ),
+            dictationStore: store
+        )
+
+        try store.insertMeeting(
+            title: "Recorded meeting",
+            calendarEventID: "event-123|1777444200",
+            startTime: start,
+            endTime: start.addingTimeInterval(600),
+            rawTranscript: "Transcript body",
+            formattedNotes: "## Summary\nNotes",
+            micAudioPath: nil,
+            systemAudioPath: nil
+        )
+
+        controller.createMeetingFromCalendarEvent(makeCalendarEvent(id: "event-123"), folderID: nil)
+
+        let meetings = try store.recentMeetings(limit: 10)
+        #expect(meetings.count == 1)
+        let reused = try #require(meetings.first)
+        #expect(reused.calendarEventID == "event-123")
+        #expect(reused.calendarEventSnapshot?.id == "event-123")
+        #expect(reused.rawTranscript == "Transcript body")
     }
 
     @Test("deleteMeeting clears selected detail state and removes saved recording")
