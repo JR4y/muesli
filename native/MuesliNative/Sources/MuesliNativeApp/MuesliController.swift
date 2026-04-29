@@ -118,6 +118,7 @@ final class MuesliController: NSObject {
     private var liveManualNotesPersistWorkItems: [Int64: DispatchWorkItem] = [:]
     private let liveManualNotesPersistInterval: TimeInterval = 0.75
     private var staleLiveMeetingRecoveryFailures = Set<Int64>()
+    private var dictationState: DictationState = .idle
     private var dictationStartedAt: Date?
     private var _streamingDictationController: Any?  // StreamingDictationController (macOS 15+)
     private var isNemotronStreaming = false
@@ -259,7 +260,8 @@ final class MuesliController: NSObject {
             self?.config.showMeetingDetectionNotification ?? false
         }
         meetingMonitor.isRecordingProvider = { [weak self] in
-            self?.isMeetingRecording() ?? false
+            guard let self else { return false }
+            return self.isMeetingRecording() || self.isDictationActivityInProgress
         }
         meetingMonitor.isStartingRecordingProvider = { [weak self] in
             self?.isStartingMeetingRecording ?? false
@@ -1454,13 +1456,6 @@ final class MuesliController: NSObject {
         guard updaterController.updater.canCheckForUpdates else {
             showBusyStatus(
                 "Sparkle cannot start a new update check yet. Try again in a moment.",
-                restoring: appState.sparkleUpdateStatus
-            )
-            return
-        }
-        guard !updaterController.updater.sessionInProgress else {
-            showBusyStatus(
-                "Sparkle is still finishing the previous update check. Try again in a moment.",
                 restoring: appState.sparkleUpdateStatus
             )
             return
@@ -2886,6 +2881,7 @@ final class MuesliController: NSObject {
     }
 
     private func setState(_ state: DictationState) {
+        dictationState = state
         let status: String
         switch state {
         case .idle: status = "Idle"
@@ -2897,6 +2893,10 @@ final class MuesliController: NSObject {
         if !isDictationTestMode {
             indicator.setState(state, config: config)
         }
+    }
+
+    private var isDictationActivityInProgress: Bool {
+        dictationState != .idle || dictationStartedAt != nil || isNemotronStreaming
     }
 
     private func beginMeetingActivity(reason: String) {
@@ -3006,12 +3006,16 @@ final class MuesliController: NSObject {
     private func handlePrepare() {
         if isMeetingRecording() { return }
         fputs("[muesli-native] prepare\n", stderr)
+        meetingMonitor.suppressWhileActive()
+        meetingMonitor.refreshState()
         do {
             try recorder.prepare()
             setState(.preparing)
         } catch {
             fputs("[muesli-native] recorder prepare failed: \(error)\n", stderr)
             setState(.idle)
+            meetingMonitor.resumeAfterCooldown()
+            meetingMonitor.refreshState()
         }
     }
 
@@ -3049,6 +3053,8 @@ final class MuesliController: NSObject {
         } catch {
             fputs("[muesli-native] recorder start failed: \(error)\n", stderr)
             setState(.idle)
+            meetingMonitor.resumeAfterCooldown()
+            meetingMonitor.refreshState()
         }
     }
 
@@ -3096,6 +3102,7 @@ final class MuesliController: NSObject {
         capturedDictationContext = nil
         dictationStartedAt = nil
         setState(.idle)
+        meetingMonitor.resumeAfterCooldown()
     }
 
     private func handleToggleStart() {
@@ -3131,6 +3138,8 @@ final class MuesliController: NSObject {
         } catch {
             fputs("[muesli-native] toggle start failed: \(error)\n", stderr)
             setState(.idle)
+            meetingMonitor.resumeAfterCooldown()
+            meetingMonitor.refreshState()
         }
     }
 
@@ -3187,6 +3196,7 @@ final class MuesliController: NSObject {
         guard let wavURL = recorder.stop() else {
             fputs("[muesli-native] stop without wav\n", stderr)
             setState(.idle)
+            meetingMonitor.resumeAfterCooldown()
             return
         }
         let duration = max(Date().timeIntervalSince(startedAt), 0)
@@ -3197,6 +3207,7 @@ final class MuesliController: NSObject {
                 dictationTestCallback?("")
             }
             setState(.idle)
+            meetingMonitor.resumeAfterCooldown()
             return
         }
 
@@ -3226,6 +3237,7 @@ final class MuesliController: NSObject {
                     await MainActor.run {
                         self.dictationTestCallback?(text)
                         self.setState(.idle)
+                        self.meetingMonitor.resumeAfterCooldown()
                     }
                     return
                 }
@@ -3236,6 +3248,7 @@ final class MuesliController: NSObject {
                 guard !text.isEmpty else {
                     await MainActor.run {
                         self.setState(.idle)
+                        self.meetingMonitor.resumeAfterCooldown()
                     }
                     return
                 }
@@ -3263,7 +3276,10 @@ final class MuesliController: NSObject {
                 }
             } catch is CancellationError {
                 fputs("[muesli-native] test dictation cancelled\n", stderr)
-                await MainActor.run { self.setState(.idle) }
+                await MainActor.run {
+                    self.setState(.idle)
+                    self.meetingMonitor.resumeAfterCooldown()
+                }
             } catch {
                 fputs("[muesli-native] transcription failed: \(error)\n", stderr)
                 await MainActor.run {
@@ -3271,6 +3287,7 @@ final class MuesliController: NSObject {
                         self.dictationTestCallback?("")
                     }
                     self.setState(.idle)
+                    self.meetingMonitor.resumeAfterCooldown()
                 }
             }
         }
