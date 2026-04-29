@@ -22,6 +22,7 @@ Git workflow currently documented and aligned:
 - `upstream` remote points to the author's repository
 - `origin` remote points to the fork
 - `vendor` is the local clean mirror branch for upstream
+- `beta-mergework` is the named merge desk used to trial upstream integration before promoting it
 - `beta` is the active development branch
 - `main` is reserved as the stable product branch
 
@@ -151,6 +152,25 @@ usage while also making quick notes feel safer as a lightweight capture mode.
 - real beta usage validated the hierarchical folder tree, folder colors/icons, and meetings-list association indicator in the browser flow
 - real beta usage confirmed quick notes can open without auto-recording, start recording later from the same note, and now show localized editor copy throughout the flow
 - the window/titlebar experiment for replacing the native SwiftUI sidebar toggle was intentionally discarded, and the beta remains on the stable `NavigationSplitView` titlebar behavior
+
+#### Upstream vendor integration follow-up
+
+After the local beta UX/localization pass was stable, the fork was brought back
+up to date with the author's newer upstream changes through `beta-mergework`
+before promoting them into `beta`.
+
+- `vendor` was advanced again to the author's newer `upstream/main`
+- the merge was rehearsed in `beta-mergework`, validated there, and then fast-forwarded into `beta`
+- Slack meeting detection was hardened so Slack no longer behaves like a noisy generic app-presence signal and instead requires stronger audio attribution before prompting
+- the meeting prompt state machine now adds a short candidate dwell period and stronger suppression semantics so repeated prompts are less jumpy
+- detection prompts are now suppressed while dictation activity is active, reducing cross-talk between dictation and meeting detection flows
+- `Coming Up` now temporarily caps the visible upcoming-meetings list to 5 events, which is acceptable for now and can later evolve into proper pagination
+- upstream Sparkle/update verification hardening and related release metadata updates were also pulled in
+
+This upstream pass was intentionally accepted as infrastructure-first work. The
+Slack and prompt-state changes improve reliability immediately, while the
+5-item `Coming Up` cap gives a reasonable short-term ceiling until a richer
+pagination or expansion model is added.
 ### 2026-04-27 to 2026-04-28
 
 This was the first major fork setup and product-shaping pass.
@@ -395,6 +415,8 @@ README "delivered features" section:
 - Localized `Notes` / `Notas` section for protected written notes
 - Localized meeting notification popups and quick-note / live-notes editing surfaces
 - Quick notes can now default to note-only mode with an independent auto-record toggle
+- Hardened Slack meeting detection and meeting prompt suppression from newer upstream work
+- Temporary 5-event cap in `Coming Up` adopted from upstream as a stepping stone toward future pagination
 
 ## Recommended next work
 
@@ -402,7 +424,8 @@ README "delivered features" section:
 2. Decide whether Google Calendar configuration should remain hidden/disabled without credentials or be exposed more explicitly
 3. Continue improving summary/title quality now that template and title-prompt controls exist
 4. Continue UX polish for meeting detail and in-meeting note handling, especially how aggressively the note window steals focus during live meetings
-5. Explore meeting-chat / copilot direction
+5. Replace the temporary 5-item `Coming Up` cap with a more intentional pagination or expansion model once the desired browsing behavior is clearer
+6. Explore meeting-chat / copilot direction
 
 ## Editing note
 

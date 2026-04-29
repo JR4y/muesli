@@ -5,6 +5,7 @@ This backlog tracks product and UX changes for this fork.
 Branch model reference:
 
 - `vendor`: clean mirror of the author's upstream
+- `beta-mergework`: temporary upstream mergework branch / worktable
 - `beta`: active development and integration
 - `main`: stable product branch
 
@@ -52,6 +53,8 @@ Completed or largely completed:
 - Quick notes now default to note-only mode, with an independent `Auto-record Quick Notes` setting and the ability to start recording later from the same note
 - The dashboard `Quick Note` button now follows the configured app language
 - Manual-note editor toolbar commands were stabilized so formatting actions work reliably after button clicks
+- Upstream Slack meeting detection hardening and stronger meeting-prompt suppression are now integrated into `beta`
+- `Coming Up` now caps visible upcoming meetings to 5 for the moment, pending a more intentional pagination/expansion design
 
 Known limitation:
 
@@ -163,7 +166,8 @@ Possible scope:
 Notes:
 
 - first ergonomic pass can stay small: keep the new collapse/expand behavior
-- next likely step: paginate or cap long `Coming Up` lists so the meetings browser stays visible without excessive scrolling
+- `Coming Up` is now temporarily capped at 5 visible upcoming meetings
+- next likely step: replace that temporary cap with pagination or a clearer expand/load-more model so the meetings browser stays visible without excessive scrolling
 - also worth exploring later: a direct shortcut from `Coming Up` into the relevant calendar area instead of only sync guidance
 - folders are now hierarchical and visually identifiable, but they are still single-assignment folders rather than multi-tag classification
 - meetings list now shows a subtle indicator when a note already has an associated calendar event

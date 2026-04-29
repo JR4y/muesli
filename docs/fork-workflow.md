@@ -1,20 +1,23 @@
 # Fork Workflow
 
-This fork uses a three-branch workflow so upstream updates, in-progress work,
-and stable releases stay clearly separated.
+This fork uses a core three-branch workflow plus one mergework branch so
+upstream updates, in-progress work, and stable releases stay clearly
+separated.
 
 ## Roles
 
 - `upstream` (remote): the original author's repository
 - `origin` (remote): this fork on GitHub
 - `vendor` (branch): clean local mirror of `upstream/main`
+- `beta-mergework` (branch/worktree): temporary merge desk used to trial upstream integration before touching `beta`
 - `beta` (branch): integration and day-to-day development branch
 - `main` (branch): stable branch for the final product
 
 ## Intent
 
 - `vendor` should stay as close as possible to the author's latest `main`
-- `beta` is where upstream changes are integrated and conflicts are resolved
+- `beta-mergework` is our workbench for rehearsing a `vendor` merge, validating it, and deciding whether it should advance
+- `beta` is where validated fork work lives day to day
 - `main` only receives changes that are already validated in `beta`
 
 ## Recommended flow
@@ -26,10 +29,18 @@ git fetch upstream
 git switch vendor
 git merge --ff-only upstream/main
 git switch beta
+git switch -C beta-mergework
 git merge vendor
 ```
 
-If everything works as expected, promote the result into `main`:
+If everything works as expected, promote the validated merge into `beta`:
+
+```bash
+git switch beta
+git merge beta-mergework
+```
+
+Then promote the result into `main` when ready:
 
 ```bash
 git switch main
@@ -40,8 +51,9 @@ git merge beta
 
 - Never develop directly on `vendor`
 - Prefer feature branches from `beta`
+- Use `beta-mergework` as the named worktable for upstream merge evaluation
 - Treat `main` as the stable product branch
-- Resolve upstream conflicts in `beta`, not in `main`
+- Resolve upstream conflicts in `beta-mergework` first, then advance `beta`
 
 ## Local beta app
 
