@@ -9,6 +9,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
     private let menu = NSMenu()
     private let statusLabel = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private var statusMessage: String?
     private var countdownOverride: String?
 
     init(controller: MuesliController, runtime: RuntimePaths) {
@@ -17,12 +18,14 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
         menu.delegate = self
-        statusLabel.title = L10n.text(.statusLabel(text: L10n.text(.statusIdle, config: controller.appState.config)), config: controller.appState.config)
+        statusLabel.title = ""
         build()
     }
 
     func setStatus(_ text: String) {
-        statusLabel.title = L10n.text(.statusLabel(text: text), config: controller.appState.config)
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        statusMessage = trimmed.isEmpty || trimmed == "Idle" ? nil : trimmed
+        statusLabel.title = statusMessage ?? ""
     }
 
     func refresh() {
@@ -103,12 +106,13 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         }
 
         menu.addItem(actionItem(title: L10n.text(.statusOpenApp(name: AppIdentity.displayName), config: controller.appState.config), action: #selector(MuesliController.openHistoryWindow as (MuesliController) -> () -> Void)))
-        let meetingTitle = controller.isMeetingRecording()
-            ? L10n.text(.statusStopMeetingRecording, config: controller.appState.config)
-            : L10n.text(.statusStartMeetingRecording, config: controller.appState.config)
-        menu.addItem(actionItem(title: meetingTitle, action: #selector(MuesliController.toggleMeetingRecording)))
         if controller.isMeetingRecording() {
+            let pauseTitle = controller.isMeetingRecordingPaused() ? "Resume Meeting Recording" : "Pause Meeting Recording"
+            menu.addItem(actionItem(title: pauseTitle, action: #selector(MuesliController.toggleMeetingRecordingPause)))
+            menu.addItem(actionItem(title: L10n.text(.statusStopMeetingRecording, config: controller.appState.config), action: #selector(MuesliController.toggleMeetingRecording)))
             menu.addItem(actionItem(title: L10n.text(.statusDiscardMeetingRecording, config: controller.appState.config), action: #selector(MuesliController.discardMeetingWithConfirmation)))
+        } else {
+            menu.addItem(actionItem(title: L10n.text(.statusStartMeetingRecording, config: controller.appState.config), action: #selector(MuesliController.toggleMeetingRecording)))
         }
         menu.addItem(.separator())
 
@@ -161,8 +165,11 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
         menu.addItem(actionItem(title: L10n.text(.statusSettings, config: controller.appState.config), action: #selector(MuesliController.openSettingsTab)))
         menu.addItem(actionItem(title: L10n.text(.statusCheckForUpdates, config: controller.appState.config), action: #selector(MuesliController.checkForUpdates)))
-        statusLabel.isEnabled = false
-        menu.addItem(statusLabel)
+        if let statusMessage {
+            statusLabel.title = statusMessage
+            statusLabel.isEnabled = false
+            menu.addItem(statusLabel)
+        }
         menu.addItem(.separator())
         menu.addItem(actionItem(title: L10n.text(.statusQuit, config: controller.appState.config), action: #selector(MuesliController.quitApp)))
     }

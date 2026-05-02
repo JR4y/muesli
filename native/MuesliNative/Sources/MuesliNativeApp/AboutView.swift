@@ -40,8 +40,9 @@ struct AboutView: View {
                     Divider().background(MuesliTheme.surfaceBorder)
 
                     aboutRow(L10n.text(.aboutCheckForUpdates, config: appState.config)) {
-                        actionButton(L10n.text(.aboutCheckNow, config: appState.config), icon: "arrow.triangle.2.circlepath") {
-                            controller.retryUpdateCheck()
+                        let action = updatePrimaryAction
+                        actionButton(actionTitle(action), icon: action.icon) {
+                            performUpdateAction(action)
                         }
                     }
                 }
@@ -155,16 +156,44 @@ struct AboutView: View {
     }
 
     private enum UpdateBannerAction {
+        case check
         case install
+        case restartInstall
         case retry
 
         var icon: String {
             switch self {
+            case .check:
+                return "arrow.triangle.2.circlepath"
             case .install:
                 return "arrow.down.circle"
+            case .restartInstall:
+                return "arrow.clockwise.circle"
             case .retry:
                 return "arrow.triangle.2.circlepath"
             }
+        }
+    }
+
+    private var updatePrimaryAction: UpdateBannerAction {
+        switch appState.sparkleUpdateStatus {
+        case .available:
+            return .install
+        case .downloaded:
+            return .restartInstall
+        case .failed:
+            return .retry
+        case .idle, .checking, .busy, .installing, .upToDate, .disabled:
+            return .check
+        }
+    }
+
+    private func performUpdateAction(_ action: UpdateBannerAction) {
+        switch action {
+        case .check, .retry:
+            controller.retryUpdateCheck()
+        case .install, .restartInstall:
+            controller.installAvailableUpdate()
         }
     }
 
@@ -202,7 +231,7 @@ struct AboutView: View {
                 title: L10n.text(.aboutUpdateReadyTitle(version: version), config: appState.config),
                 message: L10n.text(.aboutUpdateReadyMessage, config: appState.config),
                 tint: MuesliTheme.transcribing,
-                action: nil
+                action: .restartInstall
             )
         case .installing(let version):
             return UpdateBanner(
@@ -261,12 +290,7 @@ struct AboutView: View {
 
             if let action = banner.action {
                 actionButton(actionTitle(action), icon: action.icon) {
-                    switch action {
-                    case .install:
-                        controller.installAvailableUpdate()
-                    case .retry:
-                        controller.retryUpdateCheck()
-                    }
+                    performUpdateAction(action)
                 }
             }
         }
@@ -281,8 +305,12 @@ struct AboutView: View {
 
     private func actionTitle(_ action: UpdateBannerAction) -> String {
         switch action {
+        case .check:
+            return L10n.text(.aboutCheckNow, config: appState.config)
         case .install:
             return L10n.text(.aboutInstallUpdate, config: appState.config)
+        case .restartInstall:
+            return L10n.text(.sidebarRestart, config: appState.config)
         case .retry:
             return L10n.text(.aboutTryAgain, config: appState.config)
         }

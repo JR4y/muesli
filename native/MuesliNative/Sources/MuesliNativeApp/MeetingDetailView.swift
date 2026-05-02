@@ -220,17 +220,19 @@ struct MeetingDetailView: View {
     private func headerActions(for meeting: MeetingRecord, appliedTemplate: MeetingTemplateSnapshot) -> some View {
         if showsManualNotesEditor(for: meeting) {
             HStack(spacing: MuesliTheme.spacing8) {
-                statusChip(for: meeting)
                 if meeting.status == .recording {
-                    stopRecordingButton
-                    discardRecordingButton
+                    recordingControlGroup(for: meeting)
                 } else if meeting.status == .noteOnly {
+                    statusChip(for: meeting)
                     startRecordingButton(for: meeting)
                     if controller.canDeleteMeeting(meeting) {
                         deleteButton
                     }
                 } else if controller.canDeleteMeeting(meeting), meeting.status == .failed {
+                    statusChip(for: meeting)
                     deleteButton
+                } else {
+                    statusChip(for: meeting)
                 }
             }
         } else {
@@ -856,11 +858,14 @@ struct MeetingDetailView: View {
 
     @ViewBuilder
     private func statusChip(for meeting: MeetingRecord) -> some View {
+        let isPaused = meeting.status == .recording && appState.isMeetingRecordingPaused
+        let label = isPaused ? "Paused" : meeting.status.displayLabel
+        let color = isPaused ? MuesliTheme.transcribing : meeting.status.displayColor
         HStack(spacing: 6) {
             Circle()
-                .fill(meeting.status.displayColor)
+                .fill(color)
                 .frame(width: 7, height: 7)
-            Text(meeting.status.displayLabel)
+            Text(label)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(MuesliTheme.textSecondary)
         }
@@ -872,6 +877,38 @@ struct MeetingDetailView: View {
             Capsule()
                 .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
         )
+    }
+
+    @ViewBuilder
+    private func recordingControlGroup(for meeting: MeetingRecord) -> some View {
+        if meeting.status == .recording {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: MuesliTheme.spacing8) {
+                    statusChip(for: meeting)
+                    pauseResumeRecordingButton
+                    stopRecordingButton
+                    discardRecordingButton
+                }
+                .recordingControlsBackground()
+
+                VStack(alignment: .trailing, spacing: MuesliTheme.spacing8) {
+                    statusChip(for: meeting)
+                    HStack(spacing: MuesliTheme.spacing8) {
+                        pauseResumeRecordingButton
+                        stopRecordingButton
+                        discardRecordingButton
+                    }
+                    .recordingControlsBackground()
+                }
+            }
+        } else if controller.canDeleteMeeting(meeting), meeting.status == .noteOnly || meeting.status == .failed {
+            HStack(spacing: MuesliTheme.spacing8) {
+                statusChip(for: meeting)
+                deleteButton
+            }
+        } else {
+            statusChip(for: meeting)
+        }
     }
 
     @ViewBuilder
@@ -985,6 +1022,32 @@ struct MeetingDetailView: View {
         }
     }
 
+    private var pauseResumeRecordingButton: some View {
+        let isPaused = appState.isMeetingRecordingPaused
+        return Button {
+            controller.toggleMeetingRecordingPause()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: isPaused ? "play.fill" : "pause.fill")
+                    .font(.system(size: 10, weight: .semibold))
+                Text(isPaused ? "Resume" : "Pause")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundStyle(isPaused ? MuesliTheme.backgroundBase : MuesliTheme.textPrimary)
+            .padding(.horizontal, MuesliTheme.spacing12)
+            .padding(.vertical, 7)
+            .background(isPaused ? MuesliTheme.accent : MuesliTheme.surfacePrimary)
+            .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
+            .overlay(
+                RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
+                    .strokeBorder(isPaused ? MuesliTheme.accent.opacity(0.35) : MuesliTheme.surfaceBorder, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(!appState.isMeetingRecording)
+        .help(isPaused ? "Resume recording" : "Pause recording")
+    }
+
     private var stopRecordingButton: some View {
         Button {
             if let meeting {
@@ -1000,7 +1063,7 @@ struct MeetingDetailView: View {
             }
             .foregroundStyle(.white)
             .padding(.horizontal, MuesliTheme.spacing12)
-            .padding(.vertical, 8)
+            .padding(.vertical, 7)
             .background(MuesliTheme.recording)
             .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
         }
@@ -1031,7 +1094,7 @@ struct MeetingDetailView: View {
 
     private var discardRecordingButton: some View {
         iconButton("xmark", label: L10n.text(.meetingDiscard, config: appState.config)) {
-            controller.discardMeetingRecording()
+            controller.discardMeetingWithConfirmation()
         }
     }
 
@@ -1601,6 +1664,18 @@ struct MeetingDetailView: View {
         formatter.formatOptions = [.withInternetDateTime]
         return formatter
     }()
+}
+
+private extension View {
+    func recordingControlsBackground() -> some View {
+        padding(5)
+            .background(MuesliTheme.backgroundRaised)
+            .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
+            .overlay(
+                RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
+                    .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
+            )
+    }
 }
 
 private struct MeetingTranscriptView: View {
