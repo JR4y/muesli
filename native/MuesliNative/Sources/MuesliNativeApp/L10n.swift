@@ -666,7 +666,7 @@ enum L10n {
         case .meetingManualToolbarCheckbox:
             return "Checkbox"
         case .meetingStartRecording:
-            return "Start Recording"
+            return "Record"
         case .meetingStartRecordingHelp:
             return "Start recording for this note"
         case .meetingSummarizing:
@@ -1376,7 +1376,7 @@ enum L10n {
         case .meetingManualToolbarCheckbox:
             return "Checklist"
         case .meetingStartRecording:
-            return "Empezar a grabar"
+            return "Grabar"
         case .meetingStartRecordingHelp:
             return "Empezar a grabar para esta nota"
         case .meetingSummarizing:

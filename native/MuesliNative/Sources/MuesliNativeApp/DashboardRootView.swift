@@ -70,7 +70,7 @@ struct DashboardRootView: View {
         .preferredColorScheme(appState.config.darkMode ? .dark : .light)
         .toolbar {
             if showsMeetingsToolbarActions {
-                ToolbarItem(placement: .primaryAction) {
+                ToolbarItem(placement: .automatic) {
                     quickNoteToolbarButton
                 }
             }
@@ -79,6 +79,7 @@ struct DashboardRootView: View {
 
     private var quickNoteToolbarButton: some View {
         let language = AppLanguage.resolved(appState.config.appLanguage)
+        let isDisabled = appState.isMeetingRecording
         return Button {
             controller.startQuickNoteMeeting()
         } label: {
@@ -89,14 +90,24 @@ struct DashboardRootView: View {
                     .font(.system(size: 12, weight: .semibold))
                     .lineLimit(1)
             }
-            .foregroundStyle(MuesliTheme.backgroundBase)
+            .foregroundStyle(isDisabled ? MuesliTheme.textTertiary : MuesliTheme.accent)
             .padding(.horizontal, MuesliTheme.spacing12)
             .padding(.vertical, 8)
-            .background(appState.isMeetingRecording ? MuesliTheme.surfacePrimary : MuesliTheme.accent)
+            .background(
+                RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
+                    .fill(isDisabled ? MuesliTheme.surfacePrimary : MuesliTheme.accent.opacity(0.14))
+            )
             .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
+            .overlay(
+                RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
+                    .strokeBorder(
+                        isDisabled ? MuesliTheme.surfaceBorder : MuesliTheme.accent.opacity(0.35),
+                        lineWidth: 1
+                    )
+            )
         }
         .buttonStyle(.plain)
-        .disabled(appState.isMeetingRecording)
+        .disabled(isDisabled)
         .help(L10n.text(.quickNoteButtonHelp, language: language))
     }
 }

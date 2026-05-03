@@ -1078,16 +1078,20 @@ struct MeetingDetailView: View {
             controller.startRecordingForExistingMeeting(id: meeting.id)
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: "record.circle")
+                Image(systemName: "play.fill")
                     .font(.system(size: 10, weight: .semibold))
                 Text(L10n.text(.meetingStartRecording, config: appState.config))
                     .font(.system(size: 12, weight: .semibold))
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(MuesliTheme.backgroundBase)
             .padding(.horizontal, MuesliTheme.spacing12)
-            .padding(.vertical, 8)
+            .padding(.vertical, 7)
             .background(MuesliTheme.accent)
             .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
+            .overlay(
+                RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
+                    .strokeBorder(MuesliTheme.accent.opacity(0.35), lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
         .help(L10n.text(.meetingStartRecordingHelp, config: appState.config))
