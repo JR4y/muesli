@@ -59,7 +59,7 @@ git merge beta
 
 For this fork, daily local validation should use a separate beta app install:
 
-- app bundle: `MuesliBeta.app`
+- app bundle: `muesli-beta.app`
 - bundle id: `com.jr4y.muesli.beta`
 - support dir: `~/Library/Application Support/MuesliBeta/`
 - build entrypoint: `./scripts/beta-test.sh`
@@ -68,7 +68,7 @@ Important:
 
 - local fork beta builds must not follow the author's Sparkle feeds
 - `./scripts/beta-test.sh` enforces this by setting `MUESLI_SPARKLE_FEED_URL=""`
-- this means local `MuesliBeta.app` builds do not use `appcast.xml` or `appcast-preprod.xml`
+- this means local `muesli-beta.app` builds do not use `appcast.xml` or `appcast-preprod.xml`
 - `scripts/release-preprod.sh` remains upstream-oriented release infrastructure and is not the build path for this fork's day-to-day beta app
 
 ## Suggested feature flow

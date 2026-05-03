@@ -10,7 +10,7 @@ It is intended to serve three purposes at once:
 
 Last updated: `2026-04-29`
 Working branch: `beta`
-Dev app: `MuesliBeta.app`
+Dev app: `muesli-beta.app`
 
 ## Current state
 
@@ -47,7 +47,7 @@ feed, without touching the native app runtime used in daily beta testing.
 #### Local beta app build path
 
 - the fork's local beta build path is now explicitly codified in `scripts/beta-test.sh`
-- local beta builds now install as `MuesliBeta.app`
+- local beta builds now install as `muesli-beta.app`
 - local beta builds keep using the fork bundle id `com.jr4y.muesli.beta`
 - local beta builds now disable Sparkle feed lookup instead of inheriting the author's `appcast.xml` or `appcast-preprod.xml`
 - `docs/fork-workflow.md` now documents that `release-preprod.sh` is upstream-oriented infrastructure, not the day-to-day beta build path for this fork
@@ -145,7 +145,7 @@ usage while also making quick notes feel safer as a lightweight capture mode.
 #### Validation
 
 - targeted Swift tests were re-run after the refactor and passed
-- `MuesliBeta.app` was rebuilt and reinstalled from the current `beta`
+- `muesli-beta.app` was rebuilt and reinstalled from the current `beta`
 - real beta usage confirmed that themed popups now respect app styling
 - real beta usage also confirmed a calendar-linked meeting example still associated the expected event context
 - real beta usage confirmed orphaned notes can now be linked again through the picker without misleading empty-state flashes
@@ -178,7 +178,7 @@ This was the first major fork setup and product-shaping pass.
 #### Environment and app setup
 
 - Xcode was installed and activated as the active toolchain
-- A separate beta app build was created as `MuesliBeta.app`
+- A separate beta app build was created as `muesli-beta.app`
 - Beta data was migrated from the author's app where it made sense for daily use
 - The beta app is now being used as the main test environment
 
@@ -373,7 +373,7 @@ to be the primary and trustworthy entry points.
 
 ### Permissions after reinstall
 
-Reinstalling `MuesliBeta.app` currently causes macOS permissions such as
+Reinstalling `muesli-beta.app` currently causes macOS permissions such as
 Accessibility, Input Monitoring, and Screen Recording to be requested again.
 
 Current understanding:

@@ -68,21 +68,11 @@ struct MeetingHookIntegrationTests {
         let store = try makeStore()
         let spy = MeetingHookDispatcherSpy()
         let controller = makeController(store: store, dispatcher: spy)
-        let now = Date()
-        try store.insertMeeting(
-            title: "Existing",
-            calendarEventID: "duplicate-event",
-            startTime: now,
-            endTime: now.addingTimeInterval(60),
-            rawTranscript: "Existing transcript",
-            formattedNotes: "Existing notes",
-            micAudioPath: nil,
-            systemAudioPath: nil
-        )
 
         #expect(throws: Error.self) {
             try controller.persistCompletedMeetingResultAndDispatchHook(
-                makeMeetingResult(calendarEventID: "duplicate-event")
+                makeMeetingResult(calendarEventID: "duplicate-event"),
+                existingMeetingID: -1
             )
         }
         #expect(spy.invocations.isEmpty)

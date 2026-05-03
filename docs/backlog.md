@@ -21,7 +21,7 @@ Branch model reference:
 
 Completed or largely completed:
 
-- Separate beta app install (`MuesliBeta.app`) for safe daily testing
+- Separate beta app install (`muesli-beta.app`) for safe daily testing
 - Warm beige light theme baseline
 - `Meetings` promoted above `Dictations`
 - `Meetings` made the default landing view
