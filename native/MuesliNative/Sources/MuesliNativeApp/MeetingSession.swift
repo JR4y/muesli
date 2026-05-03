@@ -1,4 +1,5 @@
 import FluidAudio
+import ApplicationServices
 import Foundation
 import MuesliCore
 import os
@@ -244,7 +245,7 @@ final class MeetingSession {
         } else {
             fputs("[meeting] VAD not available, using max-duration fallback only\n", stderr)
         }
-        if config.enableScreenContext {
+        if config.enableScreenContext && CGPreflightScreenCaptureAccess() {
             // OCR screenshots are safe when using CoreAudio tap (no SCStream conflict)
             await screenContextCollector.startPeriodicCapture(useOCR: config.useCoreAudioTap)
         }

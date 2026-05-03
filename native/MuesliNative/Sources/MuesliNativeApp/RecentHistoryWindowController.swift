@@ -34,6 +34,10 @@ final class RecentHistoryWindowController: NSObject, NSWindowDelegate {
         applyWindowAppearance()
     }
 
+    func close() {
+        window?.close()
+    }
+
     func updateBackendLabel() {
         controller.syncAppState()
         applyWindowAppearance()

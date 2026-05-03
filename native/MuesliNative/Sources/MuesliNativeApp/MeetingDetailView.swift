@@ -1058,7 +1058,7 @@ struct MeetingDetailView: View {
             HStack(spacing: 6) {
                 Image(systemName: "stop.fill")
                     .font(.system(size: 10, weight: .semibold))
-                Text(L10n.text(.meetingStopRecording, config: appState.config))
+                Text(appState.config.resolvedAppLanguage.effectiveLanguageCode == "es" ? "Parar" : "Stop")
                     .font(.system(size: 12, weight: .semibold))
             }
             .foregroundStyle(.white)
@@ -1068,6 +1068,7 @@ struct MeetingDetailView: View {
             .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
         }
         .buttonStyle(.plain)
+        .disabled(!appState.isMeetingRecording)
         .help(L10n.text(.meetingStopRecordingHelp, config: appState.config))
     }
 

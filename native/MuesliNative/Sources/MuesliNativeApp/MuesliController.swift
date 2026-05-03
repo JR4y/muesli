@@ -93,6 +93,7 @@ final class MuesliController: NSObject {
     private var notifiedUpcomingEventIDs = Set<String>()
 
     private var searchTask: Task<Void, Never>?
+    private var onboardingModelPreparationTask: Task<Void, Never>?
     private var maraudersMapCountdown: MaraudersMapCountdownController?
 
     private var statusBarController: StatusBarController?
@@ -193,13 +194,14 @@ final class MuesliController: NSObject {
         hotkeyMonitor.onToggleStart = { [weak self] in self?.handleToggleStart() }
         hotkeyMonitor.onToggleStop = { [weak self] in self?.handleToggleStop() }
         hotkeyMonitor.doubleTapEnabled = config.enableDoubleTapDictation
+        let canRunMainApp = config.hasCompletedOnboarding
+            && hasRequiredStartupPermissions(for: config.resolvedOnboardingUseCase)
 
         // Defer permission-triggering monitors until after onboarding
-        if config.hasCompletedOnboarding {
+        if canRunMainApp && config.resolvedOnboardingUseCase.includesDictation {
             hotkeyMonitor.targetKeyCode = config.dictationHotkey.keyCode
             hotkeyMonitor.start()
         }
-        indicator.hotkeyLabel = config.dictationHotkey.label
         indicator.onStopMeeting = { [weak self] in self?.stopMeetingRecording() }
         indicator.onDiscardMeeting = { [weak self] in self?.discardMeetingWithConfirmation() }
         indicator.onToggleMeetingPause = { [weak self] in self?.toggleMeetingRecordingPause() }
@@ -293,50 +295,46 @@ final class MuesliController: NSObject {
         }
 
         // Defer permission-triggering monitors until after onboarding
-        if config.hasCompletedOnboarding {
-            calendarMonitor.start()
-            startCalendarMonitoring()
-            if config.maraudersMapUnlocked { startMaraudersMapMonitoring() }
-            meetingMonitor.start()
+        if canRunMainApp && config.resolvedOnboardingUseCase.includesMeetings {
+            startMeetingFeatureMonitors(includeMaraudersMap: true)
         }
 
-        Task { [weak self] in
-            guard let self else { return }
-            let ppOption = self.runtimePostProcessorOption()
-            if #available(macOS 15, *) {
-                if let ppOption {
-                    await self.transcriptionCoordinator.setActivePostProcessor(
-                        option: ppOption,
-                        systemPrompt: self.config.postProcessorSystemPrompt
+        if canRunMainApp {
+            Task { [weak self] in
+                guard let self else { return }
+                let includesMeetings = self.config.resolvedOnboardingUseCase.includesMeetings
+                let ppOption = self.runtimePostProcessorOption()
+                if #available(macOS 15, *) {
+                    if let ppOption {
+                        await self.transcriptionCoordinator.setActivePostProcessor(
+                            option: ppOption,
+                            systemPrompt: self.config.postProcessorSystemPrompt
+                        )
+                    }
+                }
+                await self.transcriptionCoordinator.preload(
+                    backend: self.selectedBackend,
+                    enablePostProcessor: self.config.enablePostProcessor && ppOption != nil,
+                    includeMeetingHelpers: includesMeetings
+                )
+                if includesMeetings, self.selectedMeetingTranscriptionBackend != self.selectedBackend {
+                    await self.transcriptionCoordinator.preload(
+                        backend: self.selectedMeetingTranscriptionBackend,
+                        enablePostProcessor: false,
+                        includeMeetingHelpers: true
                     )
                 }
-            }
-            await self.transcriptionCoordinator.preload(
-                backend: self.selectedBackend,
-                enablePostProcessor: self.config.enablePostProcessor && ppOption != nil
-            )
-            if self.selectedMeetingTranscriptionBackend != self.selectedBackend {
-                await self.transcriptionCoordinator.preload(
-                    backend: self.selectedMeetingTranscriptionBackend,
-                    enablePostProcessor: false
-                )
-            }
-            await MainActor.run {
-                self.refreshUI()
+                await MainActor.run {
+                    self.refreshUI()
+                }
             }
         }
 
-        if !config.hasCompletedOnboarding {
+        if !canRunMainApp {
             if let progress = OnboardingProgress.load() {
-                // Start hotkey monitor when resuming past the hotkey config step (step 2).
-                // The hotkey is configured at step 2, permissions at step 3, and the
-                // single onboarding restart path resumes into the dictation test at step 4.
-                // Screen Recording may trigger that restart itself; otherwise Muesli does.
-                if progress.currentStep > 2 {
-                    hotkeyMonitor.targetKeyCode = progress.hotkeyKeyCode
-                    hotkeyMonitor.start()
-                }
                 showOnboarding(resumeFrom: progress)
+            } else if config.hasCompletedOnboarding {
+                showOnboarding(resumeFrom: onboardingProgressForPermissionRepair())
             } else {
                 showOnboarding()
             }
@@ -344,7 +342,7 @@ final class MuesliController: NSObject {
             openHistoryWindow()
         }
 
-        if config.hasCompletedOnboarding {
+        if canRunMainApp {
             PostInstallChecker.check()
         }
     }
@@ -709,7 +707,8 @@ final class MuesliController: NSObject {
             }
             await self.transcriptionCoordinator.preload(
                 backend: option,
-                enablePostProcessor: self.config.enablePostProcessor && ppOption != nil
+                enablePostProcessor: self.config.enablePostProcessor && ppOption != nil,
+                includeMeetingHelpers: self.config.resolvedOnboardingUseCase.includesMeetings
             )
             await MainActor.run {
                 if needsWarmup {
@@ -728,7 +727,11 @@ final class MuesliController: NSObject {
         }
         Task { [weak self] in
             guard let self else { return }
-            await self.transcriptionCoordinator.preload(backend: option, enablePostProcessor: false)
+            await self.transcriptionCoordinator.preload(
+                backend: option,
+                enablePostProcessor: false,
+                includeMeetingHelpers: true
+            )
             await MainActor.run {
                 self.statusBarController?.refresh()
             }
@@ -1118,6 +1121,15 @@ final class MuesliController: NSObject {
         }
     }
 
+    private func startMeetingFeatureMonitors(includeMaraudersMap: Bool) {
+        calendarMonitor.start()
+        startCalendarMonitoring()
+        if includeMaraudersMap, config.maraudersMapUnlocked {
+            startMaraudersMapMonitoring()
+        }
+        meetingMonitor.start()
+    }
+
     /// Check all upcoming calendar events (EventKit + Google) for events starting within 5 minutes.
     /// Shows a notification when the event enters the 5-minute window, and schedules a second
     /// "Meeting starting now" notification at event start time.
@@ -1261,7 +1273,6 @@ final class MuesliController: NSObject {
     func updateDictationHotkey(_ hotkey: HotkeyConfig) {
         updateConfig { $0.dictationHotkey = hotkey }
         hotkeyMonitor.configure(keyCode: hotkey.keyCode)
-        indicator.hotkeyLabel = hotkey.label
     }
 
     // MARK: - Onboarding
@@ -1270,6 +1281,87 @@ final class MuesliController: NSObject {
         let wc = OnboardingWindowController(controller: self, resumeProgress: progress)
         self.onboardingWindowController = wc
         wc.show()
+    }
+
+    @MainActor
+    func bringOnboardingToFront() {
+        onboardingWindowController?.bringToFront()
+    }
+
+    @MainActor
+    func yieldOnboardingFocusToSystemSettings() {
+        onboardingWindowController?.yieldFocusToSystemSettings()
+    }
+
+    @MainActor
+    func notifyOnboardingModelReady() {
+        guard onboardingWindowController != nil else { return }
+        SoundController.playModelReady(enabled: config.soundEnabled)
+        bringOnboardingToFront()
+    }
+
+    func continueModelPreparationAfterOnboarding(
+        _ backend: BackendOption,
+        onboardingUseCase: OnboardingUseCase,
+        initialProgress: Double?,
+        initialStatus: String?,
+        isPreparing: Bool
+    ) {
+        onboardingModelPreparationTask?.cancel()
+        updateModelPreparationStatus(
+            title: "Preparing \(backend.label)",
+            detail: initialStatus ?? "Preparing \(backend.label)...",
+            progress: initialProgress,
+            isPreparing: isPreparing,
+            isComplete: false
+        )
+
+        onboardingModelPreparationTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.downloadModelForOnboarding(
+                    backend,
+                    onboardingUseCase: onboardingUseCase
+                ) { progress, status in
+                    Task { @MainActor [weak self] in
+                        guard let self else { return }
+                        self.applyModelPreparationProgress(
+                            progress,
+                            status: status,
+                            backend: backend
+                        )
+                    }
+                }
+                await MainActor.run {
+                    self.onboardingModelPreparationTask = nil
+                    self.updateModelPreparationStatus(
+                        title: "\(backend.label) ready",
+                        detail: "Ready for transcription",
+                        progress: 1.0,
+                        isPreparing: false,
+                        isComplete: true
+                    )
+                    SoundController.playModelReady(enabled: self.config.soundEnabled)
+                    self.statusBarController?.refresh()
+                }
+            } catch is CancellationError {
+                await MainActor.run {
+                    self.onboardingModelPreparationTask = nil
+                }
+            } catch {
+                await MainActor.run {
+                    self.onboardingModelPreparationTask = nil
+                    self.updateModelPreparationStatus(
+                        title: backend.isDownloaded ? "Model setup paused" : "Download paused",
+                        detail: self.modelPreparationFailureMessage(for: backend),
+                        progress: nil,
+                        isPreparing: false,
+                        isComplete: false
+                    )
+                }
+                fputs("[muesli-native] post-onboarding model preparation failed: \(error)\n", stderr)
+            }
+        }
     }
 
     func relaunchApp() {
@@ -1302,7 +1394,10 @@ final class MuesliController: NSObject {
     /// When set, handleStop routes transcribed text to this callback instead of pasting.
     /// The floating indicator and sounds are suppressed during test mode.
     var dictationTestCallback: ((String) -> Void)?
+    var dictationTestFailureCallback: ((String) -> Void)?
     var dictationTestRecordingStarted: (() -> Void)?
+    var dictationTestBackend: BackendOption?
+    var dictationTestCohereLanguage: CohereTranscribeLanguage?
     private var dictationTestTask: Task<Void, Never>?
 
     var isDictationTestMode: Bool { dictationTestCallback != nil }
@@ -1314,7 +1409,10 @@ final class MuesliController: NSObject {
         setState(.idle)
     }
 
-    func startHotkeyMonitor() {
+    func startHotkeyMonitor(keyCode: UInt16? = nil) {
+        if let keyCode {
+            hotkeyMonitor.configure(keyCode: keyCode)
+        }
         hotkeyMonitor.start()
     }
 
@@ -1322,14 +1420,112 @@ final class MuesliController: NSObject {
         hotkeyMonitor.stop()
     }
 
-    func downloadModelForOnboarding(_ backend: BackendOption, progress: @escaping (Double, String?) -> Void) async throws {
-        progress(0.0, "Downloading \(backend.label)...")
-        await transcriptionCoordinator.preload(
+    func downloadModelForOnboarding(
+        _ backend: BackendOption,
+        onboardingUseCase: OnboardingUseCase,
+        progress: @escaping (Double, String?) -> Void
+    ) async throws {
+        let wasDownloaded = backend.isDownloaded
+        progress(
+            wasDownloaded ? 0.75 : 0.0,
+            wasDownloaded ? "Warming up \(backend.label)..." : "Downloading \(backend.label)..."
+        )
+        try await transcriptionCoordinator.preloadRequired(
             backend: backend,
             enablePostProcessor: isPostProcessorReady,
-            progress: progress
+            includeMeetingHelpers: onboardingUseCase.includesMeetings,
+            progress: { value, status in
+                if wasDownloaded,
+                   value < 0.85,
+                   status?.localizedCaseInsensitiveContains("preparing") == true {
+                    return
+                }
+                if status?.localizedCaseInsensitiveContains("download") == true {
+                    progress(value, "\(status ?? "Downloading \(backend.label)...")")
+                } else if value >= 0.9 {
+                    progress(value, status ?? "Warming up \(backend.label)...")
+                } else {
+                    progress(value, status ?? "Preparing \(backend.label)...")
+                }
+            }
         )
-        progress(1.0, nil)
+        guard backend.isDownloaded else {
+            throw NSError(
+                domain: "MuesliOnboardingModelDownload",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "\(backend.label) was not downloaded successfully."]
+            )
+        }
+        progress(1.0, "\(backend.label) ready")
+    }
+
+    private func applyModelPreparationProgress(_ progress: Double, status: String?, backend: BackendOption) {
+        let detail = status ?? "Preparing \(backend.label)..."
+        let lowercasedDetail = detail.lowercased()
+        let isPreparing = lowercasedDetail.contains("compiling")
+            || lowercasedDetail.contains("warming")
+            || lowercasedDetail.contains("readying")
+
+        if isPreparing {
+            updateModelPreparationStatus(
+                title: "Preparing \(backend.label)",
+                detail: "Optimizing \(backend.label) for this Mac...",
+                progress: nil,
+                isPreparing: true,
+                isComplete: false
+            )
+            return
+        }
+
+        updateModelPreparationStatus(
+            title: "Preparing \(backend.label)",
+            detail: detail,
+            progress: progress,
+            isPreparing: false,
+            isComplete: false
+        )
+    }
+
+    private func updateModelPreparationStatus(
+        title: String,
+        detail: String?,
+        progress: Double?,
+        isPreparing: Bool,
+        isComplete: Bool
+    ) {
+        appState.modelPreparationTitle = title
+        appState.modelPreparationDetail = detail
+        appState.modelPreparationProgress = progress.map { min(max($0, 0), 1) }
+        appState.isModelPreparingAfterDownload = isPreparing
+        appState.modelPreparationIsComplete = isComplete
+        if isComplete {
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(5))
+                guard appState.modelPreparationTitle == title,
+                      appState.modelPreparationIsComplete else { return }
+                appState.modelPreparationTitle = nil
+                appState.modelPreparationDetail = nil
+                appState.modelPreparationProgress = nil
+                appState.isModelPreparingAfterDownload = false
+                appState.modelPreparationIsComplete = false
+            }
+        } else if !isPreparing && progress == nil {
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(12))
+                guard appState.modelPreparationTitle == title,
+                      appState.modelPreparationProgress == nil,
+                      !appState.isModelPreparingAfterDownload,
+                      !appState.modelPreparationIsComplete else { return }
+                appState.modelPreparationTitle = nil
+                appState.modelPreparationDetail = nil
+            }
+        }
+    }
+
+    private func modelPreparationFailureMessage(for backend: BackendOption) -> String {
+        backend.isDownloaded
+            ? "Model setup failed. Restart Muesli or retry from Models."
+            : "Download failed. Check your connection and retry."
     }
 
     func completeOnboarding(
@@ -1337,6 +1533,7 @@ final class MuesliController: NSObject {
         backend: BackendOption,
         cohereLanguage: CohereTranscribeLanguage,
         hotkey: HotkeyConfig,
+        onboardingUseCase: OnboardingUseCase,
         summaryBackend: MeetingSummaryBackendOption?,
         apiKey: String?
     ) {
@@ -1349,6 +1546,7 @@ final class MuesliController: NSObject {
             config.meetingTranscriptionBackend = backend.backend
             config.meetingTranscriptionModel = backend.model
             config.dictationHotkey = hotkey
+            config.onboardingUseCase = onboardingUseCase.rawValue
             if let summaryBackend {
                 config.meetingSummaryBackend = summaryBackend.backend
             }
@@ -1363,21 +1561,36 @@ final class MuesliController: NSObject {
         }
         selectBackend(backend)
         hotkeyMonitor.configure(keyCode: hotkey.keyCode)
-        hotkeyMonitor.start()
         dictationTestCallback = nil
+        dictationTestFailureCallback = nil
         dictationTestRecordingStarted = nil
-
-        // Start monitors that were deferred during onboarding
-        calendarMonitor.start()
-        startCalendarMonitoring()
-        meetingMonitor.start()
+        dictationTestBackend = nil
+        dictationTestCohereLanguage = nil
 
         onboardingWindowController?.close()
         onboardingWindowController = nil
-        openHistoryWindow()
+        if hasRequiredStartupPermissions(for: onboardingUseCase) {
+            if onboardingUseCase.includesDictation {
+                hotkeyMonitor.start()
+            }
+            // Start monitors that were deferred during onboarding
+            if onboardingUseCase.includesMeetings {
+                startMeetingFeatureMonitors(includeMaraudersMap: false)
+            }
+            TelemetryDeck.signal("onboarding.completed", parameters: [
+                "use_case": onboardingUseCase.rawValue,
+                "dictation_selected": onboardingUseCase.includesDictation ? "true" : "false",
+                "meetings_selected": onboardingUseCase.includesMeetings ? "true" : "false",
+            ])
+            let completionTab = OnboardingFlow.completionTab(for: onboardingUseCase)
+            openHistoryWindow(tab: completionTab)
+        } else {
+            showOnboarding(resumeFrom: onboardingProgressForPermissionRepair())
+        }
     }
 
     @objc func openHistoryWindow() {
+        guard ensureBasicDictationPermissionsBeforeDashboard() else { return }
         showActiveMeetingDocumentIfNeeded()
         presentHistoryWindow()
     }
@@ -1389,11 +1602,58 @@ final class MuesliController: NSObject {
     }
 
     func openHistoryWindow(tab: DashboardTab) {
+        guard ensureBasicDictationPermissionsBeforeDashboard() else { return }
+        presentHistoryWindow(tab: tab)
+    }
+
+    private func presentHistoryWindow(tab: DashboardTab) {
         appState.selectedTab = tab
         syncAppState()
         DispatchQueue.main.async { [weak self] in
             self?.historyWindowController?.show()
         }
+    }
+
+    private func hasRequiredStartupPermissions(for useCase: OnboardingUseCase) -> Bool {
+        if !useCase.includesDictation {
+            return AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        }
+        return OnboardingPermissionGate.hasRequiredDictationPermissions(
+            OnboardingPermissionSnapshot(
+                microphone: AVCaptureDevice.authorizationStatus(for: .audio) == .authorized,
+                accessibility: AXIsProcessTrusted(),
+                inputMonitoring: CGPreflightListenEventAccess(),
+                systemAudio: false,
+                screenRecording: false
+            )
+        )
+    }
+
+    private func ensureBasicDictationPermissionsBeforeDashboard() -> Bool {
+        guard hasRequiredStartupPermissions(for: config.resolvedOnboardingUseCase) else {
+            historyWindowController?.close()
+            if let progress = OnboardingProgress.load() {
+                showOnboarding(resumeFrom: progress)
+            } else {
+                showOnboarding(resumeFrom: onboardingProgressForPermissionRepair())
+            }
+            return false
+        }
+        return true
+    }
+
+    private func onboardingProgressForPermissionRepair() -> OnboardingProgress {
+        OnboardingProgress(
+            currentStep: OnboardingView.permissionsStep,
+            userName: config.userName,
+            selectedBackendKey: config.sttBackend,
+            selectedModelKey: config.sttModel,
+            selectedCohereLanguageCode: config.cohereLanguage,
+            hotkeyKeyCode: config.dictationHotkey.keyCode,
+            hotkeyLabel: config.dictationHotkey.label,
+            systemAudioRequested: false,
+            onboardingUseCaseRawValue: config.onboardingUseCase
+        )
     }
 
     func showMeetingsHome(folderID: Int64? = nil) {
@@ -2207,8 +2467,9 @@ final class MuesliController: NSObject {
     }
 
     func startForegroundMeetingRecording(title: String = "Meeting", calendarEventID: String? = nil) {
+        guard ensureBasicDictationPermissionsBeforeDashboard() else { return }
         startMeetingRecording(title: title, calendarEventID: calendarEventID, openDocument: true)
-        presentHistoryWindow()
+        presentHistoryWindow(tab: .meetings)
     }
 
     func startMeetingRecording(title: String = "Meeting", calendarEventID: String? = nil, openDocument: Bool = false) {
@@ -3138,7 +3399,10 @@ final class MuesliController: NSObject {
             try recorder.start()
             dictationStartedAt = Date()
             capturedDictationContext = nil
-            if config.enableScreenContext && config.enablePostProcessor && !isDictationTestMode {
+            if config.enableScreenContext
+                && CGPreflightScreenCaptureAccess()
+                && config.enablePostProcessor
+                && !isDictationTestMode {
                 capturedDictationContext = DictationContextCapture.capture()
             }
             if !isDictationTestMode {
@@ -3229,7 +3493,10 @@ final class MuesliController: NSObject {
             try recorder.start()
             dictationStartedAt = Date()
             capturedDictationContext = nil
-            if config.enableScreenContext && config.enablePostProcessor && !isDictationTestMode {
+            if config.enableScreenContext
+                && CGPreflightScreenCaptureAccess()
+                && config.enablePostProcessor
+                && !isDictationTestMode {
                 capturedDictationContext = DictationContextCapture.capture()
             }
             indicator.powerProvider = { [weak self] in
@@ -3314,6 +3581,8 @@ final class MuesliController: NSObject {
 
         setState(.transcribing)
         let isTestMode = isDictationTestMode
+        let transcriptionBackend = isTestMode ? (dictationTestBackend ?? selectedBackend) : selectedBackend
+        let transcriptionLanguage = isTestMode ? (dictationTestCohereLanguage ?? config.resolvedCohereLanguage) : config.resolvedCohereLanguage
         let task = Task { [weak self] in
             guard let self else { return }
             defer {
@@ -3323,8 +3592,8 @@ final class MuesliController: NSObject {
             do {
                 let result = try await self.transcriptionCoordinator.transcribeDictation(
                     at: wavURL,
-                    backend: self.selectedBackend,
-                    cohereLanguage: self.config.resolvedCohereLanguage,
+                    backend: transcriptionBackend,
+                    cohereLanguage: transcriptionLanguage,
                     enablePostProcessor: self.isPostProcessorReady,
                     customWords: self.serializedCustomWords(),
                     appContext: self.capturedDictationContext.map { DictationContextCapture.formatForPrompt($0) }
@@ -3385,7 +3654,7 @@ final class MuesliController: NSObject {
                 fputs("[muesli-native] transcription failed: \(error)\n", stderr)
                 await MainActor.run {
                     if self.isDictationTestMode {
-                        self.dictationTestCallback?("")
+                        self.dictationTestFailureCallback?(self.userFacingDictationTestError(error))
                     }
                     self.setState(.idle)
                     self.meetingMonitor.resumeAfterCooldown()
@@ -3393,6 +3662,38 @@ final class MuesliController: NSObject {
             }
         }
         if isTestMode { dictationTestTask = task }
+    }
+
+    private func userFacingDictationTestError(_ error: Error) -> String {
+        let nsError = error as NSError
+        if nsError.domain == "MuesliTranscriptionRuntime" {
+            switch nsError.code {
+            case 1:
+                return "Nemotron requires macOS 15 or later. Choose another model to test dictation."
+            case 2:
+                return "Qwen3 ASR requires macOS 15 or later. Choose another model to test dictation."
+            case 3:
+                return "Canary Qwen requires macOS 15 or later. Choose another model to test dictation."
+            case 4:
+                return "Cohere Transcribe requires macOS 15 or later. Choose another model to test dictation."
+            default:
+                return "The selected model is not available. Choose another model and try again."
+            }
+        }
+
+        let rawMessage = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowercasedMessage = rawMessage.lowercased()
+
+        if lowercasedMessage.contains("not loaded") || lowercasedMessage.contains("loadmodels") {
+            return "The model was not ready yet. We are preparing it again, then try once more."
+        }
+        if lowercasedMessage.contains("network") || lowercasedMessage.contains("internet") || lowercasedMessage.contains("timed out") {
+            return "The model could not finish downloading. Check your connection and retry."
+        }
+        if lowercasedMessage.contains("permission") || lowercasedMessage.contains("microphone") {
+            return "Muesli could not access the microphone. Check Microphone permission and try again."
+        }
+        return "Dictation could not start. Try again in a moment."
     }
 
     // MARK: - Marauder's Map
