@@ -8,7 +8,7 @@ It is intended to serve three purposes at once:
 - make it easy to resume work without losing context
 - prepare a clean base for future beta release notes and README feature updates
 
-Last updated: `2026-04-29`
+Last updated: `2026-05-03`
 Working branch: `beta`
 Dev app: `muesli-beta.app`
 
@@ -27,6 +27,35 @@ Git workflow currently documented and aligned:
 - `main` is reserved as the stable product branch
 
 ## Incremental history
+
+### 2026-05-03
+
+This pass brought the fork back in line with the author's latest upstream
+native changes, validated the result in `beta-mergework`, and published that
+validated integration as the new `beta` baseline.
+
+#### Upstream integration promoted through mergework
+
+- `vendor` was advanced to upstream `main` at `d21e0f7`
+- the upstream merge was rehearsed in `beta-mergework` before publication
+- conflicts were resolved there first so the fork's daily branch could stay clean
+- the resulting merge keeps the current fork behavior while absorbing the newer upstream app changes
+
+#### Fork-specific behavior preserved and aligned
+
+- the fork's `ThemePreset` model changes were preserved alongside the author's newer onboarding use case work
+- the fork's settings structure and localization paths were kept while adopting the author's better screen-recording permission UX
+- the sidebar kept the fork's current labels while gaining the upstream model-preparation status block
+- the quick-note meeting detail flow now uses the author's preferred compact stop button treatment
+- the meeting-record CTA was simplified to `Record` / `Grabar` while keeping the stronger orange upstream visual language
+
+#### Beta app and validation cleanup
+
+- the daily test app name is now consistently documented and built as `muesli-beta.app`
+- `scripts/beta-test.sh` now cleans up the legacy `MuesliBeta.app` install if it still exists
+- local beta builds now fall back cleanly to an unsigned install when the expected codesign identity is not present on this machine
+- `MeetingHookIntegrationTests` was corrected so the failure case now exercises the intended missing-live-meeting path instead of relying on stale duplicate-calendar-id assumptions
+- the focused `MeetingHookIntegrationTests` suite passes again on top of the updated beta integration
 
 ### 2026-04-29
 
