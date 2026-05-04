@@ -340,6 +340,7 @@ enum L10nKey {
     case dictionaryAdd
     case dictionarySave
     case shortcutsTitle
+    case syncTitle
     case shortcutsDescription
     case shortcutsPushToTalk
     case shortcutsPushToTalkHint
@@ -1005,6 +1006,8 @@ enum L10n {
             return "Save"
         case .shortcutsTitle:
             return "Shortcuts"
+        case .syncTitle:
+            return "Sync"
         case .shortcutsDescription:
             return "Choose your preferred shortcut for dictation."
         case .shortcutsPushToTalk:
@@ -1715,6 +1718,8 @@ enum L10n {
             return "Guardar"
         case .shortcutsTitle:
             return "Atajos"
+        case .syncTitle:
+            return "Sincronización"
         case .shortcutsDescription:
             return "Elige tu atajo preferido para dictado."
         case .shortcutsPushToTalk:

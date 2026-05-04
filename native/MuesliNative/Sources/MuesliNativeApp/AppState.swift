@@ -20,6 +20,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     case dictionary
     case models
     case shortcuts
+    case sync
 
     var id: String { rawValue }
 }
@@ -102,6 +103,18 @@ final class AppState {
     // Navigation
     var selectedTab: DashboardTab = .meetings
     var selectedSettingsPane: SettingsPane = .general
+
+    // Supabase sync
+    var supabaseSyncConfigured: Bool = false
+    var isSupabaseAuthenticated: Bool = false
+    var supabaseEmail: String?
+    var supabaseSyncStatusText: String = ""
+    var supabaseSyncErrorText: String?
+    var supabaseLastSyncAt: Date?
+    var supabaseAwaitingEmailConfirmation: Bool = false
+    var syncedFolderCount: Int = 0
+    var syncedDictationCount: Int = 0
+    var syncedMeetingCount: Int = 0
 
     // Computed
     var selectedMeeting: MeetingRecord? {

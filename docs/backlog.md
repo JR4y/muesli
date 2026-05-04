@@ -55,6 +55,7 @@ Completed or largely completed:
 - Manual-note editor toolbar commands were stabilized so formatting actions work reliably after button clicks
 - Upstream Slack meeting detection hardening and stronger meeting-prompt suppression are now integrated into `beta`
 - `Coming Up` now caps visible upcoming meetings to 5 for the moment, pending a more intentional pagination/expansion design
+- Multi-Mac sync via Supabase (project `molli`, `eu-west-1`), scoped to `muesli-beta.app`. New tables, triggers, and tombstones live in `MuesliCore/Sync/`; auth, REST client, and orchestrator live in `MuesliNativeApp/Sync/`. Configured per build via `config/Supabase.xcconfig` (gitignored, with committed `.example` template). Settings → Sync pane handles signup, signin, manual sync, and surfaces status. Same-day beta fixes covered first-sync metadata backfill for existing local data, PostgREST cursor timestamp normalization, and safe parent-before-child upload ordering for nested folders. See `docs/progress.md` 2026-05-04 entry for the implementation map and `docs/plans/2026-05-04-supabase-sync-corrected-plan.md` for the design rationale.
 
 Known limitation:
 

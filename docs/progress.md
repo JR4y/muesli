@@ -8,7 +8,7 @@ It is intended to serve three purposes at once:
 - make it easy to resume work without losing context
 - prepare a clean base for future beta release notes and README feature updates
 
-Last updated: `2026-05-03`
+Last updated: `2026-05-04`
 Working branch: `beta`
 Dev app: `muesli-beta.app`
 
@@ -27,6 +27,371 @@ Git workflow currently documented and aligned:
 - `main` is reserved as the stable product branch
 
 ## Incremental history
+
+### 2026-05-04
+
+This pass implemented multi-Mac sync via Supabase, following the plan in
+`docs/plans/2026-05-04-supabase-sync-corrected-plan.md`. Sync is currently
+scoped to `muesli-beta.app` only (production and dev variants stay
+unaffected because each variant has its own data directory and Keychain
+service namespaced by `Bundle.main.bundleIdentifier`).
+
+#### Supabase project provisioned
+
+- New Supabase project `molli` created under `JR4y's Org` in `eu-west-1`
+  (West EU / Ireland), free tier
+- Reference id: `pjjwmekbrchaytipxtjk`
+- Existing project `facturador` was paused to free a free-tier slot
+- Initial migration lives in
+  `supabase/migrations/20260504000000_init_sync_schema.sql` and was applied
+  via `supabase db push`
+- Tables created: `meeting_folders`, `meetings`, `dictations`,
+  `user_preferences`. Each business table carries `client_updated_at`,
+  `server_updated_at`, `remote_version`, `last_writer_device_id` and
+  `deleted_at` (soft delete)
+- A Postgres trigger `bump_remote_version` increments `remote_version` and
+  updates `server_updated_at` on every UPDATE, on all four tables
+- RLS is enabled on every table, with a `*_own` policy that restricts each
+  row to `auth.uid() = user_id`
+- Indexes: `(user_id, server_updated_at, id)` per table, plus
+  `(parent_folder_id)` on folders, `(folder_id)` on meetings, and a
+  partial index on `meetings(user_id, calendar_event_id)` when
+  `calendar_event_id IS NOT NULL`
+
+#### Build-time credential injection
+
+- New committed template: `config/Supabase.xcconfig.example`
+- New gitignored local file: `config/Supabase.xcconfig` (KEY=VALUE format
+  with `MUESLI_SUPABASE_URL`, `MUESLI_SUPABASE_ANON_KEY`, and
+  `MUESLI_SUPABASE_DB_PASSWORD`)
+- `.gitignore` updated to ignore `config/Supabase.xcconfig` and
+  `supabase/.temp/`
+- `scripts/build_native_app.sh` parses the xcconfig before generating
+  `Info.plist` and embeds two new keys inside the bundle:
+  - `MuesliSupabaseURL`
+  - `MuesliSupabaseAnonKey`
+- A build with the file missing is still valid — the sync stack just stays
+  inert and the Sync settings pane shows a "not configured" message
+- The anon/publishable key is safe to ship in the bundle because RLS
+  enforces per-user access; the `service_role` key never enters the
+  client
+
+#### Local sync layer (MuesliCore)
+
+New files inside `native/MuesliNative/Sources/MuesliCore/Sync/`:
+
+- `LocalSyncModels.swift` — shared types (`SyncEntityType`,
+  `SyncMetadataRecord`, `SyncTombstoneRecord`, `SyncCursor`,
+  `SyncPreferencesSnapshot`, `SyncPreferencesState`, `RemoteFolderPayload`,
+  `RemoteDictationPayload`, `RemoteMeetingPayload`, `RemotePreferencesPayload`,
+  `DirtyDictation`, `DirtyMeeting`, `DirtyFolder`, `SyncStateKey`,
+  `SyncTimestamp`)
+- `LocalSyncRepository.swift` — sole owner of the sync auxiliary tables
+  and triggers. It opens its own SQLite connection but shares the same
+  `muesli.db` file as `DictationStore`. The schema is unchanged at the
+  business level: no new columns added to `dictations`, `meetings`, or
+  `meeting_folders`.
+- `SyncPayloadHasher.swift` — canonical JSON + SHA-256 hashing of the
+  sync payload for each entity type. Used to detect "different version,
+  identical content" no-op conflicts.
+
+Auxiliary tables created lazily by `LocalSyncRepository.migrateIfNeeded()`:
+
+- `sync_metadata` — one row per `(entity_type, local_id)`. Tracks
+  `remote_id`, `client_updated_at`, `remote_version`,
+  `last_seen_server_updated_at`, `last_payload_hash`, `dirty`,
+  `last_writer_device_id`. UNIQUE on `(entity_type, remote_id)`.
+- `sync_tombstones` — one row per local delete, even if the row was
+  never synced. Stores `client_deleted_at`, `last_known_remote_version`,
+  and `dirty`.
+- `sync_state` — generic key/value store for cursors, device id, and
+  preferences sync state.
+
+Same-day beta hardening after first real multi-Mac test added three
+important operational fixes:
+
+- `migrateIfNeeded()` now backfills missing `sync_metadata` rows for
+  pre-existing local `dictations`, `meetings`, and `meeting_folders`, so a
+  first sign-in on an already-used beta install uploads the existing local
+  history instead of only rows created after sync shipped.
+- Supabase cursor timestamps that come back as `...+00:00` are normalized
+  before building PostgREST cursor filters. This fixes the
+  `Supabase 400: invalid input syntax for type timestamp with time zone`
+  failure seen after the first successful page download.
+- Folder uploads now defer child folders whose local parent exists but does
+  not yet have a `remote_id`, then re-read dirty folders after the parent
+  syncs. Without that, first-sync bootstrap could upload nested folders as
+  roots and then reapply the broken root state back into SQLite on the next
+  download cycle.
+
+Triggers installed on the existing business tables:
+
+- `AFTER INSERT` and `AFTER UPDATE` on each of `dictations`, `meetings`,
+  `meeting_folders` upsert into `sync_metadata` with `dirty = 1` and a
+  fresh `client_updated_at` derived from
+  `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`.
+- `BEFORE DELETE` copies `remote_id` and `remote_version` from
+  `sync_metadata` into a tombstone row, even when no metadata exists yet
+  (in that case the tombstone has a `NULL` remote_id and is purged
+  locally without a remote round-trip).
+- `AFTER DELETE` removes the orphaned `sync_metadata` row.
+
+Important behaviour: the triggers fire during remote-applied changes too.
+`applyRemoteFolder`, `applyRemoteDictation`, and `applyRemoteMeeting` run
+inside an immediate transaction, perform the domain INSERT/UPDATE/DELETE,
+then immediately overwrite the metadata row to `dirty = 0` with the
+authoritative remote values, and clear any tombstone the BEFORE DELETE
+trigger created on a remote-driven delete. Without that final fix-up the
+remote write would look like a fresh local edit on the next cycle.
+
+Reconciliation helpers live on `LocalSyncRepository`:
+
+- `findUnmappedDictation(timestamp:rawText:appContext:)`
+- `findUnmappedMeetingByCalendar(calendarEventID:startTime:)`
+- `findUnmappedMeetingByFingerprint(startTime:durationSeconds:rawTranscript:)`
+- `findUnmappedFolder(name:parentRemoteID:)`
+- `localID(forRemoteID:entityType:)` /
+  `remoteID(forLocalID:entityType:)`
+- `unsyncedDictations(limit:)`, `unsyncedMeetings(limit:)`,
+  `unsyncedFolders(limit:)`
+
+These let the sync manager pre-bind a freshly downloaded remote row to an
+existing local row so the apply step UPDATEs instead of inserting a
+duplicate.
+
+`device_id` is generated lazily on first call to `ensureDeviceID()` and
+persisted in `sync_state`. Each app variant
+(`Muesli` / `MuesliBeta` / `MuesliDev` / `MuesliCanary`) has its own
+`muesli.db`, which means each has its own device id automatically.
+
+Tests added: `native/MuesliNative/Tests/MuesliTests/LocalSyncRepositoryTests.swift`.
+The suite covers migration idempotency, device-id stability, the
+insert/update/delete trigger contract, dirty-tombstone semantics for both
+synced and never-synced rows, `applyRemote*` cleanliness and audio-path
+preservation, parent remapping for folders, dictation-status filtering on
+meetings, cursor save/load roundtrip, preferences dirty/synced flow,
+tombstone purge behaviour, and hash stability across equivalent JSON
+payloads. It also covers the first-sync metadata backfill path and the
+UTC-offset cursor normalization helper. Tests use real temporary SQLite
+databases (no mocks) per the project preference for SQLite-backed tests
+over in-memory mocks for the sync layer.
+
+#### Auth and REST client (MuesliNativeApp)
+
+New files under `native/MuesliNative/Sources/MuesliNativeApp/Sync/`:
+
+- `SupabaseConfig.swift` — reads `MuesliSupabaseURL` and
+  `MuesliSupabaseAnonKey` from `Bundle.main`. Returns `nil` when the
+  build wasn't given an xcconfig, which keeps the rest of the stack
+  inert. Builds `/auth/v1/...` and `/rest/v1/...` URLs. The Keychain
+  service is bundle-id-namespaced
+  (`<CFBundleIdentifier>.supabase-auth`), so each variant keeps its own
+  session.
+- `SupabaseKeychainStore.swift` — generic password store on top of the
+  macOS Keychain Services. Persists refresh token, access token, expiry,
+  user id, and email. Uses `kSecUseDataProtectionKeychain = true`.
+- `SupabaseAuthManager.swift` — `@MainActor @Observable` class with
+  `signUp`, `signIn`, `signOut`, and `currentAccessToken()`. Does pure
+  REST against `/auth/v1/signup`, `/auth/v1/token?grant_type=password`,
+  and `/auth/v1/token?grant_type=refresh_token`. Restores the session
+  from Keychain at init. Refresh is idempotent via a single in-flight
+  task. A failed refresh with 400/401 calls `signOut()` so the UI can
+  surface the disconnected state. Email-confirmation-pending signup is
+  surfaced as `awaitingEmailConfirmation = true` so the UI can prompt
+  the user to confirm by email and then sign in.
+- `SupabaseRESTClient.swift` — thin PostgREST client. One method per
+  operation per entity (`selectFolders`, `upsertFolder`, `updateFolder`,
+  `fetchFolder`, etc.), plus a generic paginator that orders by
+  `(server_updated_at ASC, id ASC)` and walks the cursor with the
+  `or=(server_updated_at.gt.X, and(server_updated_at.eq.X, id.gt.Y))`
+  PostgREST pattern. Updates use optimistic concurrency via
+  `remote_version=eq.<expected>`; an empty response means a conflict and
+  the caller is expected to refetch and resolve with LWW. The client
+  retries once on 401 after asking the auth manager for a fresh token.
+
+#### Sync orchestrator (actor)
+
+`native/MuesliNative/Sources/MuesliNativeApp/Sync/SupabaseSyncManager.swift`
+is an `actor` that serializes every sync cycle. Public API:
+
+- `start()` — bootstraps the repo (idempotent migrate + ensureDeviceID),
+  starts a 5-minute heartbeat task, runs an initial sync
+- `shutdown()` — cancels every internal task; the in-flight cycle is
+  allowed to finish on its own
+- `notifyPotentialLocalDataChange()` — debounced 2s, called from
+  `MuesliController.syncAppState()`
+- `notifyPreferencesChanged()` — debounced 1s, called from
+  `MuesliController.updateConfig(_:)` only when the sync-relevant slice
+  of `AppConfig` actually changed
+- `syncNow(reason:)` — manual trigger used by the Sync settings pane
+  and post-signin/signup hooks
+
+Cycle order matches `docs/plans/2026-05-04-supabase-sync-corrected-plan.md`
+sections §13.1 / §13.2: download in the order folders → preferences →
+dictations → meetings, then upload in the order folders → dictations →
+meetings → preferences → tombstones (meetings, then dictations, then
+folders). After the cycle runs, `purgeCleanTombstones(olderThanDays: 30)`
+sweeps the local tombstone table.
+
+Conflict resolution is last-write-wins per entity:
+
+1. Hash the local payload and the remote payload with the canonical
+   serializer
+2. If the hashes match, mark the local row clean with the remote version
+   (no write at all, no false data swap)
+3. Otherwise compare `client_updated_at`. The newer side wins
+4. If the timestamps tie, the lexicographically larger `device_id` wins
+
+Reconciliation runs on download: before applying a remote payload, the
+manager checks whether any local row already matches by fingerprint
+(`timestamp + raw_text + app_context` for dictations,
+`calendar_event_id + start_time` and then transcript-based fingerprint
+for meetings, name + parent path for folders). If it finds a match, it
+calls `attachRemoteID` so the subsequent `applyRemote*` becomes an
+UPDATE on the existing row instead of inserting a duplicate.
+
+Audio paths are protected per §23 of the plan. When a remote meeting
+update lands on top of an existing local meeting, `mic_audio_path`,
+`system_audio_path` and `saved_recording_path` are intentionally left
+untouched; only the new download path inserts NULLs because we're
+materializing a row for the first time on this Mac.
+
+Tombstone uploads piggy-back on the existing upsert routes: each
+tombstone is written as a regular row with `deleted_at` set to the local
+delete timestamp, the user id from the auth manager, and the device id
+from the repo. Once the upsert succeeds, the tombstone is marked clean
+locally so the 30-day purge can eventually remove it.
+
+Heartbeat uses `Task.sleep(nanoseconds: 5 * 60 * 1_000_000_000)`. Per
+the existing CLAUDE.md note about macOS 26 App Nap behaviour for
+LSUIElement apps, the heartbeat may be delayed when the app is fully
+idle. It's a safety net only; the primary triggers are launch, signin,
+the debounced `notify*` calls, and the manual `Sync now` button.
+
+#### Preferences bridge
+
+`native/MuesliNative/Sources/MuesliNativeApp/Sync/AppConfigSyncSnapshot.swift`
+declares two extensions on `AppConfig`:
+
+- `syncPreferencesSnapshot(folderRemoteIDLookup:)` — serializes
+  `customMeetingTemplates` and `customWords` with a sorted-keys
+  JSONEncoder, copies `hiddenBuiltInTemplateIDs`,
+  `defaultMeetingTemplateID`, `autoTemplateTargetID`, and
+  `meetingTitlePrompt` verbatim, and converts `folderOrder: [Int64]`
+  into `folderOrderRemoteIDs: [String]` via the lookup. Folders without
+  a remote id yet are silently dropped from the order; they'll be
+  back-filled on a later cycle once the folder has been uploaded.
+- `applyingSyncSnapshot(_:folderLocalIDLookup:)` — produces a copy of
+  `AppConfig` where only the sync-relevant fields are replaced. Every
+  other field (`openAIAPIKey`, hotkey, model picks, onboarding state,
+  hidden calendar ids, indicator anchor, theme, etc.) is preserved as-is.
+  `folderOrderRemoteIDs` is mapped back to `[Int64]`; remote ids without
+  a local mapping are dropped.
+
+The bridge struct `SupabasePreferencesBridge` carries two
+`@MainActor @Sendable` closures (`snapshot` and `applyRemoteSnapshot`).
+They are constructed in `AppDelegate` over the live `MuesliController`.
+
+#### Controller and lifecycle integration
+
+- `AppDelegate.applicationDidFinishLaunching(_:)` now constructs the
+  full sync stack after `controller.start()`:
+  - `LocalSyncRepository(databaseURL:)` against the same path the
+    `DictationStore` is using (`MuesliPaths.defaultDatabaseURL` with
+    the variant-specific support directory)
+  - `SupabaseAuthManager`, `SupabaseSyncStateObserver`,
+    `SupabaseRESTClient` (only when the bundle is configured)
+  - `SupabasePreferencesBridge` over `MuesliController`
+  - `SupabaseSyncManager`, started via `Task { await syncManager.start() }`
+  - All four are injected back into `MuesliController` (`syncManager`,
+    `syncRepo`, `supabaseAuth`, `supabaseSyncObserver`)
+- `applicationWillTerminate(_:)` calls
+  `Task { await syncManager.shutdown() }` before the controller's own
+  shutdown, mirroring the plan's "best-effort short final sync" intent
+  (the in-flight cycle is left to drain naturally so termination is not
+  blocked)
+- `MuesliController.syncAppState()` now emits a
+  `Task { await syncManager.notifyPotentialLocalDataChange() }` at the
+  end and mirrors the auth + observer state into `AppState` so the Sync
+  settings pane stays current
+- `MuesliController.updateConfig(_:)` now diffs
+  `currentSyncPreferencesSnapshot()` before and after the mutation;
+  when the snapshot changes it calls
+  `syncRepo.markPreferencesDirty()` and
+  `Task { await syncManager.notifyPreferencesChanged() }`. Non-sync
+  config edits (API key changes, hotkey changes, etc.) do not trigger
+  sync work
+- New helpers on `MuesliController`:
+  `currentSyncPreferencesSnapshot()`,
+  `applyRemoteSyncPreferences(_:)`,
+  `supabaseSignIn(email:password:)`,
+  `supabaseSignUp(email:password:)`, `supabaseSignOut()`, and
+  `supabaseSyncNow()`
+
+#### Settings UI
+
+- `AppState` gains `case sync` in `SettingsPane` plus the mirrored
+  fields `supabaseSyncConfigured`, `isSupabaseAuthenticated`,
+  `supabaseEmail`, `supabaseAwaitingEmailConfirmation`,
+  `supabaseSyncStatusText`, `supabaseSyncErrorText`,
+  `supabaseLastSyncAt`, and the three counters
+  `syncedFolderCount` / `syncedDictationCount` / `syncedMeetingCount`
+- `SettingsView.paneTitle` and `SettingsView.paneContent` now route the
+  new `.sync` case
+- New view:
+  `native/MuesliNative/Sources/MuesliNativeApp/Sync/SyncSettingsView.swift`.
+  Shows three states:
+  - "Sync is not configured for this build" when the xcconfig wasn't
+    embedded
+  - Email + password fields with `Sign in` and `Create account`
+    buttons when not authenticated; surfaces the
+    `Check your email to confirm` notice when signup returns no session
+  - A signed-in card with the user email, a `Sign out` button, three
+    counters, a `Sync now` button, the relative-date last-sync label,
+    the live status text, and any error text
+- `L10n.swift` gains a single new key `syncTitle` with localized
+  strings for English ("Sync") and Spanish ("Sincronización")
+
+#### Privacy boundaries reinforced in code
+
+The fields the plan lists as "must not leave the device" are not
+referenced anywhere in the sync stack. Specifically the upload payloads
+never include `openAIAPIKey`, `openRouterAPIKey`, ChatGPT tokens, Google
+Calendar tokens, hotkey config, model picks, indicator/window state,
+onboarding flags, `hiddenLocalCalendarIDs`, `hiddenCalendarEventIDs`,
+permission flags, `mic_audio_path`, `system_audio_path`,
+`saved_recording_path`, or any other filesystem path. The
+`SyncPreferencesSnapshot` is intentionally narrow.
+
+#### Live meetings excluded from upload
+
+Meetings in `recording` or `processing` status are filtered out of
+`dirtyMeetings` and `unsyncedMeetings` SQL. They become eligible the
+moment they transition to `completed`, `note_only`, or `failed`.
+
+#### Test results
+
+`swift test --package-path native/MuesliNative` was used throughout the
+implementation. The new `LocalSyncRepository` suite was added to the
+existing test base; the full run finished with all suites green (the
+pre-existing `MeetingNotificationController` non-sendable warning is
+unchanged). Sync-specific tests use real temporary SQLite databases
+under `FileManager.default.temporaryDirectory`, never mocks.
+
+#### Manual follow-up the user still owns
+
+- Decide on the `Confirm email` toggle in the Supabase dashboard under
+  Authentication → Providers → Email. The code handles either choice;
+  OFF is more convenient for personal multi-Mac sync.
+- Build the beta variant with `./scripts/beta-test.sh` (or the regular
+  `./scripts/build_native_app.sh`) from a checkout that has
+  `config/Supabase.xcconfig` populated. The sync stack stays inert
+  otherwise.
+- Sign up on the first Mac, sign in on the second Mac, watch data
+  reconcile.
+- Back up the Postgres password from `config/Supabase.xcconfig` (it
+  isn't in git) somewhere durable, e.g. 1Password. It's only needed to
+  run future `supabase db push` migrations from the CLI.
 
 ### 2026-05-03
 

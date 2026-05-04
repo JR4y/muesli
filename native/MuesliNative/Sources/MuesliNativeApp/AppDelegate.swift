@@ -7,6 +7,7 @@ import MuesliCore
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var controller: MuesliController?
+    private var supabaseSyncManager: SupabaseSyncManager?
     private(set) var updaterController: SPUStandardUpdaterController?
     private let sparkleUpdateDelegate = SparkleUpdateDelegate()
 
@@ -34,6 +35,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             self.controller = controller
             controller.start()
+
+            // Bootstrap Supabase sync. If the build was made without
+            // config/Supabase.xcconfig present, the auth manager and REST
+            // client are inert (auth.isConfigured == false) and the Sync
+            // settings pane shows a "not configured" state.
+            let dbURL = MuesliPaths.defaultDatabaseURL(appName: AppIdentity.supportDirectoryName)
+            let syncRepo = LocalSyncRepository(databaseURL: dbURL)
+            do {
+                try syncRepo.migrateIfNeeded()
+            } catch {
+                fputs("[muesli-sync] failed to migrate sync schema: \(error)\n", stderr)
+            }
+            controller.syncRepo = syncRepo
+
+            let supabaseConfig = SupabaseConfig.resolve()
+            let auth = SupabaseAuthManager(config: supabaseConfig)
+            controller.supabaseAuth = auth
+
+            let observer = SupabaseSyncStateObserver()
+            controller.supabaseSyncObserver = observer
+
+            let rest: SupabaseRESTClient?
+            if let supabaseConfig {
+                rest = SupabaseRESTClient(config: supabaseConfig, auth: auth)
+            } else {
+                rest = nil
+            }
+
+            let bridge = SupabasePreferencesBridge(
+                snapshot: { [weak controller] in
+                    controller?.currentSyncPreferencesSnapshot() ?? .empty
+                },
+                applyRemoteSnapshot: { [weak controller] snapshot in
+                    controller?.applyRemoteSyncPreferences(snapshot)
+                }
+            )
+
+            let syncManager = SupabaseSyncManager(
+                repo: syncRepo,
+                auth: auth,
+                rest: rest,
+                preferencesBridge: bridge,
+                observer: observer
+            )
+            self.supabaseSyncManager = syncManager
+            controller.syncManager = syncManager
+            Task { await syncManager.start() }
         } catch {
             let alert = NSAlert()
             alert.messageText = "\(AppIdentity.displayName) failed to start"
@@ -44,6 +92,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        if let syncManager = supabaseSyncManager {
+            Task { await syncManager.shutdown() }
+        }
         controller?.shutdown()
     }
 

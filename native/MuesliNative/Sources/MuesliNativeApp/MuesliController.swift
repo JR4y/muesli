@@ -106,6 +106,11 @@ final class MuesliController: NSObject {
 
     let appState = AppState()
 
+    var syncManager: SupabaseSyncManager?
+    var syncRepo: LocalSyncRepository?
+    var supabaseAuth: SupabaseAuthManager?
+    var supabaseSyncObserver: SupabaseSyncStateObserver?
+
     private(set) var config: AppConfig
     private(set) var selectedBackend: BackendOption
     private(set) var selectedMeetingTranscriptionBackend: BackendOption
@@ -575,6 +580,93 @@ final class MuesliController: NSObject {
         if appState.hiddenCalendarEventIDs != persisted {
             appState.hiddenCalendarEventIDs = persisted
         }
+        // Notify sync subsystem of potential local data changes (debounced).
+        if let syncManager {
+            Task { await syncManager.notifyPotentialLocalDataChange() }
+        }
+        // Mirror Supabase sync state into AppState for the Sync settings pane.
+        if let supabaseAuth {
+            appState.supabaseSyncConfigured = supabaseAuth.isConfigured
+            appState.isSupabaseAuthenticated = supabaseAuth.isAuthenticated
+            appState.supabaseEmail = supabaseAuth.email
+            appState.supabaseAwaitingEmailConfirmation = supabaseAuth.awaitingEmailConfirmation
+        } else {
+            appState.supabaseSyncConfigured = false
+            appState.isSupabaseAuthenticated = false
+        }
+        if let observer = supabaseSyncObserver {
+            appState.supabaseLastSyncAt = observer.lastSyncAt
+            appState.supabaseSyncErrorText = observer.lastErrorMessage
+            appState.supabaseSyncStatusText = Self.statusText(for: observer.status)
+            appState.syncedFolderCount = observer.syncedFolderCount
+            appState.syncedDictationCount = observer.syncedDictationCount
+            appState.syncedMeetingCount = observer.syncedMeetingCount
+        }
+    }
+
+    private static func statusText(for status: SupabaseSyncStatus) -> String {
+        switch status {
+        case .idle: return "Idle"
+        case .syncing(let reason): return "Syncing… (\(reason))"
+        case .error(let message): return "Error: \(message)"
+        case .waitingForAuth: return "Waiting for sign in"
+        }
+    }
+
+    func supabaseSignIn(email: String, password: String) async throws {
+        guard let auth = supabaseAuth else { return }
+        try await auth.signIn(email: email, password: password)
+        syncAppState()
+        if let syncManager {
+            await syncManager.syncNow(reason: "post-signin")
+            syncAppState()
+        }
+    }
+
+    func supabaseSignUp(email: String, password: String) async throws {
+        guard let auth = supabaseAuth else { return }
+        try await auth.signUp(email: email, password: password)
+        syncAppState()
+        if let syncManager, auth.isAuthenticated {
+            await syncManager.syncNow(reason: "post-signup")
+            syncAppState()
+        }
+    }
+
+    func supabaseSignOut() {
+        supabaseAuth?.signOut()
+        syncAppState()
+    }
+
+    func supabaseSyncNow() async {
+        guard let syncManager else { return }
+        await syncManager.syncNow(reason: "manual")
+        syncAppState()
+    }
+
+    /// Snapshot of the sync-relevant slice of `AppConfig`. Used by
+    /// `SupabasePreferencesBridge` to read state without exposing AppConfig
+    /// to the actor-isolated sync manager.
+    func currentSyncPreferencesSnapshot() -> SyncPreferencesSnapshot {
+        let lookup: (Int64) -> String? = { [weak self] localID in
+            guard let repo = self?.syncRepo else { return nil }
+            return (try? repo.remoteID(forLocalID: localID, entityType: .folder)) ?? nil
+        }
+        return config.syncPreferencesSnapshot(folderRemoteIDLookup: lookup)
+    }
+
+    /// Applies a remote preferences snapshot to `AppConfig` (sync fields only)
+    /// and persists. Sync metadata (`preferences_dirty=false`) is updated by
+    /// the sync manager's `applyRemotePreferencesState` call separately.
+    func applyRemoteSyncPreferences(_ snapshot: SyncPreferencesSnapshot) {
+        let lookup: (String) -> Int64? = { [weak self] remoteID in
+            guard let repo = self?.syncRepo else { return nil }
+            return (try? repo.localID(forRemoteID: remoteID, entityType: .folder)) ?? nil
+        }
+        config = config.applyingSyncSnapshot(snapshot, folderLocalIDLookup: lookup)
+        configStore.save(config)
+        appState.config = config
+        statusBarController?.refresh()
     }
 
     private func aggregatedFolderCounts(directCounts: [Int64: Int], folders: [MeetingFolder]) -> [Int64: Int] {
@@ -653,8 +745,18 @@ final class MuesliController: NSObject {
     }
 
     func updateConfig(_ mutate: (inout AppConfig) -> Void) {
+        let oldSyncSnapshot = currentSyncPreferencesSnapshot()
         mutate(&config)
         configStore.save(config)
+        let newSyncSnapshot = currentSyncPreferencesSnapshot()
+        if oldSyncSnapshot != newSyncSnapshot {
+            if let repo = syncRepo {
+                try? repo.markPreferencesDirty()
+            }
+            if let syncManager {
+                Task { await syncManager.notifyPreferencesChanged() }
+            }
+        }
         MuesliTheme.currentThemePreset = config.resolvedThemePreset
         MuesliTheme.accentOverrideHex = config.recordingColorHex == "1e1e2e" ? nil : config.recordingColorHex
         selectedBackend = BackendOption.all.first(where: {

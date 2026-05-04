@@ -26,6 +26,21 @@ DEFAULT_SIGN_IDENTITY="Developer ID Application: Pranav Hari Guruvayurappan (58W
 SIGN_IDENTITY="${MUESLI_SIGN_IDENTITY:-$DEFAULT_SIGN_IDENTITY}"
 SKIP_SIGN="${MUESLI_SKIP_SIGN:-0}"
 
+# Load Supabase sync config (gitignored). Lines like KEY=VALUE; `//` and `#`
+# comments are stripped. Missing file is fine — sync features will be inert
+# in the resulting bundle.
+SUPABASE_CONFIG_FILE="$ROOT/config/Supabase.xcconfig"
+SUPABASE_URL=""
+SUPABASE_ANON_KEY=""
+if [[ -f "$SUPABASE_CONFIG_FILE" ]]; then
+  while IFS='=' read -r key value; do
+    case "$key" in
+      MUESLI_SUPABASE_URL) SUPABASE_URL="$value" ;;
+      MUESLI_SUPABASE_ANON_KEY) SUPABASE_ANON_KEY="$value" ;;
+    esac
+  done < <(grep -E '^[A-Z_]+=' "$SUPABASE_CONFIG_FILE")
+fi
+
 mkdir -p "$DIST_DIR"
 
 set +e
@@ -131,6 +146,10 @@ cat > "$STAGED_APP_DIR/Contents/Info.plist" <<PLIST
   <string>$SPARKLE_EDKEY</string>
   <key>SUEnableAutomaticChecks</key>
   <true/>
+  <key>MuesliSupabaseURL</key>
+  <string>$SUPABASE_URL</string>
+  <key>MuesliSupabaseAnonKey</key>
+  <string>$SUPABASE_ANON_KEY</string>
 </dict>
 </plist>
 PLIST

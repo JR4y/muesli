@@ -1,0 +1,15 @@
+// Muesli Supabase sync configuration template.
+//
+// Copy this file to `config/Supabase.xcconfig` (gitignored) and fill in the
+// values for your Supabase project. The build script reads these values and
+// embeds them in Info.plist as `MuesliSupabaseURL` and `MuesliSupabaseAnonKey`.
+//
+// The anon/publishable key is safe to ship in the client bundle — it is
+// designed to be public, and RLS enforces per-user access. Never put the
+// service_role key here.
+//
+// File format: shell-sourceable KEY=VALUE pairs. Lines starting with `//` or
+// `#` are ignored.
+
+MUESLI_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+MUESLI_SUPABASE_ANON_KEY=sb_publishable_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

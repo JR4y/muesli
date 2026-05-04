@@ -57,3 +57,7 @@ context.md
 *~
 .vercel
 docs/reports/meeting-transcription-pipeline.svg
+
+# Supabase sync — local credentials (never commit)
+config/Supabase.xcconfig
+supabase/.temp/

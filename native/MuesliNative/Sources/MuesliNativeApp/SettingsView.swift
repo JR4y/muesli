@@ -279,6 +279,8 @@ struct SettingsView: View {
             return L10n.text(.sidebarModels, config: appState.config)
         case .shortcuts:
             return L10n.text(.shortcutsTitle, config: appState.config)
+        case .sync:
+            return L10n.text(.syncTitle, config: appState.config)
         }
     }
 
@@ -299,6 +301,8 @@ struct SettingsView: View {
             ModelsView(appState: appState, controller: controller)
         case .shortcuts:
             ShortcutsView(appState: appState, controller: controller)
+        case .sync:
+            settingsScrollPane { SyncSettingsView(appState: appState, controller: controller) }
         }
     }
 
