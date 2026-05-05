@@ -538,6 +538,11 @@ final class MeetingSession {
         onProgress?(.generatingTitle)
         if let liveTitle = await userEditedLiveTitle() {
             generatedTitle = liveTitle
+        } else if let calendarTitle = Self.calendarTitleCandidate(
+            originalTitle: trustedAssociatedCalendarEventTitle() ?? title,
+            calendarEventID: calendarEventID
+        ) {
+            generatedTitle = calendarTitle
         } else if let autoTitle = await MeetingSummaryClient.generateTitle(
             transcript: rawTranscript,
             config: config,
@@ -597,6 +602,12 @@ final class MeetingSession {
             systemRecordingURL: systemAudioURL,
             templateSnapshot: templateSnapshot
         )
+    }
+
+    static func calendarTitleCandidate(originalTitle: String, calendarEventID: String?) -> String? {
+        guard calendarEventID != nil else { return nil }
+        guard !originalTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return originalTitle
     }
 
     private func userEditedLiveTitle() async -> String? {
