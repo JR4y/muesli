@@ -172,6 +172,100 @@ struct DictationStoreTests {
         #expect(meeting.formattedNotes == "")
     }
 
+    @Test("merged meeting update persists transcript manual notes and status")
+    func updateMergedMeeting() throws {
+        let store = try makeStore()
+        let id = try store.createNoteOnlyMeeting(
+            title: "Quick Note",
+            calendarEventID: "evt_123",
+            startTime: Date()
+        )
+
+        try store.updateMergedMeeting(
+            id: id,
+            rawTranscript: "hello world",
+            formattedNotes: "## Summary\nMerged",
+            manualNotes: "### Quick Note\n\n- Keep this",
+            status: .completed
+        )
+
+        let meeting = try #require(try store.meeting(id: id))
+        #expect(meeting.status == .completed)
+        #expect(meeting.rawTranscript == "hello world")
+        #expect(meeting.formattedNotes == "## Summary\nMerged")
+        #expect(meeting.manualNotes == "### Quick Note\n\n- Keep this")
+        #expect(meeting.wordCount == 8)
+    }
+
+    @Test("merged source meetings stay queryable while hidden from normal lists")
+    func mergedSourceMeetingsRemainAccessible() throws {
+        let store = try makeStore()
+        let now = Date()
+
+        let targetID = try store.insertMeeting(
+            title: "Primary",
+            calendarEventID: "evt_123",
+            startTime: now,
+            endTime: now.addingTimeInterval(60),
+            rawTranscript: "target transcript",
+            formattedNotes: "## Summary\nTarget",
+            micAudioPath: nil,
+            systemAudioPath: nil
+        )
+        let sourceID = try store.insertMeeting(
+            title: "Source",
+            calendarEventID: "evt_123",
+            startTime: now.addingTimeInterval(120),
+            endTime: now.addingTimeInterval(180),
+            rawTranscript: "source transcript",
+            formattedNotes: "## Summary\nSource",
+            micAudioPath: nil,
+            systemAudioPath: nil,
+            savedRecordingPath: "/tmp/source.wav"
+        )
+
+        try store.setMeetingMergedInto(id: sourceID, mergedIntoMeetingID: targetID)
+
+        #expect(try store.recentMeetings(limit: 10).map(\.id) == [targetID])
+        #expect(try store.searchMeetings(query: "Source").isEmpty)
+        #expect(try store.meetingByCalendarEventID("evt_123")?.id == targetID)
+        #expect(try store.mergedMeetings(mergedIntoMeetingID: targetID).map(\.id) == [sourceID])
+    }
+
+    @Test("deleting a merged destination restores its hidden source meetings")
+    func deletingMergedDestinationRestoresHiddenSources() throws {
+        let store = try makeStore()
+        let now = Date()
+
+        let targetID = try store.insertMeeting(
+            title: "Primary",
+            calendarEventID: "evt_123",
+            startTime: now,
+            endTime: now.addingTimeInterval(60),
+            rawTranscript: "target transcript",
+            formattedNotes: "## Summary\nTarget",
+            micAudioPath: nil,
+            systemAudioPath: nil
+        )
+        let sourceID = try store.insertMeeting(
+            title: "Source",
+            calendarEventID: "evt_123",
+            startTime: now.addingTimeInterval(120),
+            endTime: now.addingTimeInterval(180),
+            rawTranscript: "source transcript",
+            formattedNotes: "## Summary\nSource",
+            micAudioPath: nil,
+            systemAudioPath: nil
+        )
+
+        try store.setMeetingMergedInto(id: sourceID, mergedIntoMeetingID: targetID)
+        try store.deleteMeetingRestoringMergedSources(id: targetID)
+
+        let rows = try store.recentMeetings(limit: 10)
+        #expect(rows.map(\.id) == [sourceID])
+        #expect(rows.first?.mergedIntoMeetingID == nil)
+    }
+
     @Test("manual notes update fails when the meeting row is missing")
     func updateManualNotesFailsWhenMeetingMissing() throws {
         let store = try makeStore()

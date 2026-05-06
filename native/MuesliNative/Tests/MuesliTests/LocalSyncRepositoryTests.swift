@@ -321,6 +321,48 @@ struct LocalSyncRepositoryTests {
         _ = live
     }
 
+    @Test("dirtyMeetings resolves merged destination remote id")
+    func dirtyMeetingsResolveMergedDestinationRemoteID() throws {
+        let fx = try makeFixture()
+        let targetID = try fx.store.insertMeeting(
+            title: "Target",
+            calendarEventID: nil,
+            startTime: Date(timeIntervalSince1970: 1_700_000_000),
+            endTime: Date(timeIntervalSince1970: 1_700_000_100),
+            rawTranscript: "target",
+            formattedNotes: "",
+            micAudioPath: nil,
+            systemAudioPath: nil
+        )
+        let sourceID = try fx.store.insertMeeting(
+            title: "Source",
+            calendarEventID: nil,
+            startTime: Date(timeIntervalSince1970: 1_700_000_200),
+            endTime: Date(timeIntervalSince1970: 1_700_000_300),
+            rawTranscript: "source",
+            formattedNotes: "",
+            micAudioPath: nil,
+            systemAudioPath: nil
+        )
+
+        try fx.repo.markMeetingSynced(
+            localID: targetID,
+            remoteID: "meeting-target",
+            remoteVersion: 1,
+            clientUpdatedAt: SyncTimestamp.now(),
+            serverUpdatedAt: SyncTimestamp.now(),
+            payloadHash: "h-target",
+            lastWriterDeviceID: "device-A"
+        )
+        try fx.store.setMeetingMergedInto(id: sourceID, mergedIntoMeetingID: targetID)
+
+        let dirty = try fx.repo.dirtyMeetings()
+        #expect(dirty.count == 1)
+        #expect(dirty[0].record.id == sourceID)
+        #expect(dirty[0].record.mergedIntoMeetingID == targetID)
+        #expect(dirty[0].mergedIntoMeetingRemoteID == "meeting-target")
+    }
+
     @Test("applyRemoteMeeting preserves local audio paths on update")
     func applyRemoteMeetingPreservesAudioPaths() throws {
         let fx = try makeFixture()
@@ -382,6 +424,72 @@ struct LocalSyncRepositoryTests {
 
         let dirty = try fx.repo.dirtyMeetings()
         #expect(dirty.allSatisfy { $0.record.id != id })
+    }
+
+    @Test("applyRemoteMeeting maps merged destination through remote metadata")
+    func applyRemoteMeetingMapsMergedDestination() throws {
+        let fx = try makeFixture()
+        let now = SyncTimestamp.now()
+        try fx.repo.applyRemoteMeeting(
+            RemoteMeetingPayload(
+                remoteID: "rem-target",
+                folderRemoteID: nil,
+                title: "Merged Target",
+                calendarEventID: nil,
+                calendarEventSnapshotJSON: nil,
+                startTime: "2026-05-01T10:00:00.000Z",
+                endTime: "2026-05-01T11:00:00.000Z",
+                durationSeconds: 3600,
+                rawTranscript: "target-text",
+                formattedNotes: "",
+                meetingStatus: "completed",
+                manualNotes: "",
+                wordCount: 2,
+                selectedTemplateID: nil,
+                selectedTemplateName: nil,
+                selectedTemplateKind: nil,
+                selectedTemplatePrompt: nil,
+                clientUpdatedAt: now,
+                serverUpdatedAt: now,
+                remoteVersion: 1,
+                lastWriterDeviceID: "device-B",
+                deletedAt: nil
+            )
+        )
+
+        try fx.repo.applyRemoteMeeting(
+            RemoteMeetingPayload(
+                remoteID: "rem-source",
+                folderRemoteID: nil,
+                mergedIntoMeetingRemoteID: "rem-target",
+                title: "Merged Source",
+                calendarEventID: nil,
+                calendarEventSnapshotJSON: nil,
+                startTime: "2026-05-01T12:00:00.000Z",
+                endTime: "2026-05-01T13:00:00.000Z",
+                durationSeconds: 3600,
+                rawTranscript: "source-text",
+                formattedNotes: "",
+                meetingStatus: "completed",
+                manualNotes: "",
+                wordCount: 2,
+                selectedTemplateID: nil,
+                selectedTemplateName: nil,
+                selectedTemplateKind: nil,
+                selectedTemplatePrompt: nil,
+                clientUpdatedAt: now,
+                serverUpdatedAt: now,
+                remoteVersion: 1,
+                lastWriterDeviceID: "device-B",
+                deletedAt: nil
+            )
+        )
+
+        let targetLocalID = try fx.repo.localID(forRemoteID: "rem-target", entityType: .meeting)
+        let sourceLocalID = try fx.repo.localID(forRemoteID: "rem-source", entityType: .meeting)
+        #expect(targetLocalID != nil)
+        #expect(sourceLocalID != nil)
+        #expect(try fx.store.meeting(id: sourceLocalID!)?.mergedIntoMeetingID == targetLocalID)
     }
 
     @Test("applyRemoteFolder remaps parent through sync_metadata")
@@ -563,6 +671,49 @@ struct LocalSyncRepositoryTests {
             startedAt: nil, endedAt: nil
         )
         #expect(h1 != h2)
+    }
+
+    @Test("meeting payload hash changes when merged destination changes")
+    func meetingHashDiffersForMergedDestination() {
+        let base = SyncPayloadHasher.meetingHash(
+            title: "Weekly sync",
+            calendarEventID: "evt-1",
+            calendarEventSnapshotJSON: nil,
+            startTime: "2026-05-04T10:00:00.000Z",
+            endTime: nil,
+            durationSeconds: 60,
+            rawTranscript: "hola",
+            formattedNotes: "",
+            meetingStatus: "completed",
+            manualNotes: "",
+            wordCount: 1,
+            selectedTemplateID: nil,
+            selectedTemplateName: nil,
+            selectedTemplateKind: nil,
+            selectedTemplatePrompt: nil,
+            folderRemoteID: nil,
+            mergedIntoMeetingRemoteID: nil
+        )
+        let merged = SyncPayloadHasher.meetingHash(
+            title: "Weekly sync",
+            calendarEventID: "evt-1",
+            calendarEventSnapshotJSON: nil,
+            startTime: "2026-05-04T10:00:00.000Z",
+            endTime: nil,
+            durationSeconds: 60,
+            rawTranscript: "hola",
+            formattedNotes: "",
+            meetingStatus: "completed",
+            manualNotes: "",
+            wordCount: 1,
+            selectedTemplateID: nil,
+            selectedTemplateName: nil,
+            selectedTemplateKind: nil,
+            selectedTemplatePrompt: nil,
+            folderRemoteID: nil,
+            mergedIntoMeetingRemoteID: "remote-target"
+        )
+        #expect(base != merged)
     }
 
     @Test("preferences hash is stable for equivalent JSON payloads")

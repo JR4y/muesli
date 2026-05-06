@@ -9,7 +9,7 @@ Local-first macOS app for **dictation** and **meeting transcription** on Apple S
 ## What It Does
 
 - **Dictation:** Hold hotkey → speak → release → text pasted at cursor (~0.13s with Parakeet)
-- **Meeting transcription:** Captures mic (You) + system audio (Others) → VAD-driven chunking → speaker diarization → AI-powered meeting notes
+- **Meeting transcription:** Captures mic (You) + system audio (Others) → VAD-driven chunking → lightweight live transcript path for UI → speaker diarization/post-processing for the final transcript → AI-powered meeting notes
 - **Meeting export:** Export notes or transcript as PDF (paginated US Letter) or Markdown via `MeetingExporter.swift`
 - **Screen context:** Accessibility API captures app name + text around cursor for dictation context-awareness (opt-in, off by default)
 - **7 ASR models:** Parakeet v3/v2, Whisper Small/Medium/Large Turbo, Qwen3 ASR, Nemotron Streaming
@@ -91,7 +91,9 @@ native/MuesliNative/Sources/
 │   ├── MeetingExporter.swift     # PDF/Markdown export with NSPrintOperation
 │   ├── OnboardingView.swift      # 7-step onboarding with real permission polling + dictation test
 │   ├── OnboardingProgress.swift  # Crash-safe onboarding state persistence
-│   ├── MeetingSession.swift      # Meeting lifecycle + diarization + screen context
+│   ├── MeetingSession.swift      # Meeting lifecycle + canonical final transcript pipeline + live hooks
+│   ├── MeetingLiveTranscript.swift # Live transcript pipeline, reducer, parser, display turns
+│   ├── MeetingTranscriptChatView.swift # Shared chat-style transcript renderer for live + final views
 │   ├── MeetingSummaryClient.swift # OpenAI / OpenRouter / ChatGPT summarization
 │   ├── SystemAudioRecorder.swift # ScreenCaptureKit SCStream for system audio
 │   ├── ChatGPTAuthManager.swift  # OAuth PKCE + WHAM API
@@ -186,6 +188,14 @@ Key implementation details:
 - Markdown: atomic write with metadata header (title, date, duration, word count, template)
 - NSSavePanel presented via `beginSheetModal(for:)` — never `runModal()` (deadlocks in SwiftUI)
 - File auto-opens in default app after save via `NSWorkspace.shared.open(url)`
+
+## Transcript Rendering
+
+- The final transcript source of truth remains `MeetingRecord.rawTranscript`
+- The live transcript is now a separate lightweight pipeline and can be disabled from Settings → Meetings via `enableLiveMeetingTranscript`
+- When live transcript is disabled, no live transcript UI or publication happens during recording; the final transcript pipeline still runs unchanged when the meeting stops
+- Meeting detail now renders completed transcripts in a chat-style view derived from `rawTranscript`
+- Storage and export remain plain-text transcript based; the chat view is presentation only
 
 ## Supabase Multi-Mac Sync
 
@@ -285,7 +295,7 @@ Event-driven architecture for meeting notifications:
 - **Nemotron Streaming:** English-only, best for 10s+ utterances (handsfree mode). Short dictations produce poor results.
 - **Qwen3 ASR:** 2-3s latency (autoregressive decoder). First run after launch has ~30s CoreML compilation warmup.
 - **ChatGPT OAuth:** Uses reverse-engineered WHAM API. Could break if OpenAI changes the API.
-- **Speaker diarization:** Post-processing only. Runs after meeting stops.
+- **Speaker diarization:** Post-processing only. Runs after meeting stops. Live transcript does not attempt full diarization.
 - **Screen context OCR disabled during meetings:** `CGWindowListCreateImage` conflicts with `SCStream`. AX-based context used instead. Planned fix: migrate to CoreAudio tap for system audio (see `Context/handoff-2026-04-16-coreaudio-tap-migration.md`).
 - **NSSavePanel:** Must use `beginSheetModal(for:)` in SwiftUI, never `runModal()`. `NSAttributedString(html:)` deadlocks on main thread — build attributed strings manually.
 - **App restart during onboarding:** Uses `exit(0)` via detached shell. `NSApp.terminate(nil)` inside SwiftUI animation context can crash.

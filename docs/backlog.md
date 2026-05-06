@@ -56,6 +56,8 @@ Completed or largely completed:
 - Upstream Slack meeting detection hardening and stronger meeting-prompt suppression are now integrated into `beta`
 - `Coming Up` now caps visible upcoming meetings to 5 for the moment, pending a more intentional pagination/expansion design
 - Multi-Mac sync via Supabase (project `molli`, `eu-west-1`), scoped to `muesli-beta.app`. New tables, triggers, and tombstones live in `MuesliCore/Sync/`; auth, REST client, and orchestrator live in `MuesliNativeApp/Sync/`. Configured per build via `config/Supabase.xcconfig` (gitignored, with committed `.example` template). Settings → Sync pane handles signup, signin, manual sync, and surfaces status. Same-day beta fixes covered first-sync metadata backfill for existing local data, PostgREST cursor timestamp normalization, and safe parent-before-child upload ordering for nested folders. See `docs/progress.md` 2026-05-04 entry for the implementation map and `docs/plans/2026-05-04-supabase-sync-corrected-plan.md` for the design rationale.
+- Live meeting transcript is now isolated behind a real `Settings → Meetings → Live transcript` toggle instead of being an always-on behavior
+- Meeting detail now renders the final transcript as a chat-style conversation while keeping `rawTranscript` as the storage/export source of truth
 
 Known limitation:
 
@@ -174,6 +176,7 @@ Notes:
 - meetings list now shows a subtle indicator when a note already has an associated calendar event
 - in-meeting note capture could use a more discreet mode so starting a meeting does not always force the note window open in front of the user
 - the meeting detail action area is cleaner than before, but it should still be watched in real usage to confirm the final control grouping feels stable
+- transcript viewing is now visually stronger thanks to the shared chat-style transcript UI, so the next UX work should focus more on live quality and interaction behavior than on transcript styling basics
 
 ### 6. In-meeting note handling
 
@@ -193,6 +196,23 @@ Notes:
 - this should be treated as a UX behavior change, not only a visual tweak
 - quick notes now support note-only start with an independent auto-record toggle, so the remaining problem is intrusiveness rather than missing control
 - the in-meeting notes window likely needs a broader UX pass beyond localization alone; it still feels like a rough utility surface rather than a polished live-meeting note mode
+- the new live-transcript toggle gives a practical daily-use escape hatch, but the live transcript still needs quality work to justify leaving it on all the time
+
+### 6b. Live transcript quality
+
+Goal:
+improve live transcript usefulness without regressing the already-working final transcript pipeline.
+
+Possible scope:
+
+- revisit how the 60-second VAD safety cap shapes long live bubbles
+- explore whether a short-window reconciliation step could improve `You` / `Others` grouping during live capture
+- continue refining source/time grouping now that the live lane is isolated from the final lane
+
+Notes:
+
+- the final transcript should remain canonical and post-processed
+- live transcript should keep behaving as a provisional presentation layer, not a source of truth
 
 ### 7. Meeting copilot chat
 

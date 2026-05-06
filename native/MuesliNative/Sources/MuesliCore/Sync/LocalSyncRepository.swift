@@ -365,22 +365,29 @@ public final class LocalSyncRepository {
                 me.id, me.title, me.start_time, me.duration_seconds,
                 me.raw_transcript, me.formatted_notes, me.word_count,
                 me.folder_id, me.calendar_event_id, me.mic_audio_path,
-                me.system_audio_path, me.saved_recording_path, me.meeting_status,
-                me.manual_notes, me.selected_template_id, me.selected_template_name,
+                me.system_audio_path, me.saved_recording_path,
+                me.merged_into_meeting_id, me.meeting_status, me.manual_notes,
+                me.selected_template_id, me.selected_template_name,
                 me.selected_template_kind, me.selected_template_prompt,
                 me.calendar_event_snapshot,
                 m.remote_id, m.client_updated_at, m.remote_version,
                 m.last_seen_server_updated_at, m.last_payload_hash,
                 m.dirty, m.last_writer_device_id,
-                fm.remote_id AS folder_remote_id
+                fm.remote_id AS folder_remote_id,
+                mm.remote_id AS merged_into_meeting_remote_id
             FROM meetings me
             JOIN sync_metadata m
                 ON m.entity_type = 'meeting' AND m.local_id = me.id
             LEFT JOIN sync_metadata fm
                 ON fm.entity_type = 'folder' AND fm.local_id = me.folder_id
+            LEFT JOIN sync_metadata mm
+                ON mm.entity_type = 'meeting' AND mm.local_id = me.merged_into_meeting_id
             WHERE m.dirty = 1
               AND me.meeting_status NOT IN ('recording', 'processing')
-            ORDER BY m.client_updated_at ASC, me.id ASC
+            ORDER BY
+                CASE WHEN me.merged_into_meeting_id IS NULL THEN 0 ELSE 1 END ASC,
+                m.client_updated_at ASC,
+                me.id ASC
             LIMIT ?
             """
             var stmt: OpaquePointer?
@@ -394,16 +401,24 @@ public final class LocalSyncRepository {
                 let metadata = SyncMetadataRecord(
                     entityType: .meeting,
                     localID: record.id,
-                    remoteID: optionalStringColumn(stmt, 19),
-                    clientUpdatedAt: stringColumn(stmt, 20),
-                    remoteVersion: sqlite3_column_int64(stmt, 21),
-                    lastSeenServerUpdatedAt: optionalStringColumn(stmt, 22),
-                    lastPayloadHash: optionalStringColumn(stmt, 23),
-                    dirty: sqlite3_column_int(stmt, 24) != 0,
-                    lastWriterDeviceID: optionalStringColumn(stmt, 25)
+                    remoteID: optionalStringColumn(stmt, 20),
+                    clientUpdatedAt: stringColumn(stmt, 21),
+                    remoteVersion: sqlite3_column_int64(stmt, 22),
+                    lastSeenServerUpdatedAt: optionalStringColumn(stmt, 23),
+                    lastPayloadHash: optionalStringColumn(stmt, 24),
+                    dirty: sqlite3_column_int(stmt, 25) != 0,
+                    lastWriterDeviceID: optionalStringColumn(stmt, 26)
                 )
-                let folderRemoteID = optionalStringColumn(stmt, 26)
-                result.append(DirtyMeeting(metadata: metadata, record: record, folderRemoteID: folderRemoteID))
+                let folderRemoteID = optionalStringColumn(stmt, 27)
+                let mergedIntoMeetingRemoteID = optionalStringColumn(stmt, 28)
+                result.append(
+                    DirtyMeeting(
+                        metadata: metadata,
+                        record: record,
+                        folderRemoteID: folderRemoteID,
+                        mergedIntoMeetingRemoteID: mergedIntoMeetingRemoteID
+                    )
+                )
             }
         }
         return result
@@ -794,6 +809,16 @@ public final class LocalSyncRepository {
                 } else {
                     folderLocalID = nil
                 }
+                let mergedIntoMeetingLocalID: Int64?
+                if let mergedIntoMeetingRemoteID = payload.mergedIntoMeetingRemoteID {
+                    mergedIntoMeetingLocalID = try localID(
+                        forRemoteID: mergedIntoMeetingRemoteID,
+                        entityType: .meeting,
+                        db: db
+                    )
+                } else {
+                    mergedIntoMeetingLocalID = nil
+                }
 
                 let existingLocalID = try localID(forRemoteID: payload.remoteID, entityType: .meeting, db: db)
 
@@ -813,11 +838,17 @@ public final class LocalSyncRepository {
                         localID: existingLocalID,
                         payload: payload,
                         folderLocalID: folderLocalID,
+                        mergedIntoMeetingLocalID: mergedIntoMeetingLocalID,
                         db: db
                     )
                     localID = existingLocalID
                 } else {
-                    localID = try insertMeeting(payload: payload, folderLocalID: folderLocalID, db: db)
+                    localID = try insertMeeting(
+                        payload: payload,
+                        folderLocalID: folderLocalID,
+                        mergedIntoMeetingLocalID: mergedIntoMeetingLocalID,
+                        db: db
+                    )
                 }
 
                 let hash = SyncPayloadHasher.meetingHash(
@@ -836,7 +867,8 @@ public final class LocalSyncRepository {
                     selectedTemplateName: payload.selectedTemplateName,
                     selectedTemplateKind: payload.selectedTemplateKind,
                     selectedTemplatePrompt: payload.selectedTemplatePrompt,
-                    folderRemoteID: payload.folderRemoteID
+                    folderRemoteID: payload.folderRemoteID,
+                    mergedIntoMeetingRemoteID: payload.mergedIntoMeetingRemoteID
                 )
                 try writeMetadata(
                     entityType: .meeting,
@@ -926,8 +958,9 @@ public final class LocalSyncRepository {
                 me.id, me.title, me.start_time, me.duration_seconds,
                 me.raw_transcript, me.formatted_notes, me.word_count,
                 me.folder_id, me.calendar_event_id, me.mic_audio_path,
-                me.system_audio_path, me.saved_recording_path, me.meeting_status,
-                me.manual_notes, me.selected_template_id, me.selected_template_name,
+                me.system_audio_path, me.saved_recording_path,
+                me.merged_into_meeting_id, me.meeting_status, me.manual_notes,
+                me.selected_template_id, me.selected_template_name,
                 me.selected_template_kind, me.selected_template_prompt,
                 me.calendar_event_snapshot
             FROM meetings me
@@ -1269,15 +1302,21 @@ public final class LocalSyncRepository {
         try exec("DELETE FROM dictations WHERE id = ?", params: [String(localID)], db: db)
     }
 
-    private func insertMeeting(payload: RemoteMeetingPayload, folderLocalID: Int64?, db: OpaquePointer?) throws -> Int64 {
+    private func insertMeeting(
+        payload: RemoteMeetingPayload,
+        folderLocalID: Int64?,
+        mergedIntoMeetingLocalID: Int64?,
+        db: OpaquePointer?
+    ) throws -> Int64 {
         let sql = """
         INSERT INTO meetings
         (title, calendar_event_id, calendar_event_snapshot, start_time, end_time,
          duration_seconds, raw_transcript, formatted_notes, mic_audio_path,
-         system_audio_path, saved_recording_path, meeting_status, manual_notes,
-         word_count, selected_template_id, selected_template_name,
-         selected_template_kind, selected_template_prompt, source, folder_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, 'meeting', ?)
+         system_audio_path, saved_recording_path, merged_into_meeting_id,
+         meeting_status, manual_notes, word_count, selected_template_id,
+         selected_template_name, selected_template_kind,
+         selected_template_prompt, source, folder_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, 'meeting', ?)
         """
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
@@ -1296,17 +1335,22 @@ public final class LocalSyncRepository {
         }
         bindText(stmt, 7, payload.rawTranscript)
         bindText(stmt, 8, payload.formattedNotes)
-        bindText(stmt, 9, payload.meetingStatus)
-        bindText(stmt, 10, payload.manualNotes)
-        sqlite3_bind_int(stmt, 11, Int32(payload.wordCount))
-        bindOptionalText(stmt, 12, payload.selectedTemplateID)
-        bindOptionalText(stmt, 13, payload.selectedTemplateName)
-        bindOptionalText(stmt, 14, payload.selectedTemplateKind)
-        bindOptionalText(stmt, 15, payload.selectedTemplatePrompt)
-        if let folderLocalID {
-            sqlite3_bind_int64(stmt, 16, folderLocalID)
+        if let mergedIntoMeetingLocalID {
+            sqlite3_bind_int64(stmt, 9, mergedIntoMeetingLocalID)
         } else {
-            sqlite3_bind_null(stmt, 16)
+            sqlite3_bind_null(stmt, 9)
+        }
+        bindText(stmt, 10, payload.meetingStatus)
+        bindText(stmt, 11, payload.manualNotes)
+        sqlite3_bind_int(stmt, 12, Int32(payload.wordCount))
+        bindOptionalText(stmt, 13, payload.selectedTemplateID)
+        bindOptionalText(stmt, 14, payload.selectedTemplateName)
+        bindOptionalText(stmt, 15, payload.selectedTemplateKind)
+        bindOptionalText(stmt, 16, payload.selectedTemplatePrompt)
+        if let folderLocalID {
+            sqlite3_bind_int64(stmt, 17, folderLocalID)
+        } else {
+            sqlite3_bind_null(stmt, 17)
         }
         guard sqlite3_step(stmt) == SQLITE_DONE else {
             throw lastError(db)
@@ -1318,6 +1362,7 @@ public final class LocalSyncRepository {
         localID: Int64,
         payload: RemoteMeetingPayload,
         folderLocalID: Int64?,
+        mergedIntoMeetingLocalID: Int64?,
         db: OpaquePointer?
     ) throws {
         // Preserve audio paths (mic_audio_path, system_audio_path,
@@ -1329,7 +1374,8 @@ public final class LocalSyncRepository {
             raw_transcript = ?, formatted_notes = ?, meeting_status = ?,
             manual_notes = ?, word_count = ?, selected_template_id = ?,
             selected_template_name = ?, selected_template_kind = ?,
-            selected_template_prompt = ?, folder_id = ?
+            selected_template_prompt = ?, folder_id = ?,
+            merged_into_meeting_id = ?
         WHERE id = ?
         """
         var stmt: OpaquePointer?
@@ -1361,13 +1407,23 @@ public final class LocalSyncRepository {
         } else {
             sqlite3_bind_null(stmt, 16)
         }
-        sqlite3_bind_int64(stmt, 17, localID)
+        if let mergedIntoMeetingLocalID {
+            sqlite3_bind_int64(stmt, 17, mergedIntoMeetingLocalID)
+        } else {
+            sqlite3_bind_null(stmt, 17)
+        }
+        sqlite3_bind_int64(stmt, 18, localID)
         guard sqlite3_step(stmt) == SQLITE_DONE else {
             throw lastError(db)
         }
     }
 
     private func deleteMeeting(localID: Int64, db: OpaquePointer?) throws {
+        try exec(
+            "UPDATE meetings SET merged_into_meeting_id = NULL WHERE merged_into_meeting_id = ?",
+            params: [String(localID)],
+            db: db
+        )
         try exec("DELETE FROM meetings WHERE id = ?", params: [String(localID)], db: db)
     }
 
@@ -1690,14 +1746,15 @@ public final class LocalSyncRepository {
         let micAudio = optionalStringColumn(stmt, baseColumn + 9)
         let systemAudio = optionalStringColumn(stmt, baseColumn + 10)
         let savedRecording = optionalStringColumn(stmt, baseColumn + 11)
-        let status = MeetingStatus(rawValue: stringColumn(stmt, baseColumn + 12)) ?? .completed
-        let manualNotes = stringColumn(stmt, baseColumn + 13)
-        let templateID = optionalStringColumn(stmt, baseColumn + 14)
-        let templateName = optionalStringColumn(stmt, baseColumn + 15)
-        let templateKindRaw = optionalStringColumn(stmt, baseColumn + 16)
+        let mergedIntoMeetingID = optionalInt64Column(stmt, baseColumn + 12)
+        let status = MeetingStatus(rawValue: stringColumn(stmt, baseColumn + 13)) ?? .completed
+        let manualNotes = stringColumn(stmt, baseColumn + 14)
+        let templateID = optionalStringColumn(stmt, baseColumn + 15)
+        let templateName = optionalStringColumn(stmt, baseColumn + 16)
+        let templateKindRaw = optionalStringColumn(stmt, baseColumn + 17)
         let templateKind = templateKindRaw.flatMap(MeetingTemplateKind.init(rawValue:))
-        let templatePrompt = optionalStringColumn(stmt, baseColumn + 17)
-        let snapshotJSON = optionalStringColumn(stmt, baseColumn + 18)
+        let templatePrompt = optionalStringColumn(stmt, baseColumn + 18)
+        let snapshotJSON = optionalStringColumn(stmt, baseColumn + 19)
         let snapshot: MeetingCalendarEventSnapshot? = {
             guard let json = snapshotJSON, let data = json.data(using: .utf8) else { return nil }
             return try? JSONDecoder().decode(MeetingCalendarEventSnapshot.self, from: data)
@@ -1716,6 +1773,7 @@ public final class LocalSyncRepository {
             micAudioPath: micAudio,
             systemAudioPath: systemAudio,
             savedRecordingPath: savedRecording,
+            mergedIntoMeetingID: mergedIntoMeetingID,
             status: status,
             manualNotes: manualNotes,
             selectedTemplateID: templateID,

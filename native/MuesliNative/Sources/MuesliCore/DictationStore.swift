@@ -15,7 +15,7 @@ public enum DictationStoreError: Error, LocalizedError {
 public final class DictationStore {
     private let databaseURL: URL
     private static let meetingColumns = """
-    id, title, start_time, duration_seconds, raw_transcript, formatted_notes, word_count, folder_id, calendar_event_id, mic_audio_path, system_audio_path, saved_recording_path, meeting_status, manual_notes, selected_template_id, selected_template_name, selected_template_kind, selected_template_prompt, calendar_event_snapshot
+    id, title, start_time, duration_seconds, raw_transcript, formatted_notes, word_count, folder_id, calendar_event_id, mic_audio_path, system_audio_path, saved_recording_path, merged_into_meeting_id, meeting_status, manual_notes, selected_template_id, selected_template_name, selected_template_kind, selected_template_prompt, calendar_event_snapshot
     """
 
     public init() {
@@ -66,6 +66,7 @@ public final class DictationStore {
             mic_audio_path TEXT,
             system_audio_path TEXT,
             saved_recording_path TEXT,
+            merged_into_meeting_id INTEGER REFERENCES meetings(id),
             meeting_status TEXT NOT NULL DEFAULT 'completed',
             manual_notes TEXT NOT NULL DEFAULT '',
             word_count INTEGER NOT NULL DEFAULT 0,
@@ -133,6 +134,9 @@ public final class DictationStore {
         if sqlite3_exec(db, "ALTER TABLE meetings ADD COLUMN saved_recording_path TEXT", nil, nil, nil) != SQLITE_OK {
             // Column may already exist.
         }
+        if sqlite3_exec(db, "ALTER TABLE meetings ADD COLUMN merged_into_meeting_id INTEGER REFERENCES meetings(id)", nil, nil, nil) != SQLITE_OK {
+            // Column may already exist.
+        }
         if sqlite3_exec(db, "ALTER TABLE meetings ADD COLUMN meeting_status TEXT NOT NULL DEFAULT 'completed'", nil, nil, nil) != SQLITE_OK {
             // Column may already exist.
         }
@@ -141,6 +145,7 @@ public final class DictationStore {
         }
         let _ = sqlite3_exec(db, "CREATE INDEX IF NOT EXISTS idx_meeting_folders_parent ON meeting_folders(parent_folder_id)", nil, nil, nil)
         let _ = sqlite3_exec(db, "CREATE INDEX IF NOT EXISTS idx_meetings_folder ON meetings(folder_id)", nil, nil, nil)
+        let _ = sqlite3_exec(db, "CREATE INDEX IF NOT EXISTS idx_meetings_merged_into ON meetings(merged_into_meeting_id)", nil, nil, nil)
     }
 
     public func insertDictation(
@@ -268,7 +273,7 @@ public final class DictationStore {
 
         var total = 0
         var stmt: OpaquePointer?
-        if sqlite3_prepare_v2(db, "SELECT COUNT(*) FROM meetings", -1, &stmt, nil) == SQLITE_OK {
+        if sqlite3_prepare_v2(db, "SELECT COUNT(*) FROM meetings WHERE merged_into_meeting_id IS NULL", -1, &stmt, nil) == SQLITE_OK {
             if sqlite3_step(stmt) == SQLITE_ROW { total = Int(sqlite3_column_int(stmt, 0)) }
             sqlite3_finalize(stmt)
         } else {
@@ -277,7 +282,7 @@ public final class DictationStore {
 
         var byFolder: [Int64: Int] = [:]
         var stmt2: OpaquePointer?
-        if sqlite3_prepare_v2(db, "SELECT folder_id, COUNT(*) FROM meetings WHERE folder_id IS NOT NULL GROUP BY folder_id", -1, &stmt2, nil) == SQLITE_OK {
+        if sqlite3_prepare_v2(db, "SELECT folder_id, COUNT(*) FROM meetings WHERE folder_id IS NOT NULL AND merged_into_meeting_id IS NULL GROUP BY folder_id", -1, &stmt2, nil) == SQLITE_OK {
             while sqlite3_step(stmt2) == SQLITE_ROW {
                 byFolder[sqlite3_column_int64(stmt2, 0)] = Int(sqlite3_column_int(stmt2, 1))
             }
@@ -305,11 +310,12 @@ public final class DictationStore {
             )
             SELECT \(Self.meetingColumns)
             FROM meetings
-            WHERE folder_id IN (SELECT id FROM folder_tree)
+            WHERE merged_into_meeting_id IS NULL
+              AND folder_id IN (SELECT id FROM folder_tree)
             ORDER BY id DESC
             """
         } else {
-            sql = "SELECT \(Self.meetingColumns) FROM meetings ORDER BY id DESC"
+            sql = "SELECT \(Self.meetingColumns) FROM meetings WHERE merged_into_meeting_id IS NULL ORDER BY id DESC"
         }
         if limit != nil { sql += " LIMIT ?" }
 
@@ -341,7 +347,8 @@ public final class DictationStore {
         let sql = """
         SELECT \(Self.meetingColumns)
         FROM meetings
-        WHERE meeting_status IN (?, ?)
+        WHERE merged_into_meeting_id IS NULL
+          AND meeting_status IN (?, ?)
         ORDER BY id DESC
         """
         var statement: OpaquePointer?
@@ -434,7 +441,13 @@ public final class DictationStore {
         let sql = """
         SELECT \(Self.meetingColumns)
         FROM meetings
-        WHERE title LIKE ? ESCAPE '\\' OR raw_transcript LIKE ? ESCAPE '\\' OR formatted_notes LIKE ? ESCAPE '\\' OR manual_notes LIKE ? ESCAPE '\\'
+        WHERE merged_into_meeting_id IS NULL
+          AND (
+            title LIKE ? ESCAPE '\\'
+            OR raw_transcript LIKE ? ESCAPE '\\'
+            OR formatted_notes LIKE ? ESCAPE '\\'
+            OR manual_notes LIKE ? ESCAPE '\\'
+          )
         ORDER BY id DESC
         LIMIT ?
         """
@@ -465,6 +478,7 @@ public final class DictationStore {
         SELECT \(Self.meetingColumns)
         FROM meetings
         WHERE calendar_event_id = ?
+          AND merged_into_meeting_id IS NULL
         LIMIT 1
         """
         var statement: OpaquePointer?
@@ -668,7 +682,8 @@ public final class DictationStore {
             COALESCE(SUM(word_count), 0) AS total_words,
             COALESCE(SUM(duration_seconds), 0) AS total_duration_seconds
         FROM meetings
-        WHERE meeting_status IN (?, ?)
+        WHERE merged_into_meeting_id IS NULL
+          AND meeting_status IN (?, ?)
         """
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
@@ -720,6 +735,107 @@ public final class DictationStore {
         guard sqlite3_changes(db) > 0 else {
             throw DictationStoreError.meetingNotFound(id: id)
         }
+    }
+
+    public func deleteMeetingRestoringMergedSources(id: Int64) throws {
+        let db = try openDatabase()
+        defer { sqlite3_close(db) }
+        try exec("BEGIN IMMEDIATE TRANSACTION", db: db)
+        do {
+            var restoreStatement: OpaquePointer?
+            guard sqlite3_prepare_v2(db, "UPDATE meetings SET merged_into_meeting_id = NULL WHERE merged_into_meeting_id = ?", -1, &restoreStatement, nil) == SQLITE_OK else {
+                throw lastError(db)
+            }
+            sqlite3_bind_int64(restoreStatement, 1, id)
+            guard sqlite3_step(restoreStatement) == SQLITE_DONE else {
+                let error = lastError(db)
+                sqlite3_finalize(restoreStatement)
+                throw error
+            }
+            sqlite3_finalize(restoreStatement)
+
+            var deleteStatement: OpaquePointer?
+            guard sqlite3_prepare_v2(db, "DELETE FROM meetings WHERE id = ?", -1, &deleteStatement, nil) == SQLITE_OK else {
+                throw lastError(db)
+            }
+            sqlite3_bind_int64(deleteStatement, 1, id)
+            guard sqlite3_step(deleteStatement) == SQLITE_DONE else {
+                let error = lastError(db)
+                sqlite3_finalize(deleteStatement)
+                throw error
+            }
+            let changes = sqlite3_changes(db)
+            sqlite3_finalize(deleteStatement)
+            guard changes > 0 else {
+                throw DictationStoreError.meetingNotFound(id: id)
+            }
+
+            try exec("COMMIT", db: db)
+        } catch {
+            let _ = sqlite3_exec(db, "ROLLBACK", nil, nil, nil)
+            throw error
+        }
+    }
+
+    public func setMeetingMergedInto(id: Int64, mergedIntoMeetingID: Int64?) throws {
+        let db = try openDatabase()
+        defer { sqlite3_close(db) }
+        let sql = "UPDATE meetings SET merged_into_meeting_id = ? WHERE id = ?"
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw lastError(db)
+        }
+        defer { sqlite3_finalize(statement) }
+        if let mergedIntoMeetingID {
+            sqlite3_bind_int64(statement, 1, mergedIntoMeetingID)
+        } else {
+            sqlite3_bind_null(statement, 1)
+        }
+        sqlite3_bind_int64(statement, 2, id)
+        guard sqlite3_step(statement) == SQLITE_DONE else {
+            throw lastError(db)
+        }
+        guard sqlite3_changes(db) > 0 else {
+            throw DictationStoreError.meetingNotFound(id: id)
+        }
+    }
+
+    public func restoreMergedMeetings(mergedIntoMeetingID: Int64) throws {
+        let db = try openDatabase()
+        defer { sqlite3_close(db) }
+        let sql = "UPDATE meetings SET merged_into_meeting_id = NULL WHERE merged_into_meeting_id = ?"
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw lastError(db)
+        }
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_int64(statement, 1, mergedIntoMeetingID)
+        guard sqlite3_step(statement) == SQLITE_DONE else {
+            throw lastError(db)
+        }
+    }
+
+    public func mergedMeetings(mergedIntoMeetingID: Int64) throws -> [MeetingRecord] {
+        let db = try openDatabase()
+        defer { sqlite3_close(db) }
+        let sql = """
+        SELECT \(Self.meetingColumns)
+        FROM meetings
+        WHERE merged_into_meeting_id = ?
+        ORDER BY start_time ASC, id ASC
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw lastError(db)
+        }
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_int64(statement, 1, mergedIntoMeetingID)
+
+        var rows: [MeetingRecord] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            rows.append(makeMeetingRecord(statement))
+        }
+        return rows
     }
 
     public func clearDictations() throws {
@@ -929,6 +1045,40 @@ public final class DictationStore {
         sqlite3_bind_int64(statement, 7, id)
         guard sqlite3_step(statement) == SQLITE_DONE else {
             throw lastError(db)
+        }
+    }
+
+    public func updateMergedMeeting(
+        id: Int64,
+        rawTranscript: String,
+        formattedNotes: String,
+        manualNotes: String,
+        status: MeetingStatus
+    ) throws {
+        let db = try openDatabase()
+        defer { sqlite3_close(db) }
+        let sql = """
+        UPDATE meetings
+        SET raw_transcript = ?, formatted_notes = ?, manual_notes = ?, meeting_status = ?, word_count = ?
+        WHERE id = ?
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw lastError(db)
+        }
+        defer { sqlite3_finalize(statement) }
+        let wordCount = Self.countWords(in: rawTranscript) + Self.countWords(in: manualNotes)
+        sqlite3_bind_text(statement, 1, (rawTranscript as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(statement, 2, (formattedNotes as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(statement, 3, (manualNotes as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(statement, 4, (status.rawValue as NSString).utf8String, -1, nil)
+        sqlite3_bind_int(statement, 5, Int32(wordCount))
+        sqlite3_bind_int64(statement, 6, id)
+        guard sqlite3_step(statement) == SQLITE_DONE else {
+            throw lastError(db)
+        }
+        guard sqlite3_changes(db) > 0 else {
+            throw DictationStoreError.meetingNotFound(id: id)
         }
     }
 
@@ -1215,16 +1365,17 @@ public final class DictationStore {
         let micAudioPath: String? = sqlite3_column_type(statement, 9) == SQLITE_NULL ? nil : stringColumn(statement, index: 9)
         let systemAudioPath: String? = sqlite3_column_type(statement, 10) == SQLITE_NULL ? nil : stringColumn(statement, index: 10)
         let savedRecordingPath: String? = sqlite3_column_type(statement, 11) == SQLITE_NULL ? nil : stringColumn(statement, index: 11)
-        let status = MeetingStatus(rawValue: stringColumn(statement, index: 12)) ?? .completed
-        let manualNotes = stringColumn(statement, index: 13)
-        let selectedTemplateID: String? = sqlite3_column_type(statement, 14) == SQLITE_NULL ? nil : stringColumn(statement, index: 14)
-        let selectedTemplateName: String? = sqlite3_column_type(statement, 15) == SQLITE_NULL ? nil : stringColumn(statement, index: 15)
-        let selectedTemplateKind: MeetingTemplateKind? = sqlite3_column_type(statement, 16) == SQLITE_NULL
+        let mergedIntoMeetingID: Int64? = sqlite3_column_type(statement, 12) == SQLITE_NULL ? nil : sqlite3_column_int64(statement, 12)
+        let status = MeetingStatus(rawValue: stringColumn(statement, index: 13)) ?? .completed
+        let manualNotes = stringColumn(statement, index: 14)
+        let selectedTemplateID: String? = sqlite3_column_type(statement, 15) == SQLITE_NULL ? nil : stringColumn(statement, index: 15)
+        let selectedTemplateName: String? = sqlite3_column_type(statement, 16) == SQLITE_NULL ? nil : stringColumn(statement, index: 16)
+        let selectedTemplateKind: MeetingTemplateKind? = sqlite3_column_type(statement, 17) == SQLITE_NULL
             ? nil
-            : MeetingTemplateKind(rawValue: stringColumn(statement, index: 16))
-        let selectedTemplatePrompt: String? = sqlite3_column_type(statement, 17) == SQLITE_NULL ? nil : stringColumn(statement, index: 17)
+            : MeetingTemplateKind(rawValue: stringColumn(statement, index: 17))
+        let selectedTemplatePrompt: String? = sqlite3_column_type(statement, 18) == SQLITE_NULL ? nil : stringColumn(statement, index: 18)
         let calendarEventSnapshot = Self.decodeCalendarEventSnapshot(
-            sqlite3_column_type(statement, 18) == SQLITE_NULL ? nil : stringColumn(statement, index: 18)
+            sqlite3_column_type(statement, 19) == SQLITE_NULL ? nil : stringColumn(statement, index: 19)
         )
         return MeetingRecord(
             id: sqlite3_column_int64(statement, 0),
@@ -1240,6 +1391,7 @@ public final class DictationStore {
             micAudioPath: micAudioPath,
             systemAudioPath: systemAudioPath,
             savedRecordingPath: savedRecordingPath,
+            mergedIntoMeetingID: mergedIntoMeetingID,
             status: status,
             manualNotes: manualNotes,
             selectedTemplateID: selectedTemplateID,

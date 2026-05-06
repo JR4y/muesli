@@ -8,7 +8,7 @@ It is intended to serve three purposes at once:
 - make it easy to resume work without losing context
 - prepare a clean base for future beta release notes and README feature updates
 
-Last updated: `2026-05-04`
+Last updated: `2026-05-06`
 Working branch: `beta`
 Dev app: `muesli-beta.app`
 
@@ -27,6 +27,61 @@ Git workflow currently documented and aligned:
 - `main` is reserved as the stable product branch
 
 ## Incremental history
+
+### 2026-05-06
+
+This pass reworked the meeting transcript presentation layer without changing
+the canonical final transcript pipeline.
+
+#### Live transcript light pipeline
+
+- The meeting stack now keeps a lightweight live transcript lane separate from
+  the canonical final transcript lane
+- Live transcript state is built from `MeetingTranscriptChunk` values and
+  grouped for UI only; it no longer acts as an input to final transcript
+  generation
+- The live transcript reducer still groups by source and time, but it now
+  lives behind an explicit pipeline object instead of being scattered across
+  meeting session callbacks
+- Settings now expose a `Live transcript` toggle under `Meetings`
+- The toggle is operational, not cosmetic:
+  - when enabled, live transcript chunks are projected and published for UI
+  - when disabled, no live transcript turns are published or rendered during
+    recording/processing
+  - the final transcript pipeline still runs normally after stop
+
+#### Final transcript chat view
+
+- Meeting detail now renders completed transcripts as a chat-style conversation
+  instead of plain monospaced text
+- The same visual language is reused for live and final transcript display
+  through a shared transcript chat view
+- Alignment follows transcript semantics:
+  - `You` renders on the right
+  - `Others` and `Speaker N` render on the left
+  - timestamps render above each bubble
+- The app still stores and exports the transcript as the same plain-text
+  `rawTranscript` format
+
+#### Transcript display parsing
+
+- Added a deterministic parser that converts persisted `rawTranscript` lines
+  like `[HH:mm:ss] You: ...` into display turns for the final transcript UI
+- Malformed lines fall back safely to a generic left-aligned transcript bubble
+  instead of breaking the transcript panel
+
+#### Regression coverage
+
+- Added focused tests for:
+  - default config behavior of `enableLiveMeetingTranscript`
+  - backward-compatible decoding of older config payloads
+  - live transcript pipeline chunk projection
+  - final transcript display parsing, including malformed-line fallback
+
+This change intentionally did **not** alter the canonical transcript formatter,
+post-live diarization, or export/storage format. The goal was to improve live
+control and transcript presentation without reopening the already-working
+final transcript pipeline.
 
 ### 2026-05-04
 

@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let telemetryConfig = TelemetryDeck.Config(appID: "7F2B7846-1CB5-4FE6-8ABC-56F217B06A86")
         TelemetryDeck.initialize(config: telemetryConfig)
         TelemetryDeck.signal("app.launched")
+        NSApplication.shared.mainMenu = StandardMainMenu.build(appName: AppIdentity.displayName)
 
         do {
             let runtime = try RuntimePaths.resolve()

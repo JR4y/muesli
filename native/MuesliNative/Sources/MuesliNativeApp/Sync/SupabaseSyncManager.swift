@@ -347,6 +347,13 @@ actor SupabaseSyncManager {
     }
 
     private func applyRemoteMeeting(_ payload: RemoteMeetingPayload) async throws {
+        if let mergedIntoMeetingRemoteID = payload.mergedIntoMeetingRemoteID,
+           mergedIntoMeetingRemoteID != payload.remoteID,
+           try repo.localID(forRemoteID: mergedIntoMeetingRemoteID, entityType: .meeting) == nil,
+           let rest,
+           let parent = try await rest.fetchMeeting(remoteID: mergedIntoMeetingRemoteID) {
+            try await applyRemoteMeeting(parent)
+        }
         let alreadyMapped = try repo.localID(forRemoteID: payload.remoteID, entityType: .meeting)
         if alreadyMapped == nil, payload.deletedAt == nil {
             var candidate: Int64?
@@ -380,7 +387,8 @@ actor SupabaseSyncManager {
                     selectedTemplateName: payload.selectedTemplateName,
                     selectedTemplateKind: payload.selectedTemplateKind,
                     selectedTemplatePrompt: payload.selectedTemplatePrompt,
-                    folderRemoteID: payload.folderRemoteID
+                    folderRemoteID: payload.folderRemoteID,
+                    mergedIntoMeetingRemoteID: payload.mergedIntoMeetingRemoteID
                 )
                 try repo.attachRemoteID(
                     entityType: .meeting,
@@ -590,9 +598,22 @@ actor SupabaseSyncManager {
     }
 
     private func uploadMeetings(rest: SupabaseRESTClient, userID: String) async throws {
-        let dirty = try repo.dirtyMeetings(limit: pageSize)
-        for entry in dirty {
-            try await uploadMeeting(entry: entry, rest: rest, userID: userID)
+        while true {
+            let dirty = try repo.dirtyMeetings(limit: pageSize)
+            guard !dirty.isEmpty else { return }
+
+            var uploadedAny = false
+            for entry in dirty {
+                if entry.record.mergedIntoMeetingID != nil, entry.mergedIntoMeetingRemoteID == nil {
+                    continue
+                }
+                try await uploadMeeting(entry: entry, rest: rest, userID: userID)
+                uploadedAny = true
+            }
+
+            if !uploadedAny {
+                return
+            }
         }
     }
 
@@ -615,7 +636,8 @@ actor SupabaseSyncManager {
             selectedTemplateName: entry.record.selectedTemplateName,
             selectedTemplateKind: entry.record.selectedTemplateKind?.rawValue,
             selectedTemplatePrompt: entry.record.selectedTemplatePrompt,
-            folderRemoteID: entry.folderRemoteID
+            folderRemoteID: entry.folderRemoteID,
+            mergedIntoMeetingRemoteID: entry.mergedIntoMeetingRemoteID
         )
         if entry.metadata.lastPayloadHash == hash, entry.metadata.remoteID != nil {
             try repo.markMeetingSynced(
@@ -634,6 +656,7 @@ actor SupabaseSyncManager {
                 remoteID: remoteID,
                 expectedVersion: entry.metadata.remoteVersion,
                 folderRemoteID: entry.folderRemoteID,
+                mergedIntoMeetingRemoteID: entry.mergedIntoMeetingRemoteID,
                 title: entry.record.title,
                 calendarEventID: entry.record.calendarEventID,
                 calendarEventSnapshotJSON: snapshotJSON,
@@ -671,6 +694,7 @@ actor SupabaseSyncManager {
                 remoteID: nil,
                 userID: userID,
                 folderRemoteID: entry.folderRemoteID,
+                mergedIntoMeetingRemoteID: entry.mergedIntoMeetingRemoteID,
                 title: entry.record.title,
                 calendarEventID: entry.record.calendarEventID,
                 calendarEventSnapshotJSON: snapshotJSON,
@@ -778,6 +802,7 @@ actor SupabaseSyncManager {
                     remoteID: remoteID,
                     userID: await auth.userID ?? "",
                     folderRemoteID: nil,
+                    mergedIntoMeetingRemoteID: nil,
                     title: "(deleted)",
                     calendarEventID: nil,
                     calendarEventSnapshotJSON: nil,
@@ -965,7 +990,8 @@ actor SupabaseSyncManager {
             selectedTemplateName: remote.selectedTemplateName,
             selectedTemplateKind: remote.selectedTemplateKind,
             selectedTemplatePrompt: remote.selectedTemplatePrompt,
-            folderRemoteID: remote.folderRemoteID
+            folderRemoteID: remote.folderRemoteID,
+            mergedIntoMeetingRemoteID: remote.mergedIntoMeetingRemoteID
         )
         let localHash = SyncPayloadHasher.meetingHash(
             title: local.record.title,
@@ -983,7 +1009,8 @@ actor SupabaseSyncManager {
             selectedTemplateName: local.record.selectedTemplateName,
             selectedTemplateKind: local.record.selectedTemplateKind?.rawValue,
             selectedTemplatePrompt: local.record.selectedTemplatePrompt,
-            folderRemoteID: local.folderRemoteID
+            folderRemoteID: local.folderRemoteID,
+            mergedIntoMeetingRemoteID: local.mergedIntoMeetingRemoteID
         )
         if remoteHash == localHash {
             try repo.markMeetingSynced(
@@ -1003,6 +1030,7 @@ actor SupabaseSyncManager {
                 remoteID: remote.remoteID,
                 expectedVersion: remote.remoteVersion,
                 folderRemoteID: local.folderRemoteID,
+                mergedIntoMeetingRemoteID: local.mergedIntoMeetingRemoteID,
                 title: local.record.title,
                 calendarEventID: local.record.calendarEventID,
                 calendarEventSnapshotJSON: snapshotJSON,

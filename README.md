@@ -26,7 +26,7 @@ Muesli is a **lightweight native macOS app** that combines **WisprFlow-style dic
 Hold your hotkey (or double-tap for hands-free mode) → speak → release → transcribed text is pasted at your cursor. **~0.13 second latency** via Parakeet TDT on the Apple Neural Engine.
 
 ### Meeting Transcription
-Start a meeting recording → Muesli captures your mic (You) and system audio (Others) simultaneously → VAD-driven chunked transcription happens during the meeting at natural speech boundaries → speaker diarization identifies individual remote speakers (Speaker 1, Speaker 2, etc.) → when you stop, the transcript is ready in seconds, not minutes. Generate structured meeting notes via OpenAI, free OpenRouter models, or your ChatGPT Plus/Pro subscription.
+Start a meeting recording → Muesli captures your mic (You) and system audio (Others) simultaneously → VAD-driven chunked transcription happens during the meeting at natural speech boundaries, with a lightweight live transcript path for UI → speaker diarization identifies individual remote speakers (Speaker 1, Speaker 2, etc.) during post-processing → when you stop, the transcript is ready in seconds, not minutes. Generate structured meeting notes via OpenAI, free OpenRouter models, or your ChatGPT Plus/Pro subscription.
 
 ---
 
@@ -37,7 +37,10 @@ Start a meeting recording → Muesli captures your mic (You) and system audio (O
 - **Hold-to-talk & hands-free** — Hold hotkey for quick dictation, or double-tap for sustained recording.
 - **Meeting recording** — Captures mic + system audio (including Bluetooth/AirPods) via ScreenCaptureKit.
 - **VAD-driven chunk rotation** — Silero VAD detects natural speech boundaries in real-time, splitting mic audio at pauses instead of fixed intervals. No mid-sentence cuts.
+- **Light live transcript** — During recording, Muesli can render a lightweight live transcript grouped by source (`You` / `Others`) without feeding that provisional UI back into the final transcript pipeline.
+- **Toggleable live transcript** — Settings → Meetings now includes a `Live transcript` switch. Turn it off to disable live transcript processing/rendering entirely while keeping the final transcript intact.
 - **Speaker diarization** — Identifies individual speakers in system audio (Speaker 1, Speaker 2, etc.) using FluidAudio's pyannote-based CoreML diarization model.
+- **Chat-style final transcript** — Completed meeting transcripts now render in the note detail view as a chat-style conversation with left/right alignment and timestamps, while storage/export still use the raw text transcript format.
 - **Camera-based meeting detection** — Detects when your webcam + mic activate in a recognized meeting app (Zoom, Chrome, Teams, FaceTime, Slack, WhatsApp). Camera alone (e.g. Photo Booth) won't trigger false positives.
 - **Join & Record** — Extracts meeting URLs from calendar events (Zoom, Google Meet, Teams, Webex, Chime, FaceTime). Split-button notification: "Join & Record" opens the meeting + starts recording, "Join Only" opens without recording, "Record Only" starts recording without joining. Platform icons (Zoom, Meet) in the notification panel.
 - **Google Calendar integration** — Connect your Google Calendar to see upcoming meetings in the Coming Up section and status bar. Event-driven notifications via `EKEventStoreChangedNotification` for instant calendar change detection. Pre-meeting countdowns via Marauder's Map easter egg.
@@ -247,7 +250,9 @@ Muesli needs these macOS permissions (guided during onboarding):
 │  ├── CustomWordMatcher (Jaro-Winkler fuzzy)           │
 │  ├── HotkeyMonitor (configurable modifier keys)       │
 │  ├── SystemAudioRecorder (ScreenCaptureKit)           │
-│  ├── MeetingSession (VAD-driven chunked transcription)│
+│  ├── MeetingSession (canonical final transcript pipeline + live hooks) │
+│  ├── MeetingLiveTranscript / projector helpers         │
+│  ├── MeetingTranscriptChatView (shared live/final UI)  │
 │  ├── MeetingSummaryClient (OpenAI / OpenRouter / ChatGPT) │
 │  ├── MeetingExporter (PDF + Markdown export)          │
 │  ├── GoogleCalendarAuthManager (OAuth + Calendar API)  │
@@ -296,7 +301,7 @@ swift test --package-path native/MuesliNative
 ./scripts/test_packaged_cli.sh
 ```
 
-396 tests covering model configuration, custom word matching, filler removal, transcription routing, data persistence, CLI contract/path-resolution logic, speaker diarization alignment, token consolidation, camera-based meeting detection, ChatGPT OAuth logic, meeting export, meeting navigation, and Google Calendar URL extraction.
+400+ tests covering model configuration, custom word matching, filler removal, transcription routing, data persistence, CLI contract/path-resolution logic, speaker diarization alignment, token consolidation, live transcript grouping/parsing, camera-based meeting detection, ChatGPT OAuth logic, meeting export, meeting navigation, and Google Calendar URL extraction.
 
 Current test scope:
 

@@ -193,6 +193,27 @@ enum L10nKey {
     case meetingWords(count: Int)
     case meetingBuiltInTemplates
     case meetingCustomTemplates
+    case meetingMerge
+    case meetingMergeSelectNotes
+    case meetingMergeNoCandidates
+    case meetingMergeSelected(count: Int)
+    case meetingMergeReSummarize
+    case meetingMergeKeepSummary
+    case meetingMergeSheetTitle
+    case meetingMergeSheetMessage
+    case meetingMergeProcessing
+    case meetingMergeFailedTitle
+    case meetingMergeBlockedRetainedRecording
+    case meetingMergeBlockedLiveState
+    case meetingMergeOnlyBlockedCandidates
+    case meetingMergedSourcesSection
+    case meetingOpenMergedSource
+    case meetingTranscriptUnavailable
+    case meetingLiveTranscriptToggleExpand
+    case meetingLiveTranscriptToggleCollapse
+    case meetingLiveTranscriptPlaceholder
+    case meetingLiveChatPlaceholder
+    case meetingMergedNotesSection
     case templateManagerTitle
     case templateManagerSubtitle
     case templateManagerNew
@@ -254,6 +275,7 @@ enum L10nKey {
     case settingsSharedContextDescription
     case settingsMeetingTranscriptionSection
     case settingsMeetingModel
+    case settingsLiveMeetingTranscript
     case settingsMeetingContext
     case settingsMeetingSummariesSection
     case settingsSummaryBackend
@@ -712,6 +734,48 @@ enum L10n {
             return "Built-in Templates"
         case .meetingCustomTemplates:
             return "Custom Templates"
+        case .meetingMerge:
+            return "Merge"
+        case .meetingMergeSelectNotes:
+            return "Select notes to merge"
+        case .meetingMergeNoCandidates:
+            return "No merge candidates available for this meeting."
+        case .meetingMergeSelected(let count):
+            return count == 1 ? "1 note selected" : "\(count) notes selected"
+        case .meetingMergeReSummarize:
+            return "Merge and Summarize"
+        case .meetingMergeKeepSummary:
+            return "Merge"
+        case .meetingMergeSheetTitle:
+            return "Merge meeting notes"
+        case .meetingMergeSheetMessage:
+            return "Choose the notes that belong to this same calendar meeting."
+        case .meetingMergeProcessing:
+            return "Merging..."
+        case .meetingMergeFailedTitle:
+            return "Couldn't merge notes"
+        case .meetingMergeBlockedRetainedRecording:
+            return "Keeps a saved recording, so merging it would hide that audio."
+        case .meetingMergeBlockedLiveState:
+            return "This note is still recording or processing, so it cannot be merged yet."
+        case .meetingMergeOnlyBlockedCandidates:
+            return "Related notes were found for this meeting, but they are still recording or processing."
+        case .meetingMergedSourcesSection:
+            return "Merged related notes"
+        case .meetingOpenMergedSource:
+            return "Open related note"
+        case .meetingTranscriptUnavailable:
+            return "No transcript is available for this note yet."
+        case .meetingLiveTranscriptToggleExpand:
+            return "Show live transcript"
+        case .meetingLiveTranscriptToggleCollapse:
+            return "Hide live transcript"
+        case .meetingLiveTranscriptPlaceholder:
+            return "Live transcript will appear here as the meeting is transcribed."
+        case .meetingLiveChatPlaceholder:
+            return "Ask anything (coming soon)"
+        case .meetingMergedNotesSection:
+            return "Merged notes"
         case .templateManagerTitle:
             return "Manage Templates"
         case .templateManagerSubtitle:
@@ -834,6 +898,8 @@ enum L10n {
             return "Meeting Transcription"
         case .settingsMeetingModel:
             return "Meeting model"
+        case .settingsLiveMeetingTranscript:
+            return "Live transcript"
         case .settingsMeetingContext:
             return "Meeting context"
         case .settingsMeetingSummariesSection:
@@ -1424,6 +1490,48 @@ enum L10n {
             return "Plantillas integradas"
         case .meetingCustomTemplates:
             return "Plantillas personalizadas"
+        case .meetingMerge:
+            return "Fusionar"
+        case .meetingMergeSelectNotes:
+            return "Selecciona notas para fusionar"
+        case .meetingMergeNoCandidates:
+            return "No hay candidatas para fusionar en esta reunion."
+        case .meetingMergeSelected(let count):
+            return count == 1 ? "1 nota seleccionada" : "\(count) notas seleccionadas"
+        case .meetingMergeReSummarize:
+            return "Fusionar y resumir"
+        case .meetingMergeKeepSummary:
+            return "Fusionar"
+        case .meetingMergeSheetTitle:
+            return "Fusionar notas de reunion"
+        case .meetingMergeSheetMessage:
+            return "Elige las notas que pertenecen a esta misma cita del calendario."
+        case .meetingMergeProcessing:
+            return "Fusionando..."
+        case .meetingMergeFailedTitle:
+            return "No se pudieron fusionar las notas"
+        case .meetingMergeBlockedRetainedRecording:
+            return "Conserva una grabacion guardada, asi que fusionarla ocultaria ese audio."
+        case .meetingMergeBlockedLiveState:
+            return "Esta nota sigue grabando o procesando, asi que aun no se puede fusionar."
+        case .meetingMergeOnlyBlockedCandidates:
+            return "Se encontraron notas relacionadas para esta reunion, pero todavia siguen grabando o procesando."
+        case .meetingMergedSourcesSection:
+            return "Notas relacionadas fusionadas"
+        case .meetingOpenMergedSource:
+            return "Abrir nota relacionada"
+        case .meetingTranscriptUnavailable:
+            return "Todavia no hay transcripcion disponible para esta nota."
+        case .meetingLiveTranscriptToggleExpand:
+            return "Mostrar transcripcion en vivo"
+        case .meetingLiveTranscriptToggleCollapse:
+            return "Ocultar transcripcion en vivo"
+        case .meetingLiveTranscriptPlaceholder:
+            return "La transcripcion en vivo aparecera aqui mientras se procesa la reunion."
+        case .meetingLiveChatPlaceholder:
+            return "Pregunta lo que quieras (proximamente)"
+        case .meetingMergedNotesSection:
+            return "Notas fusionadas"
         case .templateManagerTitle:
             return "Gestionar plantillas"
         case .templateManagerSubtitle:
@@ -1546,6 +1654,8 @@ enum L10n {
             return "Transcripcion de reuniones"
         case .settingsMeetingModel:
             return "Modelo de reuniones"
+        case .settingsLiveMeetingTranscript:
+            return "Transcript en vivo"
         case .settingsMeetingContext:
             return "Contexto de reuniones"
         case .settingsMeetingSummariesSection:

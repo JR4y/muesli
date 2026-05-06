@@ -58,6 +58,7 @@ public struct MeetingRecord: Identifiable, Codable, Sendable {
     public let micAudioPath: String?
     public let systemAudioPath: String?
     public let savedRecordingPath: String?
+    public let mergedIntoMeetingID: Int64?
     public let status: MeetingStatus
     public let manualNotes: String
     public let selectedTemplateID: String?
@@ -79,6 +80,7 @@ public struct MeetingRecord: Identifiable, Codable, Sendable {
         micAudioPath: String? = nil,
         systemAudioPath: String? = nil,
         savedRecordingPath: String? = nil,
+        mergedIntoMeetingID: Int64? = nil,
         status: MeetingStatus = .completed,
         manualNotes: String = "",
         selectedTemplateID: String? = nil,
@@ -99,6 +101,7 @@ public struct MeetingRecord: Identifiable, Codable, Sendable {
         self.micAudioPath = micAudioPath
         self.systemAudioPath = systemAudioPath
         self.savedRecordingPath = savedRecordingPath
+        self.mergedIntoMeetingID = mergedIntoMeetingID
         self.status = status
         self.manualNotes = manualNotes
         self.selectedTemplateID = selectedTemplateID
@@ -121,6 +124,7 @@ public struct MeetingRecord: Identifiable, Codable, Sendable {
         case micAudioPath
         case systemAudioPath
         case savedRecordingPath
+        case mergedIntoMeetingID
         case status
         case manualNotes
         case selectedTemplateID
@@ -145,6 +149,7 @@ public struct MeetingRecord: Identifiable, Codable, Sendable {
             micAudioPath: try c.decodeIfPresent(String.self, forKey: .micAudioPath),
             systemAudioPath: try c.decodeIfPresent(String.self, forKey: .systemAudioPath),
             savedRecordingPath: try c.decodeIfPresent(String.self, forKey: .savedRecordingPath),
+            mergedIntoMeetingID: try c.decodeIfPresent(Int64.self, forKey: .mergedIntoMeetingID),
             status: (try? c.decode(MeetingStatus.self, forKey: .status)) ?? .completed,
             manualNotes: (try? c.decode(String.self, forKey: .manualNotes)) ?? "",
             selectedTemplateID: try c.decodeIfPresent(String.self, forKey: .selectedTemplateID),

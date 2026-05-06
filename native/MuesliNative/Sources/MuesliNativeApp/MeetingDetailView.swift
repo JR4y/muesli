@@ -1,11 +1,6 @@
 import SwiftUI
 import MuesliCore
 
-private enum MeetingDocumentMode: Hashable {
-    case notes
-    case transcript
-}
-
 private enum ManualNotesSaveStatus {
     case saved
     case saving
@@ -35,7 +30,6 @@ struct MeetingDetailView: View {
     @State private var manualNotesSaveStatus: ManualNotesSaveStatus = .saved
     @State private var manualEditorCommand: MarkdownEditorCommand?
     @State private var pendingTemplateID: String
-    @State private var documentMode: MeetingDocumentMode
     @State private var titleSaveTask: DispatchWorkItem?
     @State private var notesSaveTask: DispatchWorkItem?
     @State private var manualNotesSaveStatusTask: DispatchWorkItem?
@@ -49,6 +43,12 @@ struct MeetingDetailView: View {
     @State private var showFolderPopover = false
     @State private var showNewFolderPrompt = false
     @State private var newFolderName = ""
+    @State private var isLiveTranscriptExpanded = false
+    @State private var liveChatDraft = ""
+    @State private var isMergeSheetPresented = false
+    @State private var selectedMergeCandidateIDs = Set<Int64>()
+    @State private var mergeErrorMessage: String?
+    @State private var isMerging = false
 
     init(
         meeting: MeetingRecord?,
@@ -68,7 +68,6 @@ struct MeetingDetailView: View {
         _editableManualNotes = State(initialValue: meeting?.manualNotes ?? "")
         _loadedMeetingID = State(initialValue: meeting?.id)
         _pendingTemplateID = State(initialValue: initialTemplateID)
-        _documentMode = State(initialValue: meeting.map(Self.defaultDocumentMode(for:)) ?? .notes)
     }
 
     private func folder(for meeting: MeetingRecord) -> MeetingFolder? {
@@ -142,6 +141,18 @@ struct MeetingDetailView: View {
                 calendarEventPickerSheet(for: meeting)
             }
         }
+        .sheet(isPresented: $isMergeSheetPresented) {
+            if let meeting {
+                mergeCandidatesSheet(for: meeting)
+            }
+        }
+        .alert(L10n.text(.meetingMergeFailedTitle, config: appState.config), isPresented: mergeErrorBinding) {
+            Button(L10n.text(.commonOK, config: appState.config), role: .cancel) {
+                mergeErrorMessage = nil
+            }
+        } message: {
+            Text(mergeErrorMessage ?? "")
+        }
     }
 
     @ViewBuilder
@@ -182,7 +193,7 @@ struct MeetingDetailView: View {
                 }
             }
 
-            if !showsManualNotesEditor(for: meeting), isRawTranscript(meeting), documentMode == .notes {
+            if !showsManualNotesEditor(for: meeting), isRawTranscript(meeting) {
                 transcriptCTA
             }
         }
@@ -225,11 +236,13 @@ struct MeetingDetailView: View {
                 } else if meeting.status == .noteOnly {
                     statusChip(for: meeting)
                     startRecordingButton(for: meeting)
+                    mergeButton(for: meeting)
                     if controller.canDeleteMeeting(meeting) {
                         deleteButton
                     }
                 } else if controller.canDeleteMeeting(meeting), meeting.status == .failed {
                     statusChip(for: meeting)
+                    mergeButton(for: meeting)
                     deleteButton
                 } else {
                     statusChip(for: meeting)
@@ -241,6 +254,7 @@ struct MeetingDetailView: View {
                     if hasRecordingAction(for: meeting) {
                         recordingAction(for: meeting)
                     }
+                    mergeButton(for: meeting)
                     summaryAction(for: meeting)
                     templateMenu(for: meeting, appliedTemplate: appliedTemplate)
                 }
@@ -329,6 +343,7 @@ struct MeetingDetailView: View {
             let isManualNotesEditable = canEditManualNotes(for: meeting)
             VStack(alignment: .leading, spacing: MuesliTheme.spacing12) {
                 eventSnapshotSection(for: meeting)
+                mergedSourceSection(for: meeting)
                 manualNotesToolbar(for: meeting)
                     .disabled(!isManualNotesEditable)
 
@@ -350,6 +365,7 @@ struct MeetingDetailView: View {
                     RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
                         .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
                 )
+                liveMeetingComposer(for: meeting)
             }
             .padding(.horizontal, 40)
             .padding(.top, 12)
@@ -358,6 +374,7 @@ struct MeetingDetailView: View {
         } else if isEditingNotes {
             VStack(alignment: .leading, spacing: MuesliTheme.spacing12) {
                 eventSnapshotSection(for: meeting)
+                mergedSourceSection(for: meeting)
                 contentToolbar(for: meeting)
 
                 TextEditor(text: $editableNotes)
@@ -370,6 +387,7 @@ struct MeetingDetailView: View {
                     .onChange(of: editableNotes) { _, _ in
                         debounceSaveNotes(meetingID: meeting.id)
                     }
+                liveMeetingComposer(for: meeting)
             }
             .padding(.horizontal, 40)
             .padding(.top, 12)
@@ -378,20 +396,12 @@ struct MeetingDetailView: View {
         } else {
             VStack(alignment: .leading, spacing: MuesliTheme.spacing12) {
                 eventSnapshotSection(for: meeting)
+                mergedSourceSection(for: meeting)
                 contentToolbar(for: meeting)
 
-                ZStack {
-                    MeetingNotesView(markdown: Self.notesContent(for: meeting))
-                        .opacity(documentMode == .notes ? 1 : 0)
-                        .allowsHitTesting(documentMode == .notes)
-                        .accessibilityHidden(documentMode != .notes)
-
-                    MeetingTranscriptView(transcript: meeting.rawTranscript)
-                        .opacity(documentMode == .transcript ? 1 : 0)
-                        .allowsHitTesting(documentMode == .transcript)
-                        .accessibilityHidden(documentMode != .transcript)
-                }
-                .frame(maxWidth: detailColumnWidth, maxHeight: .infinity, alignment: .topLeading)
+                MeetingNotesView(markdown: Self.notesContent(for: meeting))
+                    .frame(maxWidth: detailColumnWidth, maxHeight: .infinity, alignment: .topLeading)
+                liveMeetingComposer(for: meeting)
             }
             .padding(.horizontal, 40)
             .padding(.top, 12)
@@ -549,17 +559,6 @@ struct MeetingDetailView: View {
         }
     }
 
-    private var documentModePicker: some View {
-        Picker("", selection: $documentMode) {
-            Text(L10n.text(.meetingNotes, config: appState.config)).tag(MeetingDocumentMode.notes)
-            Text(L10n.text(.meetingTranscript, config: appState.config)).tag(MeetingDocumentMode.transcript)
-        }
-        .pickerStyle(.segmented)
-        .tint(MuesliTheme.accent)
-        .frame(width: 220)
-        .disabled(isEditingNotes)
-    }
-
     private func showsManualNotesEditor(for meeting: MeetingRecord) -> Bool {
         switch meeting.status {
         case .recording, .processing, .noteOnly, .failed:
@@ -571,6 +570,54 @@ struct MeetingDetailView: View {
 
     private func canEditManualNotes(for meeting: MeetingRecord) -> Bool {
         meeting.status == .recording || meeting.status == .noteOnly || meeting.status == .failed
+    }
+
+    private func canMergeMeeting(_ meeting: MeetingRecord) -> Bool {
+        MuesliController.normalizedCalendarEventID(meeting.calendarEventID) != nil
+            && meeting.mergedIntoMeetingID == nil
+            && meeting.status != .recording
+            && meeting.status != .processing
+    }
+
+    private func relatedMeetings(for meeting: MeetingRecord) -> [MeetingMergeCandidateOption] {
+        controller.relatedMeetings(for: meeting)
+    }
+
+    private func mergeCandidates(for meeting: MeetingRecord) -> [MeetingRecord] {
+        controller.mergeCandidates(for: meeting)
+    }
+
+    private func mergedSourceMeetings(for meeting: MeetingRecord) -> [MeetingRecord] {
+        controller.mergedSourceMeetings(for: meeting.id)
+    }
+
+    private func mergeBlockReasonLabel(_ reason: MeetingMergeCandidateBlockReason?) -> String? {
+        switch reason {
+        case .liveState:
+            return L10n.text(.meetingMergeBlockedLiveState, config: appState.config)
+        case .none:
+            return nil
+        }
+    }
+
+    @ViewBuilder
+    private func mergeButton(for meeting: MeetingRecord) -> some View {
+        if canMergeMeeting(meeting) {
+            let related = relatedMeetings(for: meeting)
+            let candidates = related.filter(\.isMergeable)
+            iconButton("arrow.triangle.merge", label: L10n.text(.meetingMerge, config: appState.config)) {
+                selectedMergeCandidateIDs = []
+                isMergeSheetPresented = true
+            }
+            .disabled(related.isEmpty)
+            .help(
+                related.isEmpty
+                    ? L10n.text(.meetingMergeNoCandidates, config: appState.config)
+                    : (candidates.isEmpty
+                        ? L10n.text(.meetingMergeOnlyBlockedCandidates, config: appState.config)
+                        : L10n.text(.meetingMergeSelectNotes, config: appState.config))
+            )
+        }
     }
 
     @ViewBuilder
@@ -620,7 +667,6 @@ struct MeetingDetailView: View {
                 notesSaveTask?.cancel()
                 controller.updateMeetingNotes(id: meeting.id, notes: editableNotes)
             } else {
-                documentMode = .notes
                 editableNotes = Self.notesContent(for: meeting)
             }
             isEditingNotes.toggle()
@@ -675,6 +721,55 @@ struct MeetingDetailView: View {
 
     private func hasRecordingAction(for meeting: MeetingRecord) -> Bool {
         meeting.savedRecordingPath != nil
+    }
+
+    @ViewBuilder
+    private func mergedSourceSection(for meeting: MeetingRecord) -> some View {
+        let sources = mergedSourceMeetings(for: meeting)
+        if !sources.isEmpty {
+            VStack(alignment: .leading, spacing: MuesliTheme.spacing12) {
+                Text(L10n.text(.meetingMergedSourcesSection, config: appState.config))
+                    .font(MuesliTheme.callout())
+                    .foregroundStyle(MuesliTheme.textSecondary)
+
+                VStack(alignment: .leading, spacing: MuesliTheme.spacing8) {
+                    ForEach(sources) { source in
+                        HStack(alignment: .top, spacing: MuesliTheme.spacing12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(source.title)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(MuesliTheme.textPrimary)
+                                Text(formatMeta(source))
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(MuesliTheme.textSecondary)
+                            }
+                            Spacer(minLength: 0)
+                            Button {
+                                controller.showMeetingDocument(id: source.id)
+                            } label: {
+                                Text(L10n.text(.meetingOpenMergedSource, config: appState.config))
+                                    .font(.system(size: 11, weight: .medium))
+                            }
+                            .buttonStyle(.plain)
+                            if let savedRecordingPath = source.savedRecordingPath {
+                                compactIconButton("folder", label: L10n.text(.meetingShowRecording, config: appState.config)) {
+                                    controller.revealMeetingRecordingInFinder(path: savedRecordingPath)
+                                }
+                            }
+                        }
+                        .padding(MuesliTheme.spacing12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(MuesliTheme.surfacePrimary)
+                        .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
+                                .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
+                        )
+                    }
+                }
+            }
+            .frame(maxWidth: detailColumnWidth, alignment: .leading)
+        }
     }
 
     @ViewBuilder
@@ -791,8 +886,6 @@ struct MeetingDetailView: View {
     @ViewBuilder
     private func contentToolbar(for meeting: MeetingRecord) -> some View {
         HStack {
-            documentModePicker
-
             Spacer()
 
             editButton(for: meeting)
@@ -829,6 +922,114 @@ struct MeetingDetailView: View {
         .frame(maxWidth: detailColumnWidth, alignment: .leading)
     }
 
+    private func mergeCandidatesSheet(for meeting: MeetingRecord) -> some View {
+        let related = relatedMeetings(for: meeting)
+        let mergeableCount = related.filter(\.isMergeable).count
+        return VStack(alignment: .leading, spacing: MuesliTheme.spacing16) {
+            Text(L10n.text(.meetingMergeSheetTitle, config: appState.config))
+                .font(MuesliTheme.title3())
+                .foregroundStyle(MuesliTheme.textPrimary)
+            Text(L10n.text(.meetingMergeSheetMessage, config: appState.config))
+                .font(MuesliTheme.callout())
+                .foregroundStyle(MuesliTheme.textSecondary)
+
+            if related.isEmpty {
+                Text(L10n.text(.meetingMergeNoCandidates, config: appState.config))
+                    .font(MuesliTheme.body())
+                    .foregroundStyle(MuesliTheme.textTertiary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            } else {
+                if mergeableCount == 0 {
+                    Text(L10n.text(.meetingMergeOnlyBlockedCandidates, config: appState.config))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(MuesliTheme.textSecondary)
+                }
+                ScrollView {
+                    VStack(alignment: .leading, spacing: MuesliTheme.spacing12) {
+                        ForEach(related) { option in
+                            let candidate = option.meeting
+                            Button {
+                                guard option.isMergeable else { return }
+                                if selectedMergeCandidateIDs.contains(candidate.id) {
+                                    selectedMergeCandidateIDs.remove(candidate.id)
+                                } else {
+                                    selectedMergeCandidateIDs.insert(candidate.id)
+                                }
+                            } label: {
+                                HStack(alignment: .top, spacing: MuesliTheme.spacing12) {
+                                    Image(systemName: selectedMergeCandidateIDs.contains(candidate.id) ? "checkmark.circle.fill" : "circle")
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundStyle(selectedMergeCandidateIDs.contains(candidate.id) ? MuesliTheme.accent : MuesliTheme.textTertiary)
+                                        .padding(.top, 2)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(candidate.title)
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .foregroundStyle(MuesliTheme.textPrimary)
+                                        Text(formatMeta(candidate))
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(MuesliTheme.textSecondary)
+                                        if !candidate.manualNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                            Text(candidate.manualNotes.trimmingCharacters(in: .whitespacesAndNewlines))
+                                                .font(.system(size: 11))
+                                                .foregroundStyle(MuesliTheme.textTertiary)
+                                                .lineLimit(3)
+                                        }
+                                        if let blockReason = mergeBlockReasonLabel(option.blockingReason) {
+                                            Text(blockReason)
+                                                .font(.system(size: 11, weight: .medium))
+                                                .foregroundStyle(MuesliTheme.textSecondary)
+                                                .lineLimit(3)
+                                        }
+                                    }
+                                    Spacer(minLength: 0)
+                                }
+                                .padding(MuesliTheme.spacing12)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(MuesliTheme.surfacePrimary)
+                                .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
+                                        .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
+                                )
+                                .opacity(option.isMergeable ? 1 : 0.72)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(!option.isMergeable)
+                        }
+                    }
+                }
+            }
+
+            HStack {
+                Text(L10n.text(.meetingMergeSelected(count: selectedMergeCandidateIDs.count), config: appState.config))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(MuesliTheme.textSecondary)
+
+                Spacer()
+
+                Button(L10n.text(.sidebarCancel, config: appState.config)) {
+                    isMergeSheetPresented = false
+                }
+                .buttonStyle(.plain)
+
+                Button(isMerging ? L10n.text(.meetingMergeProcessing, config: appState.config) : L10n.text(.meetingMergeKeepSummary, config: appState.config)) {
+                    runMerge(for: meeting, summaryMode: .keepCurrentSummary)
+                }
+                .buttonStyle(.bordered)
+                .disabled(selectedMergeCandidateIDs.isEmpty || isMerging)
+
+                Button(isMerging ? L10n.text(.meetingMergeProcessing, config: appState.config) : L10n.text(.meetingMergeReSummarize, config: appState.config)) {
+                    runMerge(for: meeting, summaryMode: .reSummarize)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(selectedMergeCandidateIDs.isEmpty || isMerging)
+            }
+        }
+        .padding(24)
+        .frame(minWidth: 560, minHeight: 420)
+        .background(MuesliTheme.backgroundBase)
+    }
+
     @ViewBuilder
     private func manualNotesToolbar(for meeting: MeetingRecord) -> some View {
         HStack(spacing: MuesliTheme.spacing8) {
@@ -854,6 +1055,114 @@ struct MeetingDetailView: View {
             }
         }
         .frame(maxWidth: detailColumnWidth, alignment: .leading)
+    }
+
+    private func hasTranscriptContent(for meeting: MeetingRecord) -> Bool {
+        if meeting.status == .recording || meeting.status == .processing {
+            guard appState.config.enableLiveMeetingTranscript else { return false }
+            return !liveTranscriptTurns(for: meeting).isEmpty
+        }
+        return !meeting.rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func liveTranscriptTurns(for meeting: MeetingRecord) -> [LiveMeetingTranscriptTurn] {
+        guard appState.activeMeetingTranscriptMeetingID == meeting.id else { return [] }
+        return appState.activeMeetingTranscriptTurns
+    }
+
+    @ViewBuilder
+    private func liveMeetingComposer(for meeting: MeetingRecord) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if isLiveTranscriptExpanded {
+                transcriptPanel(for: meeting)
+            }
+
+            HStack(spacing: MuesliTheme.spacing12) {
+                Button {
+                    isLiveTranscriptExpanded.toggle()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: isLiveTranscriptExpanded ? "waveform.and.magnifyingglass" : "waveform")
+                            .font(.system(size: 12, weight: .semibold))
+                        Image(systemName: isLiveTranscriptExpanded ? "chevron.down" : "chevron.up")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .foregroundStyle(MuesliTheme.textSecondary)
+                    .frame(width: 44, height: 34)
+                    .background(MuesliTheme.surfacePrimary)
+                    .clipShape(Capsule())
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(!hasTranscriptContent(for: meeting))
+                .help(
+                    hasTranscriptContent(for: meeting)
+                        ? L10n.text(
+                            isLiveTranscriptExpanded ? .meetingLiveTranscriptToggleCollapse : .meetingLiveTranscriptToggleExpand,
+                            config: appState.config
+                        )
+                        : L10n.text(.meetingTranscriptUnavailable, config: appState.config)
+                )
+
+                TextField(L10n.text(.meetingLiveChatPlaceholder, config: appState.config), text: $liveChatDraft)
+                    .textFieldStyle(.plain)
+                    .font(MuesliTheme.body())
+                    .padding(.horizontal, MuesliTheme.spacing16)
+                    .padding(.vertical, 10)
+                    .background(MuesliTheme.backgroundBase)
+                    .clipShape(Capsule())
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
+                    )
+            }
+            .padding(MuesliTheme.spacing12)
+            .frame(maxWidth: detailColumnWidth, alignment: .leading)
+            .background(MuesliTheme.backgroundRaised)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: MuesliTheme.cornerMedium)
+                .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private func transcriptPanel(for meeting: MeetingRecord) -> some View {
+        if (meeting.status == .recording || meeting.status == .processing) && appState.config.enableLiveMeetingTranscript {
+            LiveMeetingTranscriptView(
+                turns: liveTranscriptTurns(for: meeting),
+                placeholder: L10n.text(.meetingLiveTranscriptPlaceholder, config: appState.config)
+            )
+            .frame(maxWidth: detailColumnWidth, minHeight: 160, maxHeight: 240, alignment: .topLeading)
+            .background(MuesliTheme.backgroundRaised)
+            .overlay(alignment: .bottom) {
+                Divider()
+                    .background(MuesliTheme.surfaceBorder)
+            }
+        } else if hasTranscriptContent(for: meeting) {
+            MeetingTranscriptView(transcript: meeting.rawTranscript)
+                .frame(maxWidth: detailColumnWidth, minHeight: 160, maxHeight: 240, alignment: .topLeading)
+                .background(MuesliTheme.backgroundRaised)
+                .overlay(alignment: .bottom) {
+                    Divider()
+                        .background(MuesliTheme.surfaceBorder)
+                }
+        } else {
+            Text(L10n.text(.meetingTranscriptUnavailable, config: appState.config))
+                .font(.system(size: 12))
+                .foregroundStyle(MuesliTheme.textTertiary)
+                .padding(MuesliTheme.spacing16)
+                .frame(maxWidth: detailColumnWidth, minHeight: 100, alignment: .topLeading)
+                .background(MuesliTheme.backgroundRaised)
+                .overlay(alignment: .bottom) {
+                    Divider()
+                        .background(MuesliTheme.surfaceBorder)
+                }
+        }
     }
 
     @ViewBuilder
@@ -931,13 +1240,16 @@ struct MeetingDetailView: View {
 
     @ViewBuilder
     private func exportMenu(for meeting: MeetingRecord) -> some View {
-        let currentContent: MeetingExportContent = documentMode == .transcript ? .transcript : .notes
-        let currentLabel = documentMode == .transcript ? L10n.text(.meetingExportTranscript, config: appState.config) : L10n.text(.meetingExportNotes, config: appState.config)
         Menu {
             Button {
-                MeetingExporter.export(meeting: meeting, content: currentContent)
+                MeetingExporter.export(meeting: meeting, content: .notes)
             } label: {
-                Label(currentLabel, systemImage: documentMode == .transcript ? "text.quote" : "doc.text")
+                Label(L10n.text(.meetingExportNotes, config: appState.config), systemImage: "doc.text")
+            }
+            Button {
+                MeetingExporter.export(meeting: meeting, content: .transcript)
+            } label: {
+                Label(L10n.text(.meetingExportTranscript, config: appState.config), systemImage: "text.quote")
             }
             Button {
                 MeetingExporter.export(meeting: meeting, content: .fullMeeting)
@@ -1156,12 +1468,7 @@ struct MeetingDetailView: View {
     }
 
     private func activeCopyText(for meeting: MeetingRecord) -> String {
-        switch documentMode {
-        case .notes:
-            return isEditingNotes ? editableNotes : Self.notesContent(for: meeting)
-        case .transcript:
-            return meeting.rawTranscript
-        }
+        isEditingNotes ? editableNotes : Self.notesContent(for: meeting)
     }
 
     private func isRawTranscript(_ meeting: MeetingRecord) -> Bool {
@@ -1215,15 +1522,6 @@ struct MeetingDetailView: View {
             return "# \(meeting.title)\n\n## Raw Transcript\n\n\(meeting.rawTranscript)"
         }
         return meeting.formattedNotes
-    }
-
-    private static func defaultDocumentMode(for meeting: MeetingRecord) -> MeetingDocumentMode {
-        if meeting.status == .noteOnly || meeting.status == .recording || meeting.status == .processing || meeting.status == .failed {
-            return .notes
-        }
-        return meeting.notesState == .structuredNotes
-            ? MeetingDocumentMode.notes
-            : MeetingDocumentMode.transcript
     }
 
     private func debounceSaveTitle(meetingID: Int64) {
@@ -1281,6 +1579,17 @@ struct MeetingDetailView: View {
         )
     }
 
+    private var mergeErrorBinding: Binding<Bool> {
+        Binding(
+            get: { mergeErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    mergeErrorMessage = nil
+                }
+            }
+        )
+    }
+
     private var calendarAssociationErrorBinding: Binding<Bool> {
         Binding(
             get: { calendarAssociationErrorMessage != nil },
@@ -1290,6 +1599,25 @@ struct MeetingDetailView: View {
                 }
             }
         )
+    }
+
+    private func runMerge(for meeting: MeetingRecord, summaryMode: MeetingMergeSummaryMode) {
+        guard !selectedMergeCandidateIDs.isEmpty else { return }
+        isMerging = true
+        controller.mergeMeetings(
+            into: meeting.id,
+            sourceMeetingIDs: Array(selectedMergeCandidateIDs).sorted(),
+            summaryMode: summaryMode
+        ) { result in
+            isMerging = false
+            switch result {
+            case .success:
+                selectedMergeCandidateIDs = []
+                isMergeSheetPresented = false
+            case .failure(let error):
+                mergeErrorMessage = error.localizedDescription
+            }
+        }
     }
 
     private func resolvedPendingTemplateDefinition(for meeting: MeetingRecord) -> MeetingTemplateDefinition {
@@ -1421,11 +1749,15 @@ struct MeetingDetailView: View {
             editableManualNotes = meeting?.manualNotes ?? ""
             manualNotesSaveStatus = .saved
             isAssociatedEventExpanded = true
+            isLiveTranscriptExpanded = false
+            liveChatDraft = ""
+            selectedMergeCandidateIDs = []
+            isMerging = false
+            mergeErrorMessage = nil
         } else {
             syncManualNotesState(with: meeting)
         }
         pendingTemplateID = meeting.map { controller.meetingTemplateSnapshot(for: $0).id } ?? controller.defaultMeetingTemplate().id
-        documentMode = meeting.map(Self.defaultDocumentMode(for:)) ?? .notes
     }
 
     private func syncManualNotesState(with meeting: MeetingRecord?) {
@@ -1687,14 +2019,32 @@ private struct MeetingTranscriptView: View {
     let transcript: String
 
     var body: some View {
-        ScrollView {
-            Text(transcript)
-                .font(.system(size: 13, design: .monospaced))
-                .foregroundStyle(MuesliTheme.textPrimary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .textSelection(.enabled)
-                .padding(MuesliTheme.spacing24)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        let turns = MeetingTranscriptDisplayTurnParser.parse(transcript)
+
+        if turns.isEmpty, !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            ScrollView {
+                Text(transcript)
+                    .font(.system(size: 13, design: .monospaced))
+                    .foregroundStyle(MuesliTheme.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+                    .padding(MuesliTheme.spacing24)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            MeetingTranscriptChatView(turns: turns, placeholder: nil)
         }
+    }
+}
+
+private struct LiveMeetingTranscriptView: View {
+    let turns: [LiveMeetingTranscriptTurn]
+    let placeholder: String
+
+    var body: some View {
+        MeetingTranscriptChatView(
+            turns: turns.map { $0.asDisplayTurn() },
+            placeholder: placeholder
+        )
     }
 }

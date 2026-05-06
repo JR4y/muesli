@@ -292,6 +292,12 @@ enum TranscriptFormatter {
         ).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private static func visibleLength(of text: String) -> Int {
+        text.unicodeScalars.reduce(0) { partialResult, scalar in
+            partialResult + (CharacterSet.whitespacesAndNewlines.contains(scalar) ? 0 : 1)
+        }
+    }
+
     private static func appendText(_ lhs: String, _ rhs: String, gap: TimeInterval) -> String {
         if shouldConcatenateDirectly(lhs, rhs, gap: gap) {
             return lhs + rhs
@@ -330,12 +336,6 @@ enum TranscriptFormatter {
         }
 
         return lhs + " " + rhs
-    }
-
-    private static func visibleLength(of text: String) -> Int {
-        text.unicodeScalars.reduce(0) { partialResult, scalar in
-            partialResult + (CharacterSet.whitespacesAndNewlines.contains(scalar) ? 0 : 1)
-        }
     }
 
 }

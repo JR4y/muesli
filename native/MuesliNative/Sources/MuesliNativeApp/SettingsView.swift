@@ -448,6 +448,12 @@ struct SettingsView: View {
                     }
                 }
                 Divider().background(MuesliTheme.surfaceBorder)
+                settingsRow(L10n.text(.settingsLiveMeetingTranscript, config: appState.config)) {
+                    settingsSwitch(isOn: appState.config.enableLiveMeetingTranscript) { newValue in
+                        controller.updateConfig { $0.enableLiveMeetingTranscript = newValue }
+                    }
+                }
+                Divider().background(MuesliTheme.surfaceBorder)
                 screenContextRow(L10n.text(.settingsMeetingContext, config: appState.config))
             }
 

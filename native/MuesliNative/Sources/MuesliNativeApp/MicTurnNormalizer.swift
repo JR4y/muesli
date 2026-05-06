@@ -10,7 +10,8 @@ enum MicTurnNormalizer {
     static func normalize(
         result: SpeechTranscriptionResult,
         startTime: TimeInterval,
-        endTime: TimeInterval
+        endTime: TimeInterval,
+        style: TranscriptSegmentationStyle = .canonical
     ) -> [SpeechSegment] {
         let trimmedText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return [] }
@@ -26,7 +27,7 @@ enum MicTurnNormalizer {
             return sentenceSplit(text: trimmedText, startTime: startTime, endTime: clampedEndTime)
         }
 
-        let mergedSegments = mergeAdjacentSegments(timedSegments)
+        let mergedSegments = mergeAdjacentSegments(timedSegments, style: style)
         guard !isFragmented(mergedSegments) else {
             return sentenceSplit(text: trimmedText, startTime: startTime, endTime: clampedEndTime)
         }
@@ -55,7 +56,10 @@ enum MicTurnNormalizer {
         }
     }
 
-    private static func mergeAdjacentSegments(_ segments: [SpeechSegment]) -> [SpeechSegment] {
+    private static func mergeAdjacentSegments(
+        _ segments: [SpeechSegment],
+        style: TranscriptSegmentationStyle
+    ) -> [SpeechSegment] {
         guard !segments.isEmpty else { return [] }
 
         let orderedSegments = segments.sorted { lhs, rhs in
@@ -75,9 +79,17 @@ enum MicTurnNormalizer {
 
             let gap = max(0, segment.start - previous.end)
             let shortSegmentGapCap: TimeInterval = 1.5
-            let shouldMerge = gap <= maxMergeGapSeconds
-                || (gap <= shortSegmentGapCap && visibleLength(of: previous.text) < shortSegmentVisibleLength)
-                || (gap <= shortSegmentGapCap && visibleLength(of: segment.text) < shortSegmentVisibleLength)
+            let shouldMerge: Bool
+            switch style {
+            case .liveDisplay:
+                shouldMerge = gap <= maxMergeGapSeconds
+                    || (gap <= shortSegmentGapCap && visibleLength(of: previous.text) < shortSegmentVisibleLength)
+                    || (gap <= shortSegmentGapCap && visibleLength(of: segment.text) < shortSegmentVisibleLength)
+            case .canonical:
+                shouldMerge = gap <= maxMergeGapSeconds
+                    || (gap <= shortSegmentGapCap && visibleLength(of: previous.text) < shortSegmentVisibleLength)
+                    || (gap <= shortSegmentGapCap && visibleLength(of: segment.text) < shortSegmentVisibleLength)
+            }
 
             if shouldMerge {
                 merged[merged.count - 1] = SpeechSegment(
@@ -92,7 +104,6 @@ enum MicTurnNormalizer {
 
         return merged
     }
-
     private static func isFragmented(_ segments: [SpeechSegment]) -> Bool {
         guard segments.count > 3 else { return false }
 

@@ -6,12 +6,16 @@ enum SystemTurnNormalizer {
     static func normalize(
         result: SpeechTranscriptionResult,
         startTime: TimeInterval,
-        endTime: TimeInterval
+        endTime: TimeInterval,
+        style: TranscriptSegmentationStyle = .canonical
     ) -> [SpeechSegment] {
         let trimmedText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return [] }
 
         let clampedEndTime = max(endTime, startTime + 0.1)
+        if style == .liveDisplay, visibleLength(of: trimmedText) >= 320 {
+            return [SpeechSegment(start: startTime, end: clampedEndTime, text: trimmedText)]
+        }
         let units = sentenceUnits(from: trimmedText)
         guard units.count > 1 else {
             return [SpeechSegment(start: startTime, end: clampedEndTime, text: trimmedText)]

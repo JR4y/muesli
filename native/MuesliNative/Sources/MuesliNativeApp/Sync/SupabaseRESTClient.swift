@@ -252,6 +252,7 @@ final class SupabaseRESTClient {
         remoteID: String?,
         userID: String,
         folderRemoteID: String?,
+        mergedIntoMeetingRemoteID: String?,
         title: String,
         calendarEventID: String?,
         calendarEventSnapshotJSON: String?,
@@ -274,6 +275,7 @@ final class SupabaseRESTClient {
         var body: [String: Any] = [
             "user_id": userID,
             "folder_id": folderRemoteID as Any? ?? NSNull(),
+            "merged_into_meeting_id": mergedIntoMeetingRemoteID as Any? ?? NSNull(),
             "title": title,
             "calendar_event_id": calendarEventID as Any? ?? NSNull(),
             "calendar_event_snapshot": Self.parseJSONOrNull(calendarEventSnapshotJSON),
@@ -308,6 +310,7 @@ final class SupabaseRESTClient {
         remoteID: String,
         expectedVersion: Int64,
         folderRemoteID: String?,
+        mergedIntoMeetingRemoteID: String?,
         title: String,
         calendarEventID: String?,
         calendarEventSnapshotJSON: String?,
@@ -329,6 +332,7 @@ final class SupabaseRESTClient {
     ) async throws -> RemoteMeetingPayload? {
         let body: [String: Any] = [
             "folder_id": folderRemoteID as Any? ?? NSNull(),
+            "merged_into_meeting_id": mergedIntoMeetingRemoteID as Any? ?? NSNull(),
             "title": title,
             "calendar_event_id": calendarEventID as Any? ?? NSNull(),
             "calendar_event_snapshot": Self.parseJSONOrNull(calendarEventSnapshotJSON),
@@ -616,6 +620,7 @@ final class SupabaseRESTClient {
             return nil
         }
         let folderRemoteID = row["folder_id"] as? String
+        let mergedIntoMeetingRemoteID = row["merged_into_meeting_id"] as? String
         let calendarEventID = row["calendar_event_id"] as? String
         let snapshotJSON: String? = {
             guard let object = row["calendar_event_snapshot"] else { return nil }
@@ -641,6 +646,7 @@ final class SupabaseRESTClient {
         return RemoteMeetingPayload(
             remoteID: id,
             folderRemoteID: folderRemoteID,
+            mergedIntoMeetingRemoteID: mergedIntoMeetingRemoteID,
             title: title,
             calendarEventID: calendarEventID,
             calendarEventSnapshotJSON: snapshotJSON,

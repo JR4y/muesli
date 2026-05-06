@@ -86,6 +86,8 @@ final class AppState {
     var modelPreparationProgress: Double?
     var isModelPreparingAfterDownload: Bool = false
     var modelPreparationIsComplete: Bool = false
+    var activeMeetingTranscriptMeetingID: Int64?
+    var activeMeetingTranscriptTurns: [LiveMeetingTranscriptTurn] = []
 
     // Dictation pagination & filtering
     var dictationPageSize: Int = 50

@@ -204,7 +204,7 @@ struct MeetingChunkCollectorTests {
 
     @Test("collector waits for tasks, keeps completed segments, and sorts by start")
     func collectorSortsSegments() async {
-        let collector = MeetingChunkCollector()
+        let collector = MeetingChunkCollector<[SpeechSegment]>()
 
         _ = collector.add(
             Task {
@@ -225,7 +225,14 @@ struct MeetingChunkCollectorTests {
             }
         )
 
-        let segments = await collector.closeAndDrainSortedSegments()
+        let segments = (await collector.closeAndDrain())
+            .flatMap { $0 }
+            .sorted { lhs, rhs in
+                if lhs.start == rhs.start {
+                    return lhs.text < rhs.text
+                }
+                return lhs.start < rhs.start
+            }
 
         #expect(segments.map(\.text) == ["earlier", "later"])
         #expect(segments.map(\.start) == [10, 30])
@@ -233,13 +240,13 @@ struct MeetingChunkCollectorTests {
 
     @Test("collector rejects tasks after closing")
     func collectorRejectsLateTasks() async {
-        let collector = MeetingChunkCollector()
+        let collector = MeetingChunkCollector<[SpeechSegment]>()
         let initialTask = Task<[SpeechSegment], Never> {
             [SpeechSegment(start: 1, end: 2, text: "first")]
         }
         #expect(collector.add(initialTask))
 
-        let initial = await collector.closeAndDrainSortedSegments()
+        let initial = (await collector.closeAndDrain()).flatMap { $0 }
         #expect(initial.map(\.text) == ["first"])
 
         let lateTask = Task<[SpeechSegment], Never> {
@@ -251,7 +258,7 @@ struct MeetingChunkCollectorTests {
 
     @Test("collector flattens timed segments from a single chunk and sorts them")
     func collectorFlattensChunkSegments() async {
-        let collector = MeetingChunkCollector()
+        let collector = MeetingChunkCollector<[SpeechSegment]>()
 
         _ = collector.add(
             Task {
@@ -262,7 +269,14 @@ struct MeetingChunkCollectorTests {
             }
         )
 
-        let segments = await collector.closeAndDrainSortedSegments()
+        let segments = (await collector.closeAndDrain())
+            .flatMap { $0 }
+            .sorted { lhs, rhs in
+                if lhs.start == rhs.start {
+                    return lhs.text < rhs.text
+                }
+                return lhs.start < rhs.start
+            }
 
         #expect(segments.map(\.text) == ["first", "second"])
         #expect(segments.map(\.start) == [11, 12])

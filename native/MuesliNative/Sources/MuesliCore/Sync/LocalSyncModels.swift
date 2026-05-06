@@ -182,11 +182,18 @@ public struct DirtyMeeting: Sendable {
     public let metadata: SyncMetadataRecord
     public let record: MeetingRecord
     public let folderRemoteID: String?
+    public let mergedIntoMeetingRemoteID: String?
 
-    public init(metadata: SyncMetadataRecord, record: MeetingRecord, folderRemoteID: String?) {
+    public init(
+        metadata: SyncMetadataRecord,
+        record: MeetingRecord,
+        folderRemoteID: String?,
+        mergedIntoMeetingRemoteID: String? = nil
+    ) {
         self.metadata = metadata
         self.record = record
         self.folderRemoteID = folderRemoteID
+        self.mergedIntoMeetingRemoteID = mergedIntoMeetingRemoteID
     }
 }
 
@@ -295,6 +302,7 @@ public struct RemoteDictationPayload: Sendable {
 public struct RemoteMeetingPayload: Sendable {
     public let remoteID: String
     public let folderRemoteID: String?
+    public let mergedIntoMeetingRemoteID: String?
     public let title: String
     public let calendarEventID: String?
     public let calendarEventSnapshotJSON: String?
@@ -319,6 +327,7 @@ public struct RemoteMeetingPayload: Sendable {
     public init(
         remoteID: String,
         folderRemoteID: String?,
+        mergedIntoMeetingRemoteID: String? = nil,
         title: String,
         calendarEventID: String?,
         calendarEventSnapshotJSON: String?,
@@ -342,6 +351,7 @@ public struct RemoteMeetingPayload: Sendable {
     ) {
         self.remoteID = remoteID
         self.folderRemoteID = folderRemoteID
+        self.mergedIntoMeetingRemoteID = mergedIntoMeetingRemoteID
         self.title = title
         self.calendarEventID = calendarEventID
         self.calendarEventSnapshotJSON = calendarEventSnapshotJSON

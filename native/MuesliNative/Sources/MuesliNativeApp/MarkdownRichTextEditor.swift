@@ -539,6 +539,27 @@ private final class PlaceholderTextView: NSTextView {
         didSet { needsDisplay = true }
     }
 
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.modifierFlags.contains(.command) {
+            switch event.charactersIgnoringModifiers {
+            case "z":
+                let action = event.modifierFlags.contains(.shift) ? Selector(("redo:")) : Selector(("undo:"))
+                if NSApp.sendAction(action, to: nil, from: self) { return true }
+            case "v":
+                if NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: self) { return true }
+            case "c":
+                if NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: self) { return true }
+            case "x":
+                if NSApp.sendAction(#selector(NSText.cut(_:)), to: nil, from: self) { return true }
+            case "a":
+                if NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: self) { return true }
+            default:
+                break
+            }
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         guard string.isEmpty, !placeholder.isEmpty else { return }
