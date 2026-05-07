@@ -8,7 +8,7 @@ It is intended to serve three purposes at once:
 - make it easy to resume work without losing context
 - prepare a clean base for future beta release notes and README feature updates
 
-Last updated: `2026-05-06`
+Last updated: `2026-05-07`
 Working branch: `beta`
 Dev app: `muesli-beta.app`
 
@@ -27,6 +27,55 @@ Git workflow currently documented and aligned:
 - `main` is reserved as the stable product branch
 
 ## Incremental history
+
+### 2026-05-07
+
+This pass pulled in the author's latest upstream native changes, validated
+them in `beta-mergework`, documented the merge discipline more explicitly, and
+then promoted the validated integration into `beta`.
+
+#### Upstream integration promoted through mergework
+
+- `vendor` was refreshed from the author's current `upstream/main`
+- `beta-mergework` was recreated from the current `beta` before any upstream
+  integration work
+- upstream was merged and reviewed in `beta-mergework` first, not directly in
+  `beta`
+- `docs/fork-workflow.md` was tightened so the required order is now explicit:
+  refresh `vendor`, recreate `beta-mergework`, merge there, validate there,
+  then promote to `beta`
+
+#### Computer Use foundations incorporated into the fork
+
+- the author's new `Computer Use` lane is now present in the fork's beta code
+- Settings gained a dedicated `Computer Use` pane for planner enablement,
+  account/model choices, and timeout controls
+- Shortcuts gained a second configurable hotkey surface specifically for
+  `Computer Use`
+- dictation history rows now understand the new `CUA` command records and
+  expose the trace-copy flow that came with the upstream feature
+- the merge kept the fork's existing settings shell, navigation, and
+  localization structure while absorbing the new upstream capability under it
+
+#### Shortcut behavior and coexistence
+
+- the fork's existing status/menu bar behavior remains the primary UX layer
+- the upstream work did not replace that layer; it added a second hotkey lane
+  for `Computer Use`
+- the upstream hotkey monitor hardening for text editing was kept, so standard
+  edit shortcuts behave more safely while note fields are focused
+- the current merged state intentionally allows `Dictation` and `Computer Use`
+  to coexist as separate modifier-key shortcuts, with runtime protection
+  against both using the same key at once
+
+#### Follow-up captured for the fork
+
+- `docs/backlog.md` now explicitly tracks a shortcut-system consolidation pass
+  to clean up the remaining conceptual overlap between standard macOS edit
+  commands, the fork's shortcut surfaces, and the new upstream `Computer Use`
+  hotkey lane
+- the current beta app install was intentionally left in place for continued
+  manual validation after promotion
 
 ### 2026-05-06
 

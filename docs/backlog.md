@@ -178,6 +178,35 @@ Notes:
 - the meeting detail action area is cleaner than before, but it should still be watched in real usage to confirm the final control grouping feels stable
 - transcript viewing is now visually stronger thanks to the shared chat-style transcript UI, so the next UX work should focus more on live quality and interaction behavior than on transcript styling basics
 
+### 5b. Shortcut system consolidation
+
+Goal:
+reduce overlap between the fork's existing shortcut surfaces and the newer
+upstream shortcut/computer-use layers without regressing the workflows that
+already feel stable in `beta`.
+
+Possible scope:
+
+- map the current shortcut stack end to end: top app menu, status bar/menu bar
+  actions, dictation hotkey, computer-use hotkey, and text-edit shortcuts
+- confirm which parts are truly duplicated versus intentionally complementary
+- decide whether any setup in `AppDelegate` / `StandardMainMenu` should be
+  collapsed into one source of truth
+- review whether the `Computer Use` shortcut should stay enabled by default in
+  the fork or ship as a secondary opt-in capability
+- finish localizing the remaining `Computer Use` strings in `Shortcuts` once
+  the behavior is considered stable
+
+Notes:
+
+- the current merge keeps the fork's existing shortcut UX and adds the
+  upstream `Computer Use` shortcut as a second lane
+- the author also hardened text-edit shortcut handling in the hotkey monitor,
+  which is useful and should be preserved
+- there is still conceptual overlap between "shortcut configuration",
+  "standard macOS edit commands", and "global hotkey capture" that should be
+  cleaned up deliberately instead of growing by accident
+
 ### 6. In-meeting note handling
 
 Goal:
