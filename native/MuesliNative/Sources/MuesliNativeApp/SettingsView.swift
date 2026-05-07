@@ -269,6 +269,8 @@ struct SettingsView: View {
             return L10n.text(.settingsPaneGeneral, config: appState.config)
         case .dictation:
             return L10n.text(.settingsPaneDictation, config: appState.config)
+        case .computerUse:
+            return "Computer Use"
         case .meetings:
             return L10n.text(.settingsPaneMeetings, config: appState.config)
         case .appearance:
@@ -291,6 +293,8 @@ struct SettingsView: View {
             settingsScrollPane { generalSettingsPane }
         case .dictation:
             settingsScrollPane { dictationSettingsPane }
+        case .computerUse:
+            settingsScrollPane { computerUseSettingsPane }
         case .meetings:
             settingsScrollPane { meetingsSettingsPane }
         case .appearance:
@@ -418,6 +422,46 @@ struct SettingsView: View {
                 }
                 Divider().background(MuesliTheme.surfaceBorder)
                 screenContextRow(L10n.text(.settingsAppContext, config: appState.config))
+            }
+        }
+    }
+
+    private var computerUseSettingsPane: some View {
+        VStack(alignment: .leading, spacing: MuesliTheme.spacing24) {
+            settingsSection("Computer Use") {
+                settingsRow("Enable planner", controlWidth: meetingControlWidth) {
+                    settingsSwitch(isOn: appState.config.enableComputerUsePlanner) { newValue in
+                        controller.updateConfig { $0.enableComputerUsePlanner = newValue }
+                    }
+                }
+                Divider().background(MuesliTheme.surfaceBorder)
+                settingsRow("Account", controlWidth: meetingControlWidth) {
+                    chatGPTAccountControl
+                }
+                Divider().background(MuesliTheme.surfaceBorder)
+                settingsRow("Planner model", controlWidth: meetingControlWidth) {
+                    settingsModelMenu(
+                        currentModel: appState.config.computerUsePlannerModel,
+                        presets: SummaryModelPreset.computerUsePlannerModels
+                    ) { val in controller.updateConfig { $0.computerUsePlannerModel = val } }
+                }
+                Divider().background(MuesliTheme.surfaceBorder)
+                settingsRow("Timeout", controlWidth: meetingControlWidth) {
+                    Stepper(
+                        value: Binding(
+                            get: { max(appState.config.computerUseTimeoutSeconds, 1) },
+                            set: { newValue in
+                                controller.updateConfig { $0.computerUseTimeoutSeconds = max(newValue, 1) }
+                            }
+                        ),
+                        in: 1...600,
+                        step: 15
+                    ) {
+                        Text("\(max(appState.config.computerUseTimeoutSeconds, 1)) seconds")
+                            .font(MuesliTheme.body())
+                            .foregroundStyle(MuesliTheme.textPrimary)
+                    }
+                }
             }
         }
     }

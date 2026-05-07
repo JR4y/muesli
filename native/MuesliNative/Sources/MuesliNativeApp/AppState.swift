@@ -15,6 +15,7 @@ enum DashboardTab: String, CaseIterable {
 enum SettingsPane: String, CaseIterable, Identifiable {
     case general
     case dictation
+    case computerUse
     case meetings
     case appearance
     case dictionary

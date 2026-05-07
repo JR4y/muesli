@@ -181,6 +181,13 @@ struct SummaryModelPreset {
         SummaryModelPreset(id: "gpt-4o", label: "GPT-4o"),
     ]
 
+    static let computerUsePlannerModels: [SummaryModelPreset] = [
+        SummaryModelPreset(id: "gpt-5.5", label: "GPT-5.5 (default)"),
+        SummaryModelPreset(id: "gpt-5.4", label: "GPT-5.4"),
+        SummaryModelPreset(id: "gpt-5.4-mini", label: "GPT-5.4 Mini"),
+        SummaryModelPreset(id: "gpt-5.2", label: "GPT-5.2"),
+    ]
+
     static let openRouterModels: [SummaryModelPreset] = [
         SummaryModelPreset(id: "stepfun/step-3.5-flash:free", label: "Step 3.5 Flash (256k ctx)"),
         SummaryModelPreset(id: "nvidia/nemotron-3-super-120b-a12b:free", label: "Nemotron 3 Super 120B (262k ctx)"),
@@ -518,6 +525,11 @@ struct HotkeyConfig: Codable, Equatable {
     }
 
     static let `default` = HotkeyConfig()
+    static let computerUseDefault = HotkeyConfig(keyCode: 54, label: "Right Cmd")
+
+    static func computerUseDefault(avoiding dictationHotkey: HotkeyConfig) -> HotkeyConfig {
+        dictationHotkey.keyCode == computerUseDefault.keyCode ? .default : .computerUseDefault
+    }
 }
 
 enum ThemePreset: String, CaseIterable, Codable {
@@ -559,6 +571,11 @@ struct AppConfig: Codable {
     var appLanguage: String = AppLanguage.system.rawValue
     var themePreset: String = ThemePreset.warm.rawValue
     var dictationHotkey: HotkeyConfig = .default
+    var computerUseHotkey: HotkeyConfig = .computerUseDefault
+    var enableComputerUseHotkey: Bool = true
+    var enableComputerUsePlanner: Bool = true
+    var computerUsePlannerModel: String = ""
+    var computerUseTimeoutSeconds: Int = 120
     var sttBackend: String = BackendOption.whisper.backend
     var sttModel: String = BackendOption.whisper.model
     var cohereLanguage: String = CohereTranscribeLanguage.defaultLanguage.rawValue
@@ -623,6 +640,11 @@ struct AppConfig: Codable {
         case appLanguage = "app_language"
         case themePreset = "theme_preset"
         case dictationHotkey = "dictation_hotkey"
+        case computerUseHotkey = "computer_use_hotkey"
+        case enableComputerUseHotkey = "enable_computer_use_hotkey"
+        case enableComputerUsePlanner = "enable_computer_use_planner"
+        case computerUsePlannerModel = "computer_use_planner_model"
+        case computerUseTimeoutSeconds = "computer_use_timeout_seconds"
         case sttBackend = "stt_backend"
         case sttModel = "stt_model"
         case cohereLanguage = "cohere_language"
@@ -690,6 +712,12 @@ struct AppConfig: Codable {
         appLanguage = AppLanguage.resolved(try? c.decode(String.self, forKey: .appLanguage)).rawValue
         themePreset = ThemePreset.resolved(try? c.decode(String.self, forKey: .themePreset)).rawValue
         dictationHotkey = (try? c.decode(HotkeyConfig.self, forKey: .dictationHotkey)) ?? defaults.dictationHotkey
+        computerUseHotkey = (try? c.decode(HotkeyConfig.self, forKey: .computerUseHotkey))
+            ?? HotkeyConfig.computerUseDefault(avoiding: dictationHotkey)
+        enableComputerUseHotkey = (try? c.decode(Bool.self, forKey: .enableComputerUseHotkey)) ?? defaults.enableComputerUseHotkey
+        enableComputerUsePlanner = (try? c.decode(Bool.self, forKey: .enableComputerUsePlanner)) ?? defaults.enableComputerUsePlanner
+        computerUsePlannerModel = (try? c.decode(String.self, forKey: .computerUsePlannerModel)) ?? defaults.computerUsePlannerModel
+        computerUseTimeoutSeconds = (try? c.decode(Int.self, forKey: .computerUseTimeoutSeconds)) ?? defaults.computerUseTimeoutSeconds
         sttBackend = (try? c.decode(String.self, forKey: .sttBackend)) ?? defaults.sttBackend
         sttModel = (try? c.decode(String.self, forKey: .sttModel)) ?? defaults.sttModel
         cohereLanguage = CohereTranscribeLanguage.resolvedCode(try? c.decode(String.self, forKey: .cohereLanguage))
