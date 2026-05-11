@@ -117,6 +117,9 @@ struct BackendOption: Equatable {
     /// Models available for download and use.
     static let all: [BackendOption] = parakeetFamily + whisperFamily + [.cohereTranscribe] + experimental
 
+    /// Conservative first-run choices. Experimental models stay in Models.
+    static let onboarding: [BackendOption] = [.parakeetMultilingual, .whisperTinyEnglish, .whisperSmall, .cohereTranscribe]
+
     /// Models coming soon — shown greyed out in the Models tab.
     static let comingSoon: [BackendOption] = []
 
@@ -315,11 +318,16 @@ struct MeetingSummaryBackendOption: Equatable {
         label: "ChatGPT"
     )
 
-    static let all: [MeetingSummaryBackendOption] = [.openAI, .openRouter, .chatGPT]
+    static let ollama = MeetingSummaryBackendOption(
+        backend: "ollama",
+        label: "Ollama"
+    )
+
+    static let all: [MeetingSummaryBackendOption] = [.chatGPT, .openAI, .openRouter, .ollama]
 
     static func resolved(_ backend: String?) -> MeetingSummaryBackendOption {
         guard let backend, let option = all.first(where: { $0.backend == backend }) else {
-            return .openAI
+            return .chatGPT
         }
         return option
     }
@@ -506,8 +514,8 @@ enum IndicatorAnchor: String, Codable, CaseIterable {
 }
 
 struct HotkeyConfig: Codable, Equatable {
-    var keyCode: UInt16 = 55
-    var label: String = "Left Cmd"
+    var keyCode: UInt16 = 61
+    var label: String = "Right Option"
 
     static func label(for keyCode: UInt16) -> String? {
         switch keyCode {
@@ -547,6 +555,7 @@ enum ThemePreset: String, CaseIterable, Codable {
 }
 
 enum OnboardingUseCase: String, Codable, CaseIterable {
+    case voiceNotes = "voice_notes"
     case dictation = "dictation"
     case meetings = "meetings"
     case dictationAndMeetings = "dictation_and_meetings"
@@ -555,8 +564,20 @@ enum OnboardingUseCase: String, Codable, CaseIterable {
         self == .dictation || self == .dictationAndMeetings
     }
 
+    var includesVoiceNotes: Bool {
+        self == .voiceNotes
+    }
+
+    var includesPushToTalk: Bool {
+        includesVoiceNotes || includesDictation
+    }
+
     var includesMeetings: Bool {
         self == .meetings || self == .dictationAndMeetings
+    }
+
+    var canSwitchToVoiceNotesOnly: Bool {
+        self == .dictation
     }
 
     static func resolved(_ rawValue: String?) -> OnboardingUseCase {
@@ -572,7 +593,8 @@ struct AppConfig: Codable {
     var themePreset: String = ThemePreset.warm.rawValue
     var dictationHotkey: HotkeyConfig = .default
     var computerUseHotkey: HotkeyConfig = .computerUseDefault
-    var enableComputerUseHotkey: Bool = true
+    var enableComputerUseHotkey: Bool = false
+    var computerUseHotkeyDefaultDisabledMigrationApplied: Bool = true
     var enableComputerUsePlanner: Bool = true
     var computerUsePlannerModel: String = ""
     var computerUseTimeoutSeconds: Int = 120
@@ -581,7 +603,7 @@ struct AppConfig: Codable {
     var cohereLanguage: String = CohereTranscribeLanguage.defaultLanguage.rawValue
     var meetingTranscriptionBackend: String = BackendOption.whisper.backend
     var meetingTranscriptionModel: String = BackendOption.whisper.model
-    var meetingSummaryBackend: String = MeetingSummaryBackendOption.openAI.backend
+    var meetingSummaryBackend: String = MeetingSummaryBackendOption.chatGPT.backend
     var defaultMeetingTemplateID: String = MeetingTemplates.autoID
     var autoTemplateTargetID: String = ""
     var meetingTitlePrompt: String = MeetingSummaryClient.defaultTitleInstructions
@@ -606,6 +628,8 @@ struct AppConfig: Codable {
     var openAIModel: String = ""
     var openRouterModel: String = ""
     var chatGPTModel: String = ""
+    var ollamaURL: String = "http://localhost:11434"
+    var ollamaModel: String = "qwen3.5"
     var summaryModel: String = ""
     var meetingSummaryModel: String = ""
     var hasCompletedOnboarding: Bool = false
@@ -642,6 +666,7 @@ struct AppConfig: Codable {
         case dictationHotkey = "dictation_hotkey"
         case computerUseHotkey = "computer_use_hotkey"
         case enableComputerUseHotkey = "enable_computer_use_hotkey"
+        case computerUseHotkeyDefaultDisabledMigrationApplied = "computer_use_hotkey_default_disabled_migration_applied"
         case enableComputerUsePlanner = "enable_computer_use_planner"
         case computerUsePlannerModel = "computer_use_planner_model"
         case computerUseTimeoutSeconds = "computer_use_timeout_seconds"
@@ -675,6 +700,8 @@ struct AppConfig: Codable {
         case openAIModel = "openai_model"
         case openRouterModel = "openrouter_model"
         case chatGPTModel = "chatgpt_model"
+        case ollamaURL = "ollama_url"
+        case ollamaModel = "ollama_model"
         case summaryModel = "summary_model"
         case meetingSummaryModel = "meeting_summary_model"
         case hasCompletedOnboarding = "has_completed_onboarding"
@@ -714,7 +741,11 @@ struct AppConfig: Codable {
         dictationHotkey = (try? c.decode(HotkeyConfig.self, forKey: .dictationHotkey)) ?? defaults.dictationHotkey
         computerUseHotkey = (try? c.decode(HotkeyConfig.self, forKey: .computerUseHotkey))
             ?? HotkeyConfig.computerUseDefault(avoiding: dictationHotkey)
-        enableComputerUseHotkey = (try? c.decode(Bool.self, forKey: .enableComputerUseHotkey)) ?? defaults.enableComputerUseHotkey
+        let hasAppliedComputerUseHotkeyDefaultMigration = c.contains(.computerUseHotkeyDefaultDisabledMigrationApplied)
+        enableComputerUseHotkey = hasAppliedComputerUseHotkeyDefaultMigration
+            ? ((try? c.decode(Bool.self, forKey: .enableComputerUseHotkey)) ?? defaults.enableComputerUseHotkey)
+            : false
+        computerUseHotkeyDefaultDisabledMigrationApplied = true
         enableComputerUsePlanner = (try? c.decode(Bool.self, forKey: .enableComputerUsePlanner)) ?? defaults.enableComputerUsePlanner
         computerUsePlannerModel = (try? c.decode(String.self, forKey: .computerUsePlannerModel)) ?? defaults.computerUsePlannerModel
         computerUseTimeoutSeconds = (try? c.decode(Int.self, forKey: .computerUseTimeoutSeconds)) ?? defaults.computerUseTimeoutSeconds
@@ -753,6 +784,8 @@ struct AppConfig: Codable {
         openAIModel = (try? c.decode(String.self, forKey: .openAIModel)) ?? defaults.openAIModel
         openRouterModel = (try? c.decode(String.self, forKey: .openRouterModel)) ?? defaults.openRouterModel
         chatGPTModel = (try? c.decode(String.self, forKey: .chatGPTModel)) ?? defaults.chatGPTModel
+        ollamaURL = (try? c.decode(String.self, forKey: .ollamaURL)) ?? defaults.ollamaURL
+        ollamaModel = (try? c.decode(String.self, forKey: .ollamaModel)) ?? defaults.ollamaModel
         summaryModel = (try? c.decode(String.self, forKey: .summaryModel)) ?? defaults.summaryModel
         meetingSummaryModel = (try? c.decode(String.self, forKey: .meetingSummaryModel)) ?? defaults.meetingSummaryModel
         hasCompletedOnboarding = (try? c.decode(Bool.self, forKey: .hasCompletedOnboarding)) ?? defaults.hasCompletedOnboarding

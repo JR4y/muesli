@@ -78,6 +78,14 @@ struct BackendOptionTests {
         #expect(!BackendOption.experimental.contains(.cohereTranscribe))
     }
 
+    @Test("onboarding model choices exclude experimental models")
+    func onboardingModelsExcludeExperimentalOptions() {
+        #expect(BackendOption.onboarding == [.parakeetMultilingual, .whisperTinyEnglish, .whisperSmall, .cohereTranscribe])
+        for option in BackendOption.experimental {
+            #expect(!BackendOption.onboarding.contains(option))
+        }
+    }
+
     @Test("Whisper models use WhisperKit CoreML identifiers")
     func whisperKitModels() {
         // WhisperKit models use short variant names, not ggml- prefixed binaries
@@ -324,24 +332,27 @@ struct MeetingSummaryBackendTests {
 
     @Test("all options listed")
     func allOptions() {
-        #expect(MeetingSummaryBackendOption.all.count == 3)
+        #expect(MeetingSummaryBackendOption.all.count == 4)
         #expect(MeetingSummaryBackendOption.all.contains(.openAI))
         #expect(MeetingSummaryBackendOption.all.contains(.openRouter))
         #expect(MeetingSummaryBackendOption.all.contains(.chatGPT))
+        #expect(MeetingSummaryBackendOption.all.contains(.ollama))
     }
 
     @Test("backend strings are lowercase")
     func backendStrings() {
         #expect(MeetingSummaryBackendOption.openAI.backend == "openai")
         #expect(MeetingSummaryBackendOption.openRouter.backend == "openrouter")
+        #expect(MeetingSummaryBackendOption.ollama.backend == "ollama")
     }
 
-    @Test("configured values resolve with OpenAI fallback")
+    @Test("configured values resolve with ChatGPT fallback")
     func resolvedValues() {
         #expect(MeetingSummaryBackendOption.resolved("chatgpt") == .chatGPT)
         #expect(MeetingSummaryBackendOption.resolved("openrouter") == .openRouter)
-        #expect(MeetingSummaryBackendOption.resolved("unknown") == .openAI)
-        #expect(MeetingSummaryBackendOption.resolved(nil) == .openAI)
+        #expect(MeetingSummaryBackendOption.resolved("ollama") == .ollama)
+        #expect(MeetingSummaryBackendOption.resolved("unknown") == .chatGPT)
+        #expect(MeetingSummaryBackendOption.resolved(nil) == .chatGPT)
     }
 }
 
@@ -356,7 +367,7 @@ struct AppConfigTests {
         #expect(config.cohereLanguage == CohereTranscribeLanguage.defaultLanguage.rawValue)
         #expect(config.meetingTranscriptionBackend == BackendOption.whisper.backend)
         #expect(config.meetingTranscriptionModel == BackendOption.whisper.model)
-        #expect(config.meetingSummaryBackend == "openai")
+        #expect(config.meetingSummaryBackend == "chatgpt")
         #expect(config.defaultMeetingTemplateID == MeetingTemplates.autoID)
         #expect(config.autoTemplateTargetID.isEmpty)
         #expect(config.meetingTitlePrompt == MeetingSummaryClient.defaultTitleInstructions)
@@ -366,9 +377,12 @@ struct AppConfigTests {
         #expect(config.mutedMeetingDetectionAppBundleIDs.isEmpty)
         #expect(config.openAIAPIKey.isEmpty)
         #expect(config.openRouterAPIKey.isEmpty)
+        #expect(config.ollamaURL == "http://localhost:11434")
+        #expect(config.ollamaModel == "qwen3.5")
         #expect(config.dictationHotkey == .default)
         #expect(config.computerUseHotkey == .computerUseDefault)
-        #expect(config.enableComputerUseHotkey == true)
+        #expect(config.enableComputerUseHotkey == false)
+        #expect(config.computerUseHotkeyDefaultDisabledMigrationApplied == true)
         #expect(config.enableComputerUsePlanner == true)
         #expect(config.computerUsePlannerModel.isEmpty)
         #expect(config.computerUseTimeoutSeconds == 120)
@@ -458,6 +472,7 @@ struct AppConfigTests {
         #expect(json["stt_model"] != nil)
         #expect(json["computer_use_hotkey"] != nil)
         #expect(json["enable_computer_use_hotkey"] != nil)
+        #expect(json["computer_use_hotkey_default_disabled_migration_applied"] != nil)
         #expect(json["enable_computer_use_planner"] != nil)
         #expect(json["computer_use_planner_model"] != nil)
         #expect(json["computer_use_timeout_seconds"] != nil)
@@ -503,7 +518,8 @@ struct AppConfigTests {
         #expect(config.customMeetingTemplates.isEmpty)
         #expect(config.hiddenBuiltInTemplateIDs.isEmpty)
         #expect(config.computerUseHotkey == .computerUseDefault)
-        #expect(config.enableComputerUseHotkey == true)
+        #expect(config.enableComputerUseHotkey == false)
+        #expect(config.computerUseHotkeyDefaultDisabledMigrationApplied == true)
         #expect(config.enableComputerUsePlanner == true)
         #expect(config.computerUsePlannerModel.isEmpty)
         #expect(config.computerUseTimeoutSeconds == 120)
@@ -527,7 +543,38 @@ struct AppConfigTests {
 
         #expect(config.dictationHotkey == HotkeyConfig(keyCode: 54, label: "Right Cmd"))
         #expect(config.computerUseHotkey == .default)
+        #expect(config.enableComputerUseHotkey == false)
+    }
+
+    @Test("legacy computer use hotkey enabled config is disabled once")
+    func legacyComputerUseHotkeyEnabledConfigIsDisabledOnce() throws {
+        let json = """
+        {
+          "enable_computer_use_hotkey": true,
+          "enable_computer_use_planner": true
+        }
+        """
+
+        let config = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
+
+        #expect(config.enableComputerUseHotkey == false)
+        #expect(config.computerUseHotkeyDefaultDisabledMigrationApplied == true)
+        #expect(config.enableComputerUsePlanner == true)
+    }
+
+    @Test("computer use hotkey remains enabled after migration is applied")
+    func computerUseHotkeyRemainsEnabledAfterMigrationIsApplied() throws {
+        let json = """
+        {
+          "enable_computer_use_hotkey": true,
+          "computer_use_hotkey_default_disabled_migration_applied": true
+        }
+        """
+
+        let config = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
+
         #expect(config.enableComputerUseHotkey == true)
+        #expect(config.computerUseHotkeyDefaultDisabledMigrationApplied == true)
     }
 
     @Test("unsupported onboarding use case falls back to dictation")
@@ -541,6 +588,22 @@ struct AppConfigTests {
         let config = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
 
         #expect(config.resolvedOnboardingUseCase == .dictation)
+    }
+
+    @Test("voice notes use push-to-talk without paste dictation")
+    func voiceNotesUsePushToTalkWithoutPasteDictation() {
+        #expect(OnboardingUseCase.voiceNotes.includesVoiceNotes)
+        #expect(OnboardingUseCase.voiceNotes.includesPushToTalk)
+        #expect(!OnboardingUseCase.voiceNotes.includesDictation)
+        #expect(!OnboardingUseCase.voiceNotes.includesMeetings)
+    }
+
+    @Test("voice notes escape hatch is dictation-only")
+    func voiceNotesEscapeHatchIsDictationOnly() {
+        #expect(OnboardingUseCase.dictation.canSwitchToVoiceNotesOnly)
+        #expect(!OnboardingUseCase.dictationAndMeetings.canSwitchToVoiceNotesOnly)
+        #expect(!OnboardingUseCase.meetings.canSwitchToVoiceNotesOnly)
+        #expect(!OnboardingUseCase.voiceNotes.canSwitchToVoiceNotesOnly)
     }
 
     @Test("scheduled meeting notifications inherit legacy detection opt-out")
@@ -963,11 +1026,11 @@ struct WordCountTests {
 @Suite("HotkeyConfig")
 struct HotkeyConfigTests {
 
-    @Test("default is Left Cmd")
+    @Test("default is Right Option")
     func defaultConfig() {
         let config = HotkeyConfig.default
-        #expect(config.keyCode == 55)
-        #expect(config.label == "Left Cmd")
+        #expect(config.keyCode == 61)
+        #expect(config.label == "Right Option")
     }
 
     @Test("computer use default is Right Cmd")
@@ -983,14 +1046,56 @@ struct HotkeyConfigTests {
         #expect(HotkeyConfig.computerUseDefault(avoiding: .computerUseDefault) == .default)
     }
 
+    @Test("hotkey policy blocks active duplicate shortcuts")
+    func hotkeyPolicyBlocksActiveDuplicateShortcuts() {
+        #expect(ShortcutHotkeyPolicy.validateDictationHotkey(
+            .computerUseDefault,
+            computerUseHotkey: .computerUseDefault,
+            isComputerUseEnabled: true
+        ) == .conflict(message: ShortcutHotkeyPolicy.conflictMessage))
+
+        #expect(ShortcutHotkeyPolicy.validateDictationHotkey(
+            .computerUseDefault,
+            computerUseHotkey: .computerUseDefault,
+            isComputerUseEnabled: false
+        ) == .updated)
+
+        #expect(ShortcutHotkeyPolicy.validateComputerUseHotkey(
+            .default,
+            dictationHotkey: .default,
+            isComputerUseEnabled: true
+        ) == .conflict(message: ShortcutHotkeyPolicy.conflictMessage))
+
+        #expect(ShortcutHotkeyPolicy.validateComputerUseHotkey(
+            .default,
+            dictationHotkey: .default,
+            isComputerUseEnabled: false
+        ) == .updated)
+    }
+
+    @Test("hotkey policy moves computer use key when enabling with a stale conflict")
+    func hotkeyPolicyMovesComputerUseKeyWhenEnablingWithStaleConflict() {
+        let resolution = ShortcutHotkeyPolicy.resolvedComputerUseHotkeyWhenEnabling(
+            currentHotkey: .default,
+            dictationHotkey: .default
+        )
+
+        #expect(resolution.hotkey == .computerUseDefault)
+        #expect(resolution.result.didUpdate)
+        #expect(resolution.result.message == "Computer Use Command moved to Right Cmd to avoid matching Push to Talk.")
+    }
+
     @Test("label for known key codes")
     func knownKeyCodes() {
         #expect(HotkeyConfig.label(for: 55) == "Left Cmd")
         #expect(HotkeyConfig.label(for: 54) == "Right Cmd")
         #expect(HotkeyConfig.label(for: 63) == "Fn")
         #expect(HotkeyConfig.label(for: 59) == "Left Ctrl")
+        #expect(HotkeyConfig.label(for: 62) == "Right Ctrl")
         #expect(HotkeyConfig.label(for: 58) == "Left Option")
+        #expect(HotkeyConfig.label(for: 61) == "Right Option")
         #expect(HotkeyConfig.label(for: 56) == "Left Shift")
+        #expect(HotkeyConfig.label(for: 60) == "Right Shift")
     }
 
     @Test("unknown key code returns nil")

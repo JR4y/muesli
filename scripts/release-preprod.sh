@@ -31,6 +31,7 @@ INSTALL_DIR="$OUTPUT_DIR/install-root"
 APP_DIR="$INSTALL_DIR/${APP_NAME}.app"
 APPCAST_PATH="$ROOT/docs/appcast-preprod.xml"
 GENERATE_APPCAST="$ROOT/native/MuesliNative/.build/artifacts/sparkle/Sparkle/bin/generate_appcast"
+UPDATE_APPCAST_RELEASE_NOTES="$ROOT/scripts/update_appcast_release_notes.py"
 VERIFY_DIR=""
 HOSTED_MOUNT_POINT=""
 
@@ -86,6 +87,11 @@ fi
 
 if [[ ! -x "$GENERATE_APPCAST" ]]; then
   echo "ERROR: generate_appcast not found at $GENERATE_APPCAST" >&2
+  exit 1
+fi
+
+if [[ ! -f "$UPDATE_APPCAST_RELEASE_NOTES" ]]; then
+  echo "ERROR: update_appcast_release_notes.py not found at $UPDATE_APPCAST_RELEASE_NOTES" >&2
   exit 1
 fi
 
@@ -344,6 +350,10 @@ if first_item is None:
 updated = without_target[:first_item.start()] + target_block + without_target[first_item.start():]
 open(appcast_path, "w", encoding="utf-8").write(updated)
 PY
+printf '%s\n' "$RELEASE_NOTES" | python3 "$UPDATE_APPCAST_RELEASE_NOTES" \
+  "$APPCAST_PATH" \
+  --sparkle-version "$SPARKLE_BUILD_VERSION" \
+  --short-version "$VERSION"
 
 "$ROOT/scripts/verify_update_flow.sh" \
   --version "$SPARKLE_BUILD_VERSION" \
@@ -353,6 +363,7 @@ PY
   --dmg "$DMG_PATH" \
   --app-name "$APP_NAME" \
   --feed-url "$PREPROD_FEED_URL" \
+  --require-release-notes \
   --require-notarized
 
 git add "$APPCAST_PATH"

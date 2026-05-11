@@ -75,6 +75,15 @@ struct DictationsView: View {
                 meetingStats: appState.meetingStats
             )
 
+            if appState.config.resolvedOnboardingUseCase.includesVoiceNotes {
+                HStack {
+                    Spacer()
+                    voiceNoteButton
+                }
+                .padding(.horizontal, MuesliTheme.spacing24)
+                .padding(.bottom, MuesliTheme.spacing12)
+            }
+
             if appState.dictationRows.isEmpty {
                 Spacer()
                 VStack(spacing: MuesliTheme.spacing12) {
@@ -84,7 +93,7 @@ struct DictationsView: View {
                     Text(L10n.text(.dictationsNoDictationsTitle, config: appState.config))
                         .font(MuesliTheme.title3())
                         .foregroundStyle(MuesliTheme.textSecondary)
-                    Text(L10n.text(.dictationsHoldToStart(hotkey: appState.config.dictationHotkey.label), config: appState.config))
+                    Text(emptyStateInstruction)
                         .font(MuesliTheme.callout())
                         .foregroundStyle(MuesliTheme.textTertiary)
                 }
@@ -162,6 +171,34 @@ struct DictationsView: View {
                 }
             }
         }
+    }
+
+    private var emptyStateInstruction: String {
+        appState.config.resolvedOnboardingUseCase.includesVoiceNotes
+            ? "Click Record Voice Note to capture your first note"
+            : L10n.text(.dictationsHoldToStart(hotkey: appState.config.dictationHotkey.label), config: appState.config)
+    }
+
+    private var voiceNoteButton: some View {
+        let isRecording = appState.isVoiceNoteRecording
+        return Button {
+            controller.toggleVoiceNoteRecording()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: isRecording ? "stop.fill" : "mic.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                Text(isRecording ? "Stop Voice Note" : "Record Voice Note")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+            .background(isRecording ? MuesliTheme.recording : MuesliTheme.accent)
+            .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
+        }
+        .buttonStyle(.plain)
+        .disabled(appState.dictationState == .transcribing)
+        .opacity(appState.dictationState == .transcribing ? 0.55 : 1)
     }
 
     @ViewBuilder

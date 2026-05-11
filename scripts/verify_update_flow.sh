@@ -11,6 +11,7 @@ APP_NAME="Muesli"
 EXPECTED_FEED_URL="https://pHequals7.github.io/muesli/appcast.xml"
 SKIP_DMG=0
 REQUIRE_NOTARIZED=0
+REQUIRE_RELEASE_NOTES=0
 
 usage() {
   cat >&2 <<'USAGE'
@@ -28,6 +29,7 @@ Options:
   --app-name <name>         App bundle/update artifact name. Defaults to Muesli.
   --feed-url <url>          Expected SUFeedURL. Defaults to the production appcast.
   --skip-dmg                Only validate appcast metadata. Suitable for CI.
+  --require-release-notes   Require item-level release notes in the appcast.
   --require-notarized       Also require Gatekeeper/stapler checks for DMG and app.
   -h, --help                Show this help.
 USAGE
@@ -71,6 +73,10 @@ while [[ $# -gt 0 ]]; do
       REQUIRE_NOTARIZED=1
       shift
       ;;
+    --require-release-notes)
+      REQUIRE_RELEASE_NOTES=1
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -91,7 +97,7 @@ if [[ ! -f "$APPCAST" ]]; then
   exit 1
 fi
 
-if ! APPCAST_METADATA="$(python3 - "$APPCAST" "$VERSION" "$SHORT_VERSION" "$ARTIFACT_VERSION" "$APP_NAME" <<'PY'
+if ! APPCAST_METADATA="$(python3 - "$APPCAST" "$VERSION" "$SHORT_VERSION" "$ARTIFACT_VERSION" "$APP_NAME" "$REQUIRE_RELEASE_NOTES" <<'PY'
 import base64
 import re
 import shlex
@@ -103,6 +109,7 @@ expected_version = sys.argv[2]
 expected_short_version = sys.argv[3]
 artifact_version = sys.argv[4]
 app_name = sys.argv[5]
+require_release_notes = sys.argv[6] == "1"
 sparkle_ns = "http://www.andymatuschak.org/xml-namespaces/sparkle"
 
 try:
@@ -123,6 +130,7 @@ latest = items[0]
 version = latest.findtext(f"{{{sparkle_ns}}}version")
 short_version = latest.findtext(f"{{{sparkle_ns}}}shortVersionString")
 enclosure = latest.find("enclosure")
+description = latest.findtext("description") or ""
 
 if not version:
     raise SystemExit("ERROR: latest appcast item is missing sparkle:version")
@@ -175,12 +183,16 @@ if delta_enclosures:
 if not re.fullmatch(r"[0-9][0-9A-Za-z.\-]*", version):
     raise SystemExit(f"ERROR: unexpected version format: {version!r}")
 
+if require_release_notes and len(description.strip()) < 20:
+    raise SystemExit("ERROR: latest appcast item is missing item-level release notes")
+
 for key, value in {
     "APPCAST_VERSION": version,
     "APPCAST_SHORT_VERSION": short_version,
     "APPCAST_URL": url,
     "APPCAST_LENGTH": str(length_int),
     "APPCAST_SIGNATURE": signature,
+    "APPCAST_HAS_RELEASE_NOTES": "1" if description.strip() else "0",
 }.items():
     print(f"{key}={shlex.quote(value)}")
 PY
@@ -192,6 +204,9 @@ fi
 eval "$APPCAST_METADATA"
 
 echo "Appcast OK: v${APPCAST_VERSION}"
+if [[ "$REQUIRE_RELEASE_NOTES" == "1" ]]; then
+  echo "Release notes OK."
+fi
 
 if [[ "$SKIP_DMG" == "1" ]]; then
   echo "DMG checks skipped."

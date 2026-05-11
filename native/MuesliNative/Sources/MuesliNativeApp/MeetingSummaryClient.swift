@@ -25,10 +25,14 @@ enum MeetingSummaryClient {
     private static let openAIURL = URL(string: "https://api.openai.com/v1/responses")!
     private static let openRouterURL = URL(string: "https://openrouter.ai/api/v1/chat/completions")!
     private static let whamURL = URL(string: "https://chatgpt.com/backend-api/wham/responses")!
+    private static let defaultOllamaBaseURL = URL(string: "http://localhost:11434")!
     private static let defaultOpenAIModel = "gpt-5.4-mini"
     private static let defaultOpenRouterModel = "stepfun/step-3.5-flash:free"
     private static let defaultChatGPTModel = "gpt-5.4-mini"
+    private static let defaultOllamaModel = "qwen3.5"
     private static let defaultSummaryMaxOutputTokens = 2500
+    private static let ollamaSummaryTimeout: TimeInterval = 300
+    private static let ollamaTitleTimeout: TimeInterval = 120
 
     static let defaultTitleInstructions = """
     Generate a short, descriptive meeting title (3-7 words) from this transcript. \
@@ -52,7 +56,7 @@ enum MeetingSummaryClient {
         manualNotesToRetain: String? = nil,
         visualContext: String? = nil
     ) async throws -> String {
-        let backend = (config.meetingSummaryBackend.isEmpty ? MeetingSummaryBackendOption.openAI.backend : config.meetingSummaryBackend).lowercased()
+        let backend = (config.meetingSummaryBackend.isEmpty ? MeetingSummaryBackendOption.chatGPT.backend : config.meetingSummaryBackend).lowercased()
         let generatedNotes: String
         if backend == MeetingSummaryBackendOption.chatGPT.backend {
             generatedNotes = try await summarizeWithChatGPT(
@@ -85,6 +89,18 @@ enum MeetingSummaryClient {
                 manualNotes: manualNotesToRetain,
                 config: config
             )
+        }
+        if backend == MeetingSummaryBackendOption.ollama.backend {
+            generatedNotes = try await summarizeWithOllama(
+                transcript: transcript,
+                meetingTitle: meetingTitle,
+                existingNotes: existingNotes,
+                manualNotes: manualNotesToRetain,
+                config: config,
+                template: template,
+                visualContext: visualContext
+            )
+            return notesByRetainingManualNotes(generatedNotes: generatedNotes, manualNotes: manualNotesToRetain)
         }
         generatedNotes = try await summarizeWithOpenAI(
             transcript: transcript,
@@ -444,6 +460,73 @@ enum MeetingSummaryClient {
         }
     }
 
+    private static func summarizeWithOllama(
+        transcript: String,
+        meetingTitle: String,
+        existingNotes: String?,
+        manualNotes: String?,
+        config: AppConfig,
+        template: MeetingTemplateSnapshot,
+        visualContext: String? = nil
+    ) async throws -> String {
+        let baseURLString = config.ollamaURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let baseURL: URL
+        if baseURLString.isEmpty {
+            baseURL = defaultOllamaBaseURL
+        } else {
+            guard let url = URL(string: baseURLString) else {
+                throw MeetingSummaryError.backendFailed(backend: "Ollama", statusCode: nil, message: "Invalid Ollama URL: \(baseURLString)")
+            }
+            baseURL = url
+        }
+        let chatURL = baseURL.appendingPathComponent("api/chat")
+
+        let configuredModel = config.ollamaModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = configuredModel.isEmpty ? defaultOllamaModel : configuredModel
+        let instructions = summaryInstructions(for: template, existingNotes: existingNotes, manualNotes: manualNotes)
+        let userPrompt = summaryUserPrompt(
+            transcript: transcript,
+            meetingTitle: meetingTitle,
+            existingNotes: existingNotes,
+            manualNotes: manualNotes,
+            visualContext: visualContext
+        )
+        let body: [String: Any] = [
+            "model": model,
+            "messages": [
+                ["role": "system", "content": instructions],
+                ["role": "user", "content": userPrompt],
+            ],
+            "stream": false,
+            "options": ["num_predict": defaultSummaryMaxOutputTokens],
+        ]
+
+        var request = URLRequest(url: chatURL)
+        request.timeoutInterval = ollamaSummaryTimeout
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            try validateHTTPResponse(response, data: data, backend: "Ollama")
+            guard
+                let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                let message = json["message"] as? [String: Any],
+                let text = message["content"] as? String,
+                !text.isEmpty
+            else {
+                if let message = extractErrorMessage(from: data) {
+                    throw MeetingSummaryError.backendFailed(backend: "Ollama", statusCode: nil, message: message)
+                }
+                throw MeetingSummaryError.emptyResponse(backend: "Ollama")
+            }
+            return text
+        } catch {
+            throw summaryRequestError(backend: "Ollama", error: error)
+        }
+    }
+
     /// Call the WHAM streaming API and collect the full response text.
     private static func callWHAM(systemPrompt: String, userPrompt: String, model: String) async throws -> String? {
         let (token, accountId) = try await ChatGPTAuthManager.shared.validAccessToken()
@@ -602,7 +685,7 @@ enum MeetingSummaryClient {
         config: AppConfig,
         associatedCalendarEventTitle: String? = nil
     ) async -> String? {
-        let backend = (config.meetingSummaryBackend.isEmpty ? MeetingSummaryBackendOption.openAI.backend : config.meetingSummaryBackend).lowercased()
+        let backend = (config.meetingSummaryBackend.isEmpty ? MeetingSummaryBackendOption.chatGPT.backend : config.meetingSummaryBackend).lowercased()
         let titleInstructions = resolvedTitleInstructions(config: config)
 
         // Use a short prefix of the transcript for title generation (save tokens)
@@ -634,20 +717,24 @@ enum MeetingSummaryClient {
                 maxTokens: nil,
                 extraHeaders: ["X-OpenRouter-Title": AppIdentity.displayName]
             )
-        } else {
-            let apiKey = ProcessInfo.processInfo.environment["OPENAI_API_KEY"] ?? config.openAIAPIKey
-            guard !apiKey.isEmpty else { return nil }
-            let model = config.openAIModel.isEmpty ? defaultOpenAIModel : config.openAIModel
-            return await callChatCompletions(
-                url: URL(string: "https://api.openai.com/v1/chat/completions")!,
-                apiKey: apiKey,
-                model: model,
-                systemPrompt: titleInstructions,
-                userPrompt: userPrompt,
-                maxTokens: nil,
-                extraHeaders: [:]
-            )
         }
+
+        if backend == MeetingSummaryBackendOption.ollama.backend {
+            return await generateTitleWithOllama(userPrompt: userPrompt, config: config)
+        }
+
+        let apiKey = ProcessInfo.processInfo.environment["OPENAI_API_KEY"] ?? config.openAIAPIKey
+        guard !apiKey.isEmpty else { return nil }
+        let model = config.openAIModel.isEmpty ? defaultOpenAIModel : config.openAIModel
+        return await callChatCompletions(
+            url: URL(string: "https://api.openai.com/v1/chat/completions")!,
+            apiKey: apiKey,
+            model: model,
+            systemPrompt: titleInstructions,
+            userPrompt: userPrompt,
+            maxTokens: nil,
+            extraHeaders: [:]
+        )
     }
 
     static func resolvedTitleInstructions(config: AppConfig) -> String {
@@ -745,6 +832,65 @@ enum MeetingSummaryClient {
             return title
         } catch {
             fputs("[summary] ChatGPT title generation failed: \(error)\n", stderr)
+            return nil
+        }
+    }
+
+    private static func generateTitleWithOllama(userPrompt: String, config: AppConfig) async -> String? {
+        let baseURLString = config.ollamaURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let baseURL: URL
+        if baseURLString.isEmpty {
+            baseURL = defaultOllamaBaseURL
+        } else {
+            guard let url = URL(string: baseURLString) else {
+                fputs("[summary] Ollama title generation: invalid URL \(baseURLString)\n", stderr)
+                return nil
+            }
+            baseURL = url
+        }
+        let chatURL = baseURL.appendingPathComponent("api/chat")
+        let configuredModel = config.ollamaModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = configuredModel.isEmpty ? defaultOllamaModel : configuredModel
+        let titleInstructions = resolvedTitleInstructions(config: config)
+
+        let body: [String: Any] = [
+            "model": model,
+            "messages": [
+                ["role": "system", "content": titleInstructions],
+                ["role": "user", "content": userPrompt],
+            ],
+            "options": ["num_predict": 100],
+            "stream": false,
+        ]
+
+        var request = URLRequest(url: chatURL)
+        request.timeoutInterval = ollamaTitleTimeout
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            try validateHTTPResponse(response, data: data, backend: "Ollama")
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let message = json["message"] as? [String: Any],
+                  let content = message["content"] as? String,
+                  !content.isEmpty else {
+                fputs("[summary] Ollama title generation: empty or invalid response\n", stderr)
+                return nil
+            }
+            let title = content.trimmingCharacters(in: .whitespacesAndNewlines.union(.init(charactersIn: "\"")))
+            guard !title.isEmpty else {
+                fputs("[summary] Ollama title generation: trimmed response is empty\n", stderr)
+                return nil
+            }
+            fputs("[summary] Ollama generated title: \(title)\n", stderr)
+            return title
+        } catch let error as MeetingSummaryError {
+            fputs("[summary] Ollama title generation failed: \(error.localizedDescription)\n", stderr)
+            return nil
+        } catch {
+            fputs("[summary] Ollama title generation failed: \(error)\n", stderr)
             return nil
         }
     }

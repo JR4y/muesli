@@ -14,7 +14,7 @@ APP_BUNDLE_NAME="${MUESLI_APP_BUNDLE_NAME:-$APP_NAME.app}"
 APP_EXECUTABLE_NAME="${MUESLI_EXECUTABLE_NAME:-Muesli}"
 APP_SUPPORT_DIR_NAME="${MUESLI_SUPPORT_DIR_NAME:-$APP_DISPLAY_NAME}"
 BUNDLE_ID="${MUESLI_BUNDLE_ID:-com.muesli.app}"
-DEFAULT_APP_VERSION="0.6.6"
+DEFAULT_APP_VERSION="0.6.7"
 APP_VERSION="${MUESLI_BUILD_VERSION:-$DEFAULT_APP_VERSION}"
 APP_BUNDLE_VERSION="${MUESLI_BUNDLE_VERSION:-$APP_VERSION}"
 APP_SHORT_VERSION="${MUESLI_SHORT_VERSION:-$APP_VERSION}"
@@ -41,10 +41,17 @@ if [[ -f "$SUPABASE_CONFIG_FILE" ]]; then
   done < <(grep -E '^[A-Z_]+=' "$SUPABASE_CONFIG_FILE")
 fi
 
+SWIFT_BUILD_ARGS=(--package-path "$PACKAGE_DIR" -c "$BUILD_CONFIG")
+if [[ -n "${MUESLI_SWIFTPM_SCRATCH_PATH:-}" ]]; then
+  mkdir -p "$MUESLI_SWIFTPM_SCRATCH_PATH"
+  SWIFT_BUILD_ARGS+=(--scratch-path "$MUESLI_SWIFTPM_SCRATCH_PATH")
+  echo "Using SwiftPM scratch path: $MUESLI_SWIFTPM_SCRATCH_PATH"
+fi
+
 mkdir -p "$DIST_DIR"
 
 set +e
-swift build --package-path "$PACKAGE_DIR" -c "$BUILD_CONFIG" --product "$APP_BINARY"
+swift build "${SWIFT_BUILD_ARGS[@]}" --product "$APP_BINARY"
 status=$?
 set -e
 
@@ -54,7 +61,7 @@ if [[ $status -ne 0 ]]; then
 fi
 
 set +e
-swift build --package-path "$PACKAGE_DIR" -c "$BUILD_CONFIG" --product "$CLI_BINARY"
+swift build "${SWIFT_BUILD_ARGS[@]}" --product "$CLI_BINARY"
 status=$?
 set -e
 
@@ -63,7 +70,7 @@ if [[ $status -ne 0 ]]; then
   exit $status
 fi
 
-BIN_DIR="$(swift build --package-path "$PACKAGE_DIR" -c "$BUILD_CONFIG" --show-bin-path)"
+BIN_DIR="$(swift build "${SWIFT_BUILD_ARGS[@]}" --show-bin-path)"
 APP_BIN="$BIN_DIR/$APP_BINARY"
 CLI_BIN="$BIN_DIR/$CLI_BINARY"
 

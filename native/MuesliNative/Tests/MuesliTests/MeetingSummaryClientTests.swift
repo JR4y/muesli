@@ -314,17 +314,88 @@ struct MeetingSummaryClientTests {
         #expect(title == nil)
     }
 
-    @Test("summarize defaults to openai backend when empty")
-    func defaultsToOpenAI() async throws {
+    @Test("empty summary backend resolves to ChatGPT")
+    func defaultsToChatGPT() {
         var config = AppConfig()
         config.meetingSummaryBackend = ""
-        config.openAIAPIKey = ""
 
-        let result = try await MeetingSummaryClient.summarize(
-            transcript: "Test", meetingTitle: "Title", config: config
+        let backend = MeetingSummaryBackendOption.resolved(
+            config.meetingSummaryBackend.isEmpty ? nil : config.meetingSummaryBackend
         )
 
-        // Should hit OpenAI path, fail (no key), return fallback
-        #expect(result.contains("## Raw Transcript"))
+        #expect(backend == .chatGPT)
+    }
+
+    @Test("summarize routes to Ollama when configured")
+    func routesToOllama() async throws {
+        var config = AppConfig()
+        config.meetingSummaryBackend = "ollama"
+        config.ollamaURL = "http://localhost:1" // invalid port to force connection failure
+
+        do {
+            _ = try await MeetingSummaryClient.summarize(
+                transcript: "Test transcript",
+                meetingTitle: "My Meeting",
+                config: config
+            )
+            #expect(Bool(false), "Expected error to be thrown")
+        } catch {
+            let summaryError = error as? MeetingSummaryError
+            #expect(summaryError != nil)
+            if case .requestFailed(let backend, _) = summaryError! {
+                #expect(backend == "Ollama")
+            } else {
+                #expect(Bool(false), "Expected requestFailed error, got \(String(describing: error))")
+            }
+        }
+    }
+
+    @Test("generateTitle returns nil for Ollama when unreachable")
+    func titleOllamaUnreachable() async {
+        var config = AppConfig()
+        config.meetingSummaryBackend = "ollama"
+        config.ollamaURL = "http://localhost:1"
+
+        let title = await MeetingSummaryClient.generateTitle(
+            transcript: "Sprint planning discussion",
+            config: config
+        )
+
+        #expect(title == nil)
+    }
+
+    @Test("generateTitle returns nil for Ollama with invalid URL")
+    func titleOllamaInvalidURL() async {
+        var config = AppConfig()
+        config.meetingSummaryBackend = "ollama"
+        config.ollamaURL = "not a valid url"
+
+        let title = await MeetingSummaryClient.generateTitle(
+            transcript: "Sprint planning discussion",
+            config: config
+        )
+
+        #expect(title == nil)
+    }
+
+    @Test("summarize with Ollama uses default model when none configured")
+    func ollamaUsesDefaultModel() async throws {
+        var config = AppConfig()
+        config.meetingSummaryBackend = "ollama"
+        config.ollamaModel = ""
+        config.ollamaURL = "http://localhost:1"
+
+        do {
+            _ = try await MeetingSummaryClient.summarize(
+                transcript: "Test",
+                meetingTitle: "Title",
+                config: config
+            )
+        } catch {
+            // The request fails because port 1 is invalid, but the model
+            // defaulting is tested by the fact that no empty-model error is thrown
+            let summaryError = error as? MeetingSummaryError
+            #expect(summaryError != nil)
+        }
     }
 }

@@ -336,8 +336,11 @@ struct SettingsView: View {
                 Divider().background(MuesliTheme.surfaceBorder)
                 settingsRow(L10n.text(.settingsLaunchAtLogin, config: appState.config)) {
                     settingsSwitch(isOn: appState.config.launchAtLogin) { newValue in
-                        controller.updateConfig { $0.launchAtLogin = newValue }
+                        controller.setLaunchAtLogin(newValue)
                     }
+                }
+                if appState.launchAtLoginRegistrationState == .requiresApproval {
+                    launchAtLoginApprovalPrompt
                 }
                 Divider().background(MuesliTheme.surfaceBorder)
                 settingsRow(L10n.text(.settingsOpenDashboardOnLaunch, config: appState.config)) {
@@ -362,6 +365,38 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    private var launchAtLoginApprovalPrompt: some View {
+        HStack(spacing: MuesliTheme.spacing8) {
+            Image(systemName: "exclamationmark.circle.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(MuesliTheme.recording)
+            Text("Requires approval in System Settings")
+                .font(MuesliTheme.caption())
+                .foregroundStyle(MuesliTheme.textTertiary)
+            Spacer(minLength: MuesliTheme.spacing12)
+            Button {
+                controller.openLaunchAtLoginSettings()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.up.forward.square")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text("Open")
+                }
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(MuesliTheme.accent)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(MuesliTheme.accentSubtle)
+            .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
+            .help("Open Login Items in System Settings")
+        }
+        .padding(.leading, MuesliTheme.spacing16)
+        .padding(.trailing, MuesliTheme.spacing16)
+        .padding(.bottom, MuesliTheme.spacing8)
     }
 
     private var dictationSettingsPane: some View {
@@ -542,6 +577,22 @@ struct SettingsView: View {
                         ) { val in controller.updateConfig { $0.openAIModel = val } }
                     }
                     keyStatusRow(key: appState.config.openAIAPIKey)
+                } else if appState.selectedMeetingSummaryBackend == .ollama {
+                    settingsRow("Ollama URL", controlWidth: meetingControlWidth) {
+                        PastableTextField(
+                            text: appState.config.ollamaURL,
+                            placeholder: "http://localhost:11434",
+                            onChange: { val in controller.updateConfig { $0.ollamaURL = val } }
+                        )
+                        .frame(height: 22)
+                    }
+                    Divider().background(MuesliTheme.surfaceBorder)
+                    settingsRow("Model", controlWidth: meetingControlWidth) {
+                        settingsModelTextField(
+                            currentModel: appState.config.ollamaModel,
+                            placeholder: "qwen3.5"
+                        ) { val in controller.updateConfig { $0.ollamaModel = val } }
+                    }
                 } else {
                     settingsRow(L10n.text(.settingsApiKey, config: appState.config), controlWidth: meetingControlWidth) {
                         PastableSecureField(
@@ -1409,6 +1460,7 @@ struct SettingsView: View {
         accessibilityGranted = AXIsProcessTrusted()
         inputMonitoringGranted = CGPreflightListenEventAccess()
         screenRecordingGranted = CGPreflightScreenCaptureAccess()
+        controller.refreshLaunchAtLoginState()
         if screenRecordingGranted && pendingScreenContextEnable {
             clearPendingScreenContextEnable()
             controller.updateConfig { $0.enableScreenContext = true }
@@ -1420,6 +1472,11 @@ struct SettingsView: View {
             clearPendingScreenContextEnable()
             controller.updateConfig { $0.enableScreenContext = false }
         }
+        controller.reclassifyVoiceNotesAsDictationIfReady(
+            microphoneGranted: micGranted,
+            accessibilityGranted: accessibilityGranted,
+            inputMonitoringGranted: inputMonitoringGranted
+        )
         refreshSystemAudioPermissionIfNeeded()
     }
 

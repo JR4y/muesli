@@ -36,6 +36,7 @@ OUTPUT_DIR="$ROOT/dist-release"
 INSTALL_DIR="${MUESLI_RELEASE_INSTALL_DIR:-$OUTPUT_DIR/install-root}"
 APP_DIR="${MUESLI_RELEASE_APP_DIR:-$INSTALL_DIR/Muesli.app}"
 GENERATE_APPCAST="$ROOT/native/MuesliNative/.build/artifacts/sparkle/Sparkle/bin/generate_appcast"
+UPDATE_APPCAST_RELEASE_NOTES="$ROOT/scripts/update_appcast_release_notes.py"
 TAP_REPO="${MUESLI_TAP_REPO:-pHequals7/homebrew-muesli}"
 TAP_CASK_REL_PATH="${MUESLI_TAP_CASK_REL_PATH:-Casks/m/muesli.rb}"
 SKIP_TAP_UPDATE="${MUESLI_SKIP_TAP_UPDATE:-0}"
@@ -87,6 +88,11 @@ fi
 
 if [[ ! -x "$GENERATE_APPCAST" ]]; then
   echo "ERROR: generate_appcast not found at $GENERATE_APPCAST" >&2
+  exit 1
+fi
+
+if [[ ! -f "$UPDATE_APPCAST_RELEASE_NOTES" ]]; then
+  echo "ERROR: update_appcast_release_notes.py not found at $UPDATE_APPCAST_RELEASE_NOTES" >&2
   exit 1
 fi
 
@@ -373,6 +379,10 @@ perl -0pi -e 's{https://pHequals7\.github\.io/muesli/(Muesli-([0-9][0-9A-Za-z\.\
 
 # Delta artifacts are not hosted, so strip delta enclosures from the appcast.
 perl -0pi -e 's{^\h*<enclosure\b[^>]*\bsparkle:deltaFrom="[^"]*"[^>]*/>\n}{}mg' "$ROOT/docs/appcast.xml"
+printf '%s\n' "$RELEASE_NOTES" | python3 "$UPDATE_APPCAST_RELEASE_NOTES" \
+  "$ROOT/docs/appcast.xml" \
+  --sparkle-version "$VERSION" \
+  --short-version "$VERSION"
 
 # Keep the marketing/docs surface aligned with the published GitHub Release.
 sed -i '' "s|https://github.com/pHequals7/muesli/releases/download/[^\"]*\\.dmg|$DOWNLOAD_URL|g" "$ROOT/docs/index.html"
@@ -382,6 +392,7 @@ echo "  Verifying Sparkle update flow metadata..."
 "$ROOT/scripts/verify_update_flow.sh" \
   --version "$VERSION" \
   --dmg "$DMG_PATH" \
+  --require-release-notes \
   --require-notarized
 
 git add docs/appcast.xml docs/index.html docs/llms.txt
