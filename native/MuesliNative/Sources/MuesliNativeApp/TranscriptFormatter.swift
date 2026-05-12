@@ -13,7 +13,8 @@ enum TranscriptFormatter {
         micSegments: [SpeechSegment],
         systemSegments: [SpeechSegment],
         diarizationSegments: [TimedSpeakerSegment]?,
-        meetingStart: Date
+        meetingStart: Date,
+        consolidationGapThreshold: TimeInterval = defaultConsolidationGapThreshold
     ) -> String {
         // Bleed filtering is now handled upstream by MeetingBleedDetector
         // (speaker-embedding comparison), not text-based heuristics.
@@ -43,7 +44,10 @@ enum TranscriptFormatter {
         let tagged = (taggedMic + taggedSystem).sorted { $0.segment.start < $1.segment.start }
 
         // Consolidate consecutive segments from the same speaker into single lines
-        let consolidated = filterLowSignalSegments(consolidate(tagged))
+        let consolidated = filterLowSignalSegments(consolidate(
+            tagged,
+            gapThreshold: consolidationGapThreshold
+        ))
 
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -62,9 +66,12 @@ enum TranscriptFormatter {
     /// token-level fragmentation while preserving chronological ordering —
     /// segments from the same speaker that are far apart in time stay separate
     /// so they interleave correctly with other speakers.
-    private static let consolidationGapThreshold: TimeInterval = 2.0
+    private static let defaultConsolidationGapThreshold: TimeInterval = 2.0
 
-    private static func consolidate(_ segments: [TaggedSegment]) -> [TaggedSegment] {
+    private static func consolidate(
+        _ segments: [TaggedSegment],
+        gapThreshold: TimeInterval
+    ) -> [TaggedSegment] {
         guard !segments.isEmpty else { return [] }
 
         var result: [TaggedSegment] = []
@@ -75,7 +82,7 @@ enum TranscriptFormatter {
 
         for seg in segments.dropFirst() {
             let gap = max(0, seg.segment.start - currentEnd)
-            if seg.speaker == currentSpeaker && gap <= consolidationGapThreshold {
+            if seg.speaker == currentSpeaker && gap <= gapThreshold {
                 // Same speaker, temporally close — accumulate text
                 currentText = appendText(currentText, seg.segment.text, gap: gap)
                 currentEnd = max(currentEnd, seg.segment.end)

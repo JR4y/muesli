@@ -779,6 +779,30 @@ struct MeetingsView: View {
             dateFilterButton
 
             Button {
+                controller.importMeetilyStyleLiveTranscriptWAV()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "waveform")
+                        .font(.system(size: 11, weight: .medium))
+                    Text("Import WAV")
+                        .font(.system(size: 12, weight: .semibold))
+                        .lineLimit(1)
+                }
+                .foregroundStyle(appState.isMeetingRecording ? MuesliTheme.textTertiary : MuesliTheme.textPrimary)
+                .padding(.horizontal, MuesliTheme.spacing12)
+                .padding(.vertical, 8)
+                .background(MuesliTheme.surfacePrimary)
+                .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
+                .overlay(
+                    RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
+                        .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(appState.isMeetingRecording)
+            .fixedSize()
+
+            Button {
                 controller.showMeetingTemplatesManager()
             } label: {
                 HStack(spacing: 6) {

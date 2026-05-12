@@ -8,7 +8,7 @@ It is intended to serve three purposes at once:
 - make it easy to resume work without losing context
 - prepare a clean base for future beta release notes and README feature updates
 
-Last updated: `2026-05-07`
+Last updated: `2026-05-12`
 Working branch: `beta`
 Dev app: `muesli-beta.app`
 
@@ -27,6 +27,76 @@ Git workflow currently documented and aligned:
 - `main` is reserved as the stable product branch
 
 ## Incremental history
+
+### 2026-05-12
+
+This pass stabilized the Meetily-inspired speech-pause transcript work in the
+local beta build. The goal was to keep Muesli's stronger source separation and
+canonical pipeline while adopting the more natural pause-based turn boundaries
+that tested well in Meetily and in the new WAV importer.
+
+#### Beta build discipline
+
+- the beta install flow is now documented and enforced around
+  `scripts/beta-test.sh`
+- local beta builds install as `/Applications/muesli-beta.app`
+- the beta bundle id is `com.jr4y.muesli.beta`
+- beta data lives under `~/Library/Application Support/MuesliBeta/`
+- if the local Developer ID signing identity is unavailable, the beta script
+  explicitly falls back to an unsigned local install via `MUESLI_SKIP_SIGN=1`
+- direct `scripts/build_native_app.sh` usage is documented as the generic
+  production-style installer and should not be used for beta refreshes
+
+#### Meetily-style WAV import harness
+
+- Reuniones gained an `Import WAV` action for comparing pause segmentation on
+  real audio files
+- imported WAVs are normalized to 16 kHz mono, segmented with the shared
+  Meetily-style VAD defaults, transcribed by turn, and saved as completed
+  meetings with a single `Audio` source
+- the importer intentionally remains a clean harness/control path and does not
+  run through the full canonical meeting pipeline yet
+
+#### Live transcript by speech pauses
+
+- live transcript now consumes explicit speech-start, speech-end, chunk, and
+  flush events instead of only appended transcript chunks
+- live state is projected as open/closed turns, with independent lanes for
+  microphone (`You`) and system audio (`Others`)
+- the live VAD settings now reuse the shared Meetily-style baseline:
+  `0.50` positive threshold, `0.35` negative threshold, `2.0s` redemption,
+  `300ms` pre-speech pad, and `400ms` effective post-speech pad
+- pause/stop now flushes active live turns and resets VAD detection state
+- the live transcript panel auto-scrolls when the user is at the bottom and can
+  be expanded/resized manually in the meeting detail view
+
+#### Canonical transcript pause segmentation
+
+- the final transcript pipeline now performs a safe post-reconciliation
+  pause-projection pass before formatting the raw transcript
+- the pass runs after ASR chunk collection, repair, reconciliation, and bleed
+  filtering, so it does not replace the canonical quality gates
+- microphone turns stay labelled as `You`
+- system turns stay labelled as `Others` without diarization, or `Speaker N`
+  with diarization
+- system diarization boundaries are used as additional hard turn boundaries, so
+  remote speaker changes can split a continuous speech region even when VAD
+  sees it as one larger region
+- the canonical formatter accepts a stricter consolidation gap for this path so
+  natural pause turns are less likely to collapse back into large blocks
+
+#### Verification
+
+- focused tests were added for the Meetily-style importer and canonical speech
+  turn segmenter
+- verified suites include:
+  `MeetilyStyleLiveTranscriptImporterTests`,
+  `MeetingSpeechTurnSegmenterTests`,
+  `LiveMeetingTranscriptReducerTests`,
+  `StreamingVadControllerTests`,
+  `TranscriptFormatterTests`, and `TranscriptReconcilerTests`
+- `/Applications/muesli-beta.app` was rebuilt and reinstalled with
+  `scripts/beta-test.sh`
 
 ### 2026-05-07
 

@@ -4,6 +4,7 @@ import Foundation
 import Sparkle
 import TelemetryDeck
 import MuesliCore
+import UniformTypeIdentifiers
 
 private enum DictationOutputMode {
     case paste
@@ -494,15 +495,14 @@ final class MuesliController: NSObject {
         appState.activeMeetingTranscriptTurns = []
     }
 
-    private func publishLiveTranscriptChunk(
-        source: LiveMeetingTranscriptSource,
-        chunk: MeetingTranscriptChunk,
+    private func publishLiveTranscriptEvent(
+        _ event: LiveMeetingTranscriptEvent,
         for meetingID: Int64
     ) {
         guard config.enableLiveMeetingTranscript else { return }
         guard activeMeetingTranscriptMeetingID == meetingID else { return }
         guard var pipeline = activeLiveTranscriptPipeline else { return }
-        activeMeetingTranscriptTurns = pipeline.ingest(source: source, chunk: chunk)
+        activeMeetingTranscriptTurns = pipeline.ingest(event)
         activeLiveTranscriptPipeline = pipeline
         appState.activeMeetingTranscriptMeetingID = activeMeetingTranscriptMeetingID
         appState.activeMeetingTranscriptTurns = activeMeetingTranscriptTurns
@@ -2060,6 +2060,118 @@ final class MuesliController: NSObject {
         appState.isMeetingTemplatesManagerPresented = true
     }
 
+    func importMeetilyStyleLiveTranscriptWAV() {
+        guard !isMeetingRecording(), !isStartingMeetingRecording else {
+            let alert = NSAlert()
+            alert.alertStyle = .informational
+            alert.messageText = "Finish the active meeting first"
+            alert.informativeText = "WAV import uses the meeting transcription model and should run when no meeting is recording."
+            alert.runModal()
+            return
+        }
+
+        let panel = NSOpenPanel()
+        panel.title = "Import WAV"
+        panel.message = "Create a meeting transcript using Meetily-style pause segmentation."
+        panel.allowedContentTypes = [
+            UTType(filenameExtension: "wav"),
+            UTType(filenameExtension: "wave")
+        ].compactMap { $0 }
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        let folderID = appState.selectedFolderID
+        Task { [weak self] in
+            await self?.performMeetilyStyleLiveTranscriptImport(from: url, folderID: folderID)
+        }
+    }
+
+    private func performMeetilyStyleLiveTranscriptImport(from url: URL, folderID: Int64?) async {
+        let backend = selectedMeetingTranscriptionBackend
+        let cohereLanguage = config.resolvedCohereLanguage
+
+        await MainActor.run {
+            statusBarController?.setStatus("Importing WAV...")
+        }
+
+        do {
+            try await transcriptionCoordinator.preloadRequired(
+                backend: backend,
+                enablePostProcessor: false,
+                includeMeetingHelpers: true,
+                progress: { [weak self] _, status in
+                    guard let self, let status else { return }
+                    Task { @MainActor [weak self] in
+                        self?.statusBarController?.setStatus(status)
+                    }
+                }
+            )
+
+            let importer = MeetilyStyleLiveTranscriptImporter()
+            let result = try await importer.importWAV(
+                url: url,
+                backend: backend,
+                cohereLanguage: cohereLanguage,
+                transcriptionCoordinator: transcriptionCoordinator,
+                progress: { [weak self] completed, total, message in
+                    guard let self else { return }
+                    Task { @MainActor [weak self] in
+                        let prefix = total > 0 ? "\(completed)/\(total)" : ""
+                        self?.statusBarController?.setStatus(prefix.isEmpty ? message : "\(prefix) \(message)")
+                    }
+                }
+            )
+
+            let startTime = Date()
+            let endTime = startTime.addingTimeInterval(result.inputDuration)
+            let title = Self.importedWAVMeetingTitle(for: url)
+            let meetingID = try dictationStore.insertMeeting(
+                title: title,
+                calendarEventID: nil,
+                startTime: startTime,
+                endTime: endTime,
+                rawTranscript: result.rawTranscript,
+                formattedNotes: "",
+                micAudioPath: nil,
+                systemAudioPath: nil,
+                savedRecordingPath: url.path
+            )
+            if let folderID {
+                try? dictationStore.moveMeeting(id: meetingID, toFolder: folderID)
+            }
+
+            await MainActor.run {
+                statusBarController?.setStatus("Imported WAV")
+                syncAppState()
+                showMeetingDocument(id: meetingID)
+            }
+            fputs(
+                "[muesli-native] imported WAV with Meetily-style live transcript: \(url.path) " +
+                "(segments=\(result.segments.count), vad_segments=\(result.detectedSpeechSegments), dropped_short=\(result.droppedShortSegments))\n",
+                stderr
+            )
+        } catch {
+            await MainActor.run {
+                statusBarController?.setStatus("Idle")
+                let alert = NSAlert()
+                alert.alertStyle = .warning
+                alert.messageText = "WAV import failed"
+                alert.informativeText = error.localizedDescription
+                alert.runModal()
+            }
+            fputs("[muesli-native] Meetily-style WAV import failed: \(error)\n", stderr)
+        }
+    }
+
+    private static func importedWAVMeetingTitle(for url: URL) -> String {
+        let name = url.deletingPathExtension().lastPathComponent
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? "Imported WAV" : "Imported WAV: \(name)"
+    }
+
     @objc func openPreferences() {
         openHistoryWindow(tab: .settings)
     }
@@ -3119,13 +3231,9 @@ final class MuesliController: NSObject {
                     }
                 }
                 meetingSession.setLiveTranscriptEnabled(self.config.enableLiveMeetingTranscript)
-                meetingSession.onLiveTranscriptChunk = { [weak self] source, chunk in
+                meetingSession.onLiveTranscriptEvent = { [weak self] event in
                     Task { @MainActor [weak self] in
-                        self?.publishLiveTranscriptChunk(
-                            source: source,
-                            chunk: chunk,
-                            for: meetingID
-                        )
+                        self?.publishLiveTranscriptEvent(event, for: meetingID)
                     }
                 }
                 try await meetingSession.start()

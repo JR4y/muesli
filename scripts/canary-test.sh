@@ -7,6 +7,7 @@ set -euo pipefail
 # - Separate support directory (~/Library/Application Support/MuesliCanary/)
 # - Optional onboarding reset / clean wipe
 # - Optional local model seeding from the sibling stt-quantize-coreml repo
+# - Signed with Developer ID when available; otherwise falls back to unsigned local install
 #
 # Usage:
 #   ./scripts/canary-test.sh
@@ -156,7 +157,15 @@ fi
 
 configure_postproc_override
 
-log "Building MuesliCanary (debug, signed)..."
+if [[ "${MUESLI_SKIP_SIGN:-0}" != "1" ]]; then
+  SIGN_IDENTITY="${MUESLI_SIGN_IDENTITY:-Developer ID Application: Pranav Hari Guruvayurappan (58W55QJ567)}"
+  if ! security find-identity -v -p codesigning | grep -Fq "$SIGN_IDENTITY"; then
+    log "No matching codesign identity for local Canary build; continuing unsigned."
+    export MUESLI_SKIP_SIGN=1
+  fi
+fi
+
+log "Building MuesliCanary (debug, signed when identity is available)..."
 MUESLI_APP_NAME=MuesliCanary \
 MUESLI_BUNDLE_ID=com.muesli.canary \
 MUESLI_SUPPORT_DIR_NAME=MuesliCanary \

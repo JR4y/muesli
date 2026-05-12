@@ -9,7 +9,7 @@ Local-first macOS app for **dictation** and **meeting transcription** on Apple S
 ## What It Does
 
 - **Dictation:** Hold hotkey → speak → release → text pasted at cursor (~0.13s with Parakeet)
-- **Meeting transcription:** Captures mic (You) + system audio (Others) → VAD-driven chunking → lightweight live transcript path for UI → speaker diarization/post-processing for the final transcript → AI-powered meeting notes
+- **Meeting transcription:** Captures mic (You) + system audio (Others) → VAD-driven chunking → pause-aware live transcript turns → speaker diarization/post-processing plus pause-aware canonical formatting for the final transcript → AI-powered meeting notes
 - **Meeting export:** Export notes or transcript as PDF (paginated US Letter) or Markdown via `MeetingExporter.swift`
 - **Screen context:** Accessibility API captures app name + text around cursor for dictation context-awareness (opt-in, off by default)
 - **7 ASR models:** Parakeet v3/v2, Whisper Small/Medium/Large Turbo, Qwen3 ASR, Nemotron Streaming
@@ -37,6 +37,15 @@ Local-first macOS app for **dictation** and **meeting transcription** on Apple S
 ```
 
 MuesliDev uses bundle ID `com.muesli.dev` and stores data at `~/Library/Application Support/MuesliDev/`. Production data is never touched.
+
+### Beta build for this fork
+```bash
+MUESLI_SWIFTPM_SCRATCH_PATH="$HOME/Library/Caches/muesli-spm/dev" ./scripts/beta-test.sh
+```
+
+For the fork's local beta app, always use `scripts/beta-test.sh`, not `scripts/build_native_app.sh` directly. The beta script installs `/Applications/muesli-beta.app`, uses bundle ID `com.jr4y.muesli.beta`, stores data under `~/Library/Application Support/MuesliBeta/`, and falls back to an unsigned local install with `MUESLI_SKIP_SIGN=1` when the local Developer ID identity is unavailable.
+
+`scripts/build_native_app.sh` is the generic installer and defaults to `/Applications/Muesli.app`; using it directly is only correct for the generic app target, not for refreshing the fork's beta build.
 
 ### SwiftPM build artifacts in worktrees
 SwiftPM writes build artifacts to `native/MuesliNative/.build` inside the active worktree by default. That can consume several GB per worktree. For worktree-heavy local testing, set `MUESLI_SWIFTPM_SCRATCH_PATH` when invoking `scripts/build_native_app.sh` directly or through helper scripts such as `scripts/dev-test.sh`:
@@ -104,6 +113,8 @@ native/MuesliNative/Sources/
 │   ├── MeetingSession.swift      # Meeting lifecycle + canonical final transcript pipeline + live hooks
 │   ├── MeetingLiveTranscript.swift # Live transcript pipeline, reducer, parser, display turns
 │   ├── MeetingTranscriptChatView.swift # Shared chat-style transcript renderer for live + final views
+│   ├── MeetingSpeechTurnSegmenter.swift # Canonical pause-aware turn projection over existing ASR output
+│   ├── MeetilyStyleLiveTranscriptImporter.swift # WAV import harness using Meetily-style VAD pause defaults
 │   ├── MeetingSummaryClient.swift # OpenAI / OpenRouter / ChatGPT summarization
 │   ├── SystemAudioRecorder.swift # ScreenCaptureKit SCStream for system audio
 │   ├── ChatGPTAuthManager.swift  # OAuth PKCE + WHAM API
@@ -202,7 +213,12 @@ Key implementation details:
 ## Transcript Rendering
 
 - The final transcript source of truth remains `MeetingRecord.rawTranscript`
-- The live transcript is now a separate lightweight pipeline and can be disabled from Settings → Meetings via `enableLiveMeetingTranscript`
+- The live transcript is a separate lightweight pipeline and can be disabled from Settings → Meetings via `enableLiveMeetingTranscript`
+- Live transcript turns are segmented by speech start/end events from VAD, not by completed ASR chunks alone. Muesli keeps one active live turn per source (`You`/mic and `Others`/system), so overlapping speech can show as two simultaneous source-separated turns instead of being merged into one bubble.
+- Live pause defaults intentionally mirror the Meetily-style baseline used by the WAV importer: positive speech threshold `0.50`, negative speech threshold `0.35`, redemption time `2.0s`, pre-speech pad `0.30s`, post-speech pad `0.40s`, minimum speech time `0.25s`, minimum raw segment `800` samples at 16 kHz, and maximum speech duration `30s`.
+- Pause/stop recording paths flush active live turns so the last visible bubble closes before the final transcript pipeline completes.
+- Imported WAV files can be transcribed through the Meetily-style importer from the Meetings browser. This is a diagnostic/control path for validating pause segmentation on known audio; it does not replace the normal meeting capture pipeline.
+- The canonical final transcript remains based on the normal ASR/reconciliation/diarization/bleed-filtering pipeline, then projects the existing speech segments onto VAD pause windows for readability. It does not re-transcribe by VAD windows.
 - When live transcript is disabled, no live transcript UI or publication happens during recording; the final transcript pipeline still runs unchanged when the meeting stops
 - Meeting detail now renders completed transcripts in a chat-style view derived from `rawTranscript`
 - Storage and export remain plain-text transcript based; the chat view is presentation only

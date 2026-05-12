@@ -114,6 +114,12 @@ private enum MeetingTranscriptRecoveryResult {
 
 final class MeetingSession {
     private static let logger = Logger(subsystem: "com.muesli.native", category: "MeetingSession")
+    private static let liveTranscriptConfiguration = MeetilyStyleLiveTranscriptConfiguration.default
+    private static var liveTranscriptAdditionalPostSpeechPadding: TimeInterval {
+        max(0, liveTranscriptConfiguration.postSpeechPad - liveTranscriptConfiguration.preSpeechPad)
+    }
+    private static let liveTranscriptTimeResolution = 3
+    private static let liveTranscriptVadConfiguration = makeLiveTranscriptVadConfiguration()
 
     private let title: String
     private let calendarEventID: String?
@@ -145,10 +151,18 @@ final class MeetingSession {
     private var systemChunkTimingTracker = MeetingChunkTimingTracker()
     private var systemChunkRecorder: PCMChunkRecorder?
     var onProgress: ((MeetingProcessingStage) -> Void)?
-    var onLiveTranscriptChunk: ((LiveMeetingTranscriptSource, MeetingTranscriptChunk) -> Void)?
+    var onLiveTranscriptEvent: ((LiveMeetingTranscriptEvent) -> Void)?
     var manualNotesProvider: (() async -> String?)?
     var liveTitleProvider: (() async -> String?)?
     private let screenContextCollector = MeetingScreenContextCollector()
+
+    static func makeLiveTranscriptVadConfiguration() -> StreamingVadController.Configuration {
+        StreamingVadController.Configuration(
+            segmentation: liveTranscriptConfiguration.vadSegmentationConfig,
+            returnSeconds: true,
+            timeResolution: liveTranscriptTimeResolution
+        )
+    }
 
     /// Current mic power level for waveform visualization.
     func currentPower() -> Float {
@@ -268,6 +282,10 @@ final class MeetingSession {
             appendFlushedStreamingMicOnQueue()
             rotateChunkOnQueue()
             rotateSystemChunkOnQueue()
+            emitLiveTranscriptFlushOnQueue(for: .microphone)
+            emitLiveTranscriptFlushOnQueue(for: .system)
+            vadController?.resetDetectionState()
+            systemVadController?.resetDetectionState()
             retainedRecordingWriter?.markPauseBoundary()
             neuralAec.resetForStreaming()
             setPausedStateOnQueue(true)
@@ -363,6 +381,8 @@ final class MeetingSession {
             systemChunkRecorder = nil
             let lastChunkTiming = chunkTimingTracker.finish()
             let lastSystemChunkTiming = systemChunkTimingTracker.finish()
+            emitLiveTranscriptFlushOnQueue(for: .microphone)
+            emitLiveTranscriptFlushOnQueue(for: .system)
             return (meetingStart, lastChunkTiming, lastRawMicURL, lastSystemChunkTiming, lastSystemChunkURL)
         }
         let rawStreamingMicURL = streamingMicRecorder.stop()
@@ -537,11 +557,18 @@ final class MeetingSession {
             protectedTranscriptInputs = reconciledTranscriptInputs
         }
 
+        let canonicalTranscriptInputs = await segmentCanonicalTranscriptInputsByPauses(
+            protectedTranscriptInputs,
+            fullSessionMicURL: fullSessionMicURL,
+            systemAudioURL: systemAudioURL
+        )
+
         let rawTranscript = TranscriptFormatter.merge(
-            micSegments: protectedTranscriptInputs.micSegments,
-            systemSegments: protectedTranscriptInputs.systemSegments,
-            diarizationSegments: protectedTranscriptInputs.diarizationSegments,
-            meetingStart: meetingStart
+            micSegments: canonicalTranscriptInputs.micSegments,
+            systemSegments: canonicalTranscriptInputs.systemSegments,
+            diarizationSegments: canonicalTranscriptInputs.diarizationSegments,
+            meetingStart: meetingStart,
+            consolidationGapThreshold: MeetingSpeechTurnSegmenter.canonicalFormatterConsolidationGap
         )
 
         let generatedTitle: String
@@ -737,9 +764,7 @@ final class MeetingSession {
                         endTime: chunkOffset + max(chunkDuration, 0.1)
                     )
                     self.systemChunkHealthTracker.noteSuccessfulChunk()
-                    if self.isLiveTranscriptEnabled() {
-                        self.onLiveTranscriptChunk?(.system, chunk)
-                    }
+                    self.emitLiveTranscriptChunk(.system, chunk: chunk)
                     return chunk
                 }
                 self.systemChunkHealthTracker.noteEmptyChunk()
@@ -776,16 +801,28 @@ final class MeetingSession {
 
     private func configureRealtimeAudioCallbacks(vadManager: VadManager?) {
         if let vadManager {
-            let controller = StreamingVadController(vadManager: vadManager)
+            let controller = StreamingVadController(
+                vadManager: vadManager,
+                configuration: Self.liveTranscriptVadConfiguration
+            )
             controller.onChunkBoundary = { [weak self] in
                 self?.rotateChunk()
+            }
+            controller.onSpeechEvent = { [weak self] event in
+                self?.handleLiveSpeechEvent(event, source: .microphone)
             }
             controller.start()
             vadController = controller
 
-            let systemController = StreamingVadController(vadManager: vadManager)
+            let systemController = StreamingVadController(
+                vadManager: vadManager,
+                configuration: Self.liveTranscriptVadConfiguration
+            )
             systemController.onChunkBoundary = { [weak self] in
                 self?.rotateSystemChunk()
+            }
+            systemController.onSpeechEvent = { [weak self] event in
+                self?.handleLiveSpeechEvent(event, source: .system)
             }
             systemController.start()
             systemVadController = systemController
@@ -894,9 +931,7 @@ final class MeetingSession {
                     endTime: chunkOffset + max(chunkDuration, 0.1)
                 )
                 micChunkHealthTracker.noteSuccessfulChunk()
-                if isLiveTranscriptEnabled() {
-                    onLiveTranscriptChunk?(.microphone, chunk)
-                }
+                emitLiveTranscriptChunk(.microphone, chunk: chunk)
                 return chunk
             }
             micChunkHealthTracker.noteEmptyChunk()
@@ -912,6 +947,37 @@ final class MeetingSession {
         urls.compactMap { $0 }.forEach { url in
             try? FileManager.default.removeItem(at: url)
         }
+    }
+
+    private func handleLiveSpeechEvent(_ event: VadStreamEvent, source: LiveMeetingTranscriptSource) {
+        guard isLiveTranscriptEnabled() else { return }
+        guard let eventTime = event.time else { return }
+
+        let clampedTime: TimeInterval
+        switch event.kind {
+        case .speechStart:
+            clampedTime = max(eventTime, 0)
+            onLiveTranscriptEvent?(.speechStarted(source: source, at: clampedTime))
+        case .speechEnd:
+            clampedTime = max(
+                eventTime + Self.liveTranscriptAdditionalPostSpeechPadding,
+                0
+            )
+            onLiveTranscriptEvent?(.speechEnded(source: source, at: clampedTime))
+        }
+    }
+
+    private func emitLiveTranscriptChunk(
+        _ source: LiveMeetingTranscriptSource,
+        chunk: MeetingTranscriptChunk
+    ) {
+        guard isLiveTranscriptEnabled() else { return }
+        onLiveTranscriptEvent?(.transcriptChunk(source: source, chunk: chunk))
+    }
+
+    private func emitLiveTranscriptFlushOnQueue(for source: LiveMeetingTranscriptSource) {
+        guard isLiveTranscriptEnabled() else { return }
+        onLiveTranscriptEvent?(.flush(source: source))
     }
 
     private func normalizeSystemTranscription(
@@ -971,6 +1037,63 @@ final class MeetingSession {
         } catch {
             fputs("[meeting] failed to validate reconciled mic coverage: \(error)\n", stderr)
             return reconciledTranscriptInputs
+        }
+    }
+
+    private func segmentCanonicalTranscriptInputsByPauses(
+        _ inputs: ReconciledTranscriptInputs,
+        fullSessionMicURL: URL?,
+        systemAudioURL: URL?
+    ) async -> ReconciledTranscriptInputs {
+        guard let vadManager = await transcriptionCoordinator.getVadManager() else {
+            return inputs
+        }
+
+        var micSegments = inputs.micSegments
+        if let fullSessionMicURL,
+           let boundaries = await canonicalSpeechBoundaries(for: fullSessionMicURL, vadManager: vadManager) {
+            micSegments = MeetingSpeechTurnSegmenter.segmentMic(
+                micSegments,
+                speechBoundaries: boundaries.segments,
+                audioDuration: boundaries.duration
+            )
+            fputs("[meeting] canonical mic pause segmentation: \(inputs.micSegments.count) -> \(micSegments.count) turns\n", stderr)
+        }
+
+        var systemSegments = inputs.systemSegments
+        if let systemAudioURL,
+           let boundaries = await canonicalSpeechBoundaries(for: systemAudioURL, vadManager: vadManager) {
+            systemSegments = MeetingSpeechTurnSegmenter.segmentSystem(
+                systemSegments,
+                speechBoundaries: boundaries.segments,
+                diarizationSegments: inputs.diarizationSegments,
+                audioDuration: boundaries.duration
+            )
+            fputs("[meeting] canonical system pause segmentation: \(inputs.systemSegments.count) -> \(systemSegments.count) turns\n", stderr)
+        }
+
+        return ReconciledTranscriptInputs(
+            micSegments: micSegments,
+            systemSegments: systemSegments,
+            diarizationSegments: inputs.diarizationSegments
+        )
+    }
+
+    private func canonicalSpeechBoundaries(
+        for url: URL,
+        vadManager: VadManager
+    ) async -> (segments: [VadSegment], duration: TimeInterval)? {
+        do {
+            let samples = try AudioConverter().resampleAudioFile(url)
+            let duration = Double(samples.count) / Double(VadManager.sampleRate)
+            let speechSegments = try await vadManager.segmentSpeech(
+                samples,
+                config: MeetilyStyleLiveTranscriptConfiguration.default.vadSegmentationConfig
+            )
+            return (speechSegments, duration)
+        } catch {
+            fputs("[meeting] canonical pause segmentation failed for \(url.lastPathComponent): \(error)\n", stderr)
+            return nil
         }
     }
 

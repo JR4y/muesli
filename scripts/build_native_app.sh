@@ -173,6 +173,9 @@ ditto "$STAGED_APP_DIR" "$APP_DIR"
 if [[ "$SKIP_SIGN" != "1" ]]; then
   if ! security find-identity -v -p codesigning | grep -Fq "$SIGN_IDENTITY"; then
     echo "Signing identity not found: $SIGN_IDENTITY" >&2
+    echo "This generic installer targets: $APP_DIR" >&2
+    echo "For an unsigned local install, rerun with: MUESLI_SKIP_SIGN=1" >&2
+    echo "For the fork's beta install, use: ./scripts/beta-test.sh" >&2
     exit 1
   fi
 

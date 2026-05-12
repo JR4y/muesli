@@ -8,9 +8,23 @@ import os
 /// may be processed against the mutable stream state at a time. Chunks can
 /// arrive faster than VAD inference finishes, so we queue them and drain
 /// serially rather than spawning overlapping Tasks that race the same state.
-final class StreamingVadController {
+final class StreamingVadController: @unchecked Sendable {
+    struct Configuration: Sendable {
+        let segmentation: VadSegmentationConfig
+        let returnSeconds: Bool
+        let timeResolution: Int
+
+        static let `default` = Configuration(
+            segmentation: .default,
+            returnSeconds: false,
+            timeResolution: 1
+        )
+    }
+
     /// Called when VAD detects a natural chunk boundary.
     var onChunkBoundary: (() -> Void)?
+    /// Called when VAD detects a speech start or end boundary.
+    var onSpeechEvent: ((VadStreamEvent) -> Void)?
 
     private struct State {
         var generation = 0
@@ -26,6 +40,7 @@ final class StreamingVadController {
     private let makeInitialState: @Sendable () async -> VadStreamState
     private let processStreamChunk: @Sendable ([Float], VadStreamState) async throws -> VadStreamResult
     private let logger = Logger(subsystem: "com.muesli.native", category: "StreamingVadController")
+    private let configuration: Configuration
 
     /// Minimum chunk duration before allowing rotation (prevents rapid flipping).
     private let minChunkDuration: TimeInterval
@@ -33,13 +48,23 @@ final class StreamingVadController {
     private let maxChunkDuration: TimeInterval
     private var maxDurationTimer: Timer?
 
-    convenience init(vadManager: VadManager) {
+    convenience init(
+        vadManager: VadManager,
+        configuration: Configuration = .default
+    ) {
         self.init(
             minChunkDuration: 3.0,
             maxChunkDuration: 60.0,
+            configuration: configuration,
             makeInitialState: { await vadManager.makeStreamState() },
             processStreamChunk: { samples, state in
-                try await vadManager.processStreamingChunk(samples, state: state)
+                try await vadManager.processStreamingChunk(
+                    samples,
+                    state: state,
+                    config: configuration.segmentation,
+                    returnSeconds: configuration.returnSeconds,
+                    timeResolution: configuration.timeResolution
+                )
             }
         )
     }
@@ -47,11 +72,13 @@ final class StreamingVadController {
     internal init(
         minChunkDuration: TimeInterval,
         maxChunkDuration: TimeInterval,
+        configuration: Configuration = .default,
         makeInitialState: @escaping @Sendable () async -> VadStreamState,
         processStreamChunk: @escaping @Sendable ([Float], VadStreamState) async throws -> VadStreamResult
     ) {
         self.minChunkDuration = minChunkDuration
         self.maxChunkDuration = maxChunkDuration
+        self.configuration = configuration
         self.makeInitialState = makeInitialState
         self.processStreamChunk = processStreamChunk
     }
@@ -104,6 +131,30 @@ final class StreamingVadController {
             guard self.lock.withLock({ !$0.isActive && $0.generation == stopGeneration }) else { return }
             self.maxDurationTimer?.invalidate()
             self.maxDurationTimer = nil
+        }
+    }
+
+    func resetDetectionState() {
+        let resetGeneration = lock.withLock { state -> Int? in
+            guard state.isActive else { return nil }
+            return state.generation
+        }
+        guard let resetGeneration else { return }
+
+        Task { [weak self] in
+            guard let self else { return }
+            let initialState = await self.makeInitialState()
+            self.lock.withLock { state in
+                guard state.isActive, state.generation == resetGeneration else { return }
+                let processedSamples = state.streamState?.processedSamples ?? 0
+                state.streamState = VadStreamState(
+                    modelState: initialState.modelState,
+                    triggered: false,
+                    tempEndSample: nil,
+                    processedSamples: processedSamples
+                )
+                state.lastRotationTime = Date()
+            }
         }
     }
 
@@ -188,11 +239,12 @@ final class StreamingVadController {
             do {
                 let result = try await processStreamChunk(next.chunk, next.streamState)
 
+                let boundaryEvent = result.event
                 let shouldRotate = lock.withLock { state in
                     guard state.isActive, state.generation == next.generation else { return false }
                     state.streamState = result.state
 
-                    guard let event = result.event, event.kind == .speechEnd else {
+                    guard let event = boundaryEvent, event.kind == .speechEnd else {
                         return false
                     }
 
@@ -201,6 +253,12 @@ final class StreamingVadController {
                     guard elapsed >= self.minChunkDuration else { return false }
                     state.lastRotationTime = now
                     return true
+                }
+
+                if let boundaryEvent {
+                    DispatchQueue.main.async { [weak self] in
+                        self?.onSpeechEvent?(boundaryEvent)
+                    }
                 }
 
                 if shouldRotate {

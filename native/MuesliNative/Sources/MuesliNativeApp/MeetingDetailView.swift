@@ -15,6 +15,9 @@ private enum ManualNotesSaveStatus {
 
 struct MeetingDetailView: View {
     private let detailColumnWidth: CGFloat = 860
+    private let minimumTranscriptPanelHeight: CGFloat = 160
+    private let defaultTranscriptPanelHeight: CGFloat = 240
+    private let maximumTranscriptPanelHeight: CGFloat = 560
 
     let meeting: MeetingRecord?
     let controller: MuesliController
@@ -44,6 +47,8 @@ struct MeetingDetailView: View {
     @State private var showNewFolderPrompt = false
     @State private var newFolderName = ""
     @State private var isLiveTranscriptExpanded = false
+    @State private var liveTranscriptPanelHeight: CGFloat = 240
+    @State private var liveTranscriptResizeStartHeight: CGFloat?
     @State private var liveChatDraft = ""
     @State private var isMergeSheetPresented = false
     @State private var selectedMergeCandidateIDs = Set<Int64>()
@@ -1079,7 +1084,12 @@ struct MeetingDetailView: View {
 
             HStack(spacing: MuesliTheme.spacing12) {
                 Button {
-                    isLiveTranscriptExpanded.toggle()
+                    if isLiveTranscriptExpanded {
+                        isLiveTranscriptExpanded = false
+                    } else {
+                        liveTranscriptPanelHeight = max(liveTranscriptPanelHeight, defaultTranscriptPanelHeight)
+                        isLiveTranscriptExpanded = true
+                    }
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: isLiveTranscriptExpanded ? "waveform.and.magnifyingglass" : "waveform")
@@ -1133,24 +1143,16 @@ struct MeetingDetailView: View {
     @ViewBuilder
     private func transcriptPanel(for meeting: MeetingRecord) -> some View {
         if (meeting.status == .recording || meeting.status == .processing) && appState.config.enableLiveMeetingTranscript {
-            LiveMeetingTranscriptView(
-                turns: liveTranscriptTurns(for: meeting),
-                placeholder: L10n.text(.meetingLiveTranscriptPlaceholder, config: appState.config)
-            )
-            .frame(maxWidth: detailColumnWidth, minHeight: 160, maxHeight: 240, alignment: .topLeading)
-            .background(MuesliTheme.backgroundRaised)
-            .overlay(alignment: .bottom) {
-                Divider()
-                    .background(MuesliTheme.surfaceBorder)
+            transcriptPanelContainer {
+                LiveMeetingTranscriptView(
+                    turns: liveTranscriptTurns(for: meeting),
+                    placeholder: L10n.text(.meetingLiveTranscriptPlaceholder, config: appState.config)
+                )
             }
         } else if hasTranscriptContent(for: meeting) {
-            MeetingTranscriptView(transcript: meeting.rawTranscript)
-                .frame(maxWidth: detailColumnWidth, minHeight: 160, maxHeight: 240, alignment: .topLeading)
-                .background(MuesliTheme.backgroundRaised)
-                .overlay(alignment: .bottom) {
-                    Divider()
-                        .background(MuesliTheme.surfaceBorder)
-                }
+            transcriptPanelContainer {
+                MeetingTranscriptView(transcript: meeting.rawTranscript)
+            }
         } else {
             Text(L10n.text(.meetingTranscriptUnavailable, config: appState.config))
                 .font(.system(size: 12))
@@ -1163,6 +1165,59 @@ struct MeetingDetailView: View {
                         .background(MuesliTheme.surfaceBorder)
                 }
         }
+    }
+
+    private func transcriptPanelContainer<Content: View>(
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            transcriptResizeHandle
+            content()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .frame(
+            maxWidth: detailColumnWidth,
+            minHeight: liveTranscriptPanelHeight,
+            maxHeight: liveTranscriptPanelHeight,
+            alignment: .topLeading
+        )
+        .background(MuesliTheme.backgroundRaised)
+        .overlay(alignment: .bottom) {
+            Divider()
+                .background(MuesliTheme.surfaceBorder)
+        }
+    }
+
+    private var transcriptResizeHandle: some View {
+        HStack {
+            Spacer()
+            Capsule()
+                .fill(MuesliTheme.surfaceBorder)
+                .frame(width: 42, height: 5)
+            Spacer()
+        }
+        .contentShape(Rectangle())
+        .padding(.vertical, 8)
+        .background(MuesliTheme.backgroundRaised)
+        .gesture(
+            DragGesture(minimumDistance: 1)
+                .onChanged { value in
+                    if liveTranscriptResizeStartHeight == nil {
+                        liveTranscriptResizeStartHeight = liveTranscriptPanelHeight
+                    }
+                    let baseHeight = liveTranscriptResizeStartHeight ?? liveTranscriptPanelHeight
+                    let proposedHeight = baseHeight - value.translation.height
+                    liveTranscriptPanelHeight = clampedTranscriptPanelHeight(proposedHeight)
+                }
+                .onEnded { _ in
+                    liveTranscriptResizeStartHeight = nil
+                }
+        )
+        .help("Drag to resize transcript")
+    }
+
+    private func clampedTranscriptPanelHeight(_ height: CGFloat) -> CGFloat {
+        min(max(height, minimumTranscriptPanelHeight), maximumTranscriptPanelHeight)
     }
 
     @ViewBuilder
@@ -1750,6 +1805,8 @@ struct MeetingDetailView: View {
             manualNotesSaveStatus = .saved
             isAssociatedEventExpanded = true
             isLiveTranscriptExpanded = false
+            liveTranscriptPanelHeight = defaultTranscriptPanelHeight
+            liveTranscriptResizeStartHeight = nil
             liveChatDraft = ""
             selectedMergeCandidateIDs = []
             isMerging = false
@@ -2044,7 +2101,8 @@ private struct LiveMeetingTranscriptView: View {
     var body: some View {
         MeetingTranscriptChatView(
             turns: turns.map { $0.asDisplayTurn() },
-            placeholder: placeholder
+            placeholder: placeholder,
+            autoScrollToLatest: true
         )
     }
 }

@@ -8,6 +8,7 @@ private actor StreamingVadTestProbe {
     private(set) var inFlightCount = 0
     private(set) var maxConcurrentCount = 0
     private(set) var boundaryCount = 0
+    private(set) var speechEventKinds: [VadStreamEvent.Kind] = []
 
     func processingStarted() {
         inFlightCount += 1
@@ -22,10 +23,28 @@ private actor StreamingVadTestProbe {
     func boundaryTriggered() {
         boundaryCount += 1
     }
+
+    func speechEventTriggered(_ kind: VadStreamEvent.Kind) {
+        speechEventKinds.append(kind)
+    }
 }
 
 @Suite("StreamingVadController", .serialized)
 struct StreamingVadControllerTests {
+    @Test("meeting live transcript VAD configuration stays valid for debug builds")
+    func meetingLiveTranscriptConfigurationIsValid() {
+        let config = MeetingSession.makeLiveTranscriptVadConfiguration()
+
+        #expect(config.segmentation.silenceThresholdForSplit == 0.50)
+        #expect(config.segmentation.negativeThreshold == 0.35)
+        #expect(config.segmentation.minSilenceDuration == 2.0)
+        #expect(config.segmentation.speechPadding == 0.30)
+        #expect(config.segmentation.minSpeechDuration == 0.30)
+        #expect(config.segmentation.speechPadding <= config.segmentation.minSpeechDuration)
+        #expect(config.returnSeconds)
+        #expect(config.timeResolution == 3)
+    }
+
     @Test("serializes streaming VAD processing to a single in-flight chunk")
     func serializesChunkProcessing() async throws {
         let probe = StreamingVadTestProbe()
@@ -123,6 +142,43 @@ struct StreamingVadControllerTests {
         #expect(await probe.boundaryCount == 1)
     }
 
+    @Test("emits speech events for both start and end boundaries")
+    func emitsSpeechEvents() async throws {
+        let probe = StreamingVadTestProbe()
+        let emittedEvents = [
+            VadStreamEvent(kind: .speechStart, sampleIndex: 0, time: 0.0),
+            VadStreamEvent(kind: .speechEnd, sampleIndex: VadManager.chunkSize, time: 0.256),
+        ]
+        let controller = StreamingVadController(
+            minChunkDuration: 0,
+            maxChunkDuration: 3600,
+            makeInitialState: { VadStreamState.initial() },
+            processStreamChunk: { _, state in
+                await probe.processingStarted()
+                let eventIndex = await probe.processedCount
+                await probe.processingFinished()
+                let event = emittedEvents[min(eventIndex, emittedEvents.count - 1)]
+                return VadStreamResult(state: state, event: event, probability: 0.5)
+            }
+        )
+
+        controller.onSpeechEvent = { event in
+            Task { await probe.speechEventTriggered(event.kind) }
+        }
+
+        controller.start()
+        controller.processAudio([Float](repeating: 0, count: VadManager.chunkSize))
+        controller.processAudio([Float](repeating: 0, count: VadManager.chunkSize))
+
+        let deadline = ContinuousClock.now + .seconds(2)
+        while await probe.speechEventKinds.count < 2, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        controller.stop()
+
+        #expect(await probe.speechEventKinds == [.speechStart, .speechEnd])
+    }
+
     @Test("ignores stale VAD results after stop and restart")
     func ignoresStaleResultsAfterRestart() async throws {
         let probe = StreamingVadTestProbe()
@@ -203,5 +259,43 @@ struct StreamingVadControllerTests {
         controller.stop()
 
         #expect(await probe.processedCount == 4)
+    }
+
+    @Test("reset detection state clears triggered speech so a new start can be emitted")
+    func resetDetectionStateClearsTriggeredSpeech() async throws {
+        let probe = StreamingVadTestProbe()
+        let initialState = VadStreamState(triggered: true, processedSamples: VadManager.chunkSize * 2)
+        let controller = StreamingVadController(
+            minChunkDuration: 0,
+            maxChunkDuration: 3600,
+            makeInitialState: { initialState },
+            processStreamChunk: { _, state in
+                await probe.processingStarted()
+                await probe.processingFinished()
+                let event: VadStreamEvent? = state.triggered
+                    ? nil
+                    : VadStreamEvent(kind: .speechStart, sampleIndex: state.processedSamples, time: 0.512)
+                return VadStreamResult(state: state, event: event, probability: 0.0)
+            }
+        )
+
+        controller.onSpeechEvent = { event in
+            Task { await probe.speechEventTriggered(event.kind) }
+        }
+        controller.start()
+        controller.processAudio([Float](repeating: 0, count: VadManager.chunkSize))
+        try? await Task.sleep(for: .milliseconds(100))
+
+        controller.resetDetectionState()
+        try? await Task.sleep(for: .milliseconds(100))
+        controller.processAudio([Float](repeating: 0, count: VadManager.chunkSize))
+
+        let deadline = ContinuousClock.now + .seconds(2)
+        while await probe.speechEventKinds.isEmpty, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        controller.stop()
+
+        #expect(await probe.speechEventKinds == [.speechStart])
     }
 }
