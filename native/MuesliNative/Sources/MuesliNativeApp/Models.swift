@@ -128,6 +128,26 @@ struct BackendOption: Equatable {
         all.filter { $0.isDownloaded }
     }
 
+    static func resolve(backend: String, model: String) -> BackendOption? {
+        all.first { $0.backend == backend && $0.model == model }
+    }
+
+    static func resolveDownloaded(
+        backend: String,
+        model: String,
+        fallback: BackendOption?,
+        downloadedOptions: [BackendOption]
+    ) -> BackendOption? {
+        if let selected = downloadedOptions.first(where: { $0.backend == backend && $0.model == model }) {
+            return selected
+        }
+        if let fallback,
+           downloadedOptions.contains(where: { $0.backend == fallback.backend && $0.model == fallback.model }) {
+            return fallback
+        }
+        return downloadedOptions.first
+    }
+
     /// Check if this model's files exist on disk.
     var isDownloaded: Bool {
         let fm = FileManager.default
@@ -650,6 +670,7 @@ struct AppConfig: Codable {
     var maraudersMapCustomAudioPath: String?
     var hiddenLocalCalendarIDs: [String] = []
     var hiddenCalendarEventIDs: [String] = []
+    var disabledCalendarIDs: [String] = []
     var enablePostProcessor: Bool = false
     var activePostProcessorId: String = PostProcessorOption.defaultOption.id
     var postProcessorSystemPrompt: String = PostProcessorOption.defaultSystemPrompt
@@ -720,6 +741,7 @@ struct AppConfig: Codable {
         case maraudersMapCustomAudioPath = "marauders_map_custom_audio_path"
         case hiddenLocalCalendarIDs = "hidden_local_calendar_ids"
         case hiddenCalendarEventIDs = "hidden_calendar_event_ids"
+        case disabledCalendarIDs = "disabled_calendar_ids"
         case enablePostProcessor = "enable_post_processor"
         case activePostProcessorId = "active_post_processor_id"
         case postProcessorSystemPrompt = "post_processor_system_prompt"
@@ -804,6 +826,7 @@ struct AppConfig: Codable {
         maraudersMapCustomAudioPath = try? c.decode(String.self, forKey: .maraudersMapCustomAudioPath)
         hiddenLocalCalendarIDs = (try? c.decode([String].self, forKey: .hiddenLocalCalendarIDs)) ?? defaults.hiddenLocalCalendarIDs
         hiddenCalendarEventIDs = (try? c.decode([String].self, forKey: .hiddenCalendarEventIDs)) ?? defaults.hiddenCalendarEventIDs
+        disabledCalendarIDs = (try? c.decode([String].self, forKey: .disabledCalendarIDs)) ?? defaults.disabledCalendarIDs
         enablePostProcessor = (try? c.decode(Bool.self, forKey: .enablePostProcessor)) ?? defaults.enablePostProcessor
         activePostProcessorId = (try? c.decode(String.self, forKey: .activePostProcessorId)) ?? defaults.activePostProcessorId
         postProcessorSystemPrompt = (try? c.decode(String.self, forKey: .postProcessorSystemPrompt)) ?? defaults.postProcessorSystemPrompt

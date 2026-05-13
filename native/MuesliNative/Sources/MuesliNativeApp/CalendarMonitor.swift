@@ -10,6 +10,17 @@ struct UpcomingMeetingEvent {
     var meetingURL: URL? = nil
 }
 
+/// A calendar exposed by EventKit (iCloud, On-My-Mac, Exchange, an Internet
+/// Account–linked Google calendar, etc.). Used by Settings to show which
+/// calendars Muesli is reading from and to drive per-calendar enable/disable.
+struct AvailableCalendar: Identifiable, Equatable {
+    let id: String           // EKCalendar.calendarIdentifier
+    let title: String
+    let sourceTitle: String  // e.g. "iCloud", "spencer@dockstreet.com"
+    let colorHex: String?
+    let typeLabel: String
+}
+
 final class CalendarMonitor {
     private let store = EKEventStore()
     private var changeObserver: NSObjectProtocol?
@@ -136,7 +147,12 @@ final class CalendarMonitor {
 
     /// Returns upcoming timed events from the local macOS calendar (EventKit) for the next N days.
     /// All-day events are excluded — they're not useful for meeting recording.
-    func upcomingEvents(daysAhead: Int = 7, excluding hiddenCalendarIDs: Set<String> = []) -> [UnifiedCalendarEvent] {
+    /// Events from calendars listed in `disabledCalendarIDs` are filtered out.
+    func upcomingEvents(
+        daysAhead: Int = 7,
+        excluding hiddenCalendarIDs: Set<String> = [],
+        disabledCalendarIDs: Set<String> = []
+    ) -> [UnifiedCalendarEvent] {
         // Create a fresh EKEventStore each time to avoid stale cache.
         // EKEventStore instances cache calendar data and don't automatically
         // reflect external changes (e.g., events moved in Google Calendar).
@@ -148,9 +164,12 @@ final class CalendarMonitor {
         guard !calendars.isEmpty else { return [] }
         let predicate = freshStore.predicateForEvents(withStart: now, end: future, calendars: calendars)
         let events = freshStore.events(matching: predicate)
-        return events.compactMap { event in
+        let unified = events.compactMap { event in
             Self.unifiedCalendarEvent(from: event)
-        }.sorted { $0.startDate < $1.startDate }
+        }
+        return UnifiedCalendarEvent
+            .filter(unified, disabledCalendarIDs: disabledCalendarIDs)
+            .sorted { $0.startDate < $1.startDate }
     }
 
     func events(
@@ -166,6 +185,39 @@ final class CalendarMonitor {
         return events.compactMap { event in
             Self.unifiedCalendarEvent(from: event)
         }.sorted { $0.startDate < $1.startDate }
+    }
+
+    /// Enumerate every event calendar EventKit exposes — iCloud, On-My-Mac,
+    /// Exchange, and any Google account linked via System Settings > Internet
+    /// Accounts. Used by Settings to surface which calendars Muesli is reading
+    /// from and to power per-calendar enable/disable.
+    func availableCalendars() -> [AvailableCalendar] {
+        let freshStore = EKEventStore()
+        return freshStore.calendars(for: .event)
+            .map { cal in
+                AvailableCalendar(
+                    id: cal.calendarIdentifier,
+                    title: cal.title,
+                    sourceTitle: cal.source.title,
+                    colorHex: Self.hexString(from: cal.cgColor),
+                    typeLabel: Self.typeLabel(for: cal.type)
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.sourceTitle != rhs.sourceTitle { return lhs.sourceTitle < rhs.sourceTitle }
+                return lhs.title < rhs.title
+            }
+    }
+
+    private static func typeLabel(for type: EKCalendarType) -> String {
+        switch type {
+        case .local: return "Local"
+        case .calDAV: return "CalDAV"
+        case .exchange: return "Exchange"
+        case .subscription: return "Subscription"
+        case .birthday: return "Birthday"
+        @unknown default: return "Calendar"
+        }
     }
 
     // MARK: - Meeting URL Extraction
