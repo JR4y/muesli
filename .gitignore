@@ -60,4 +60,5 @@ docs/reports/meeting-transcription-pipeline.svg
 
 # Supabase sync — local credentials (never commit)
 config/Supabase.xcconfig
+config/google-oauth.json
 supabase/.temp/

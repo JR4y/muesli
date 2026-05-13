@@ -2974,6 +2974,37 @@ final class MuesliController: NSObject {
         }
     }
 
+    func setCalendarSourceEnabled(_ calendarID: String, isEnabled: Bool, isLocal: Bool) {
+        var hiddenIDs = Set(config.hiddenLocalCalendarIDs)
+        var disabledIDs = Set(config.disabledCalendarIDs)
+
+        if isEnabled {
+            disabledIDs.remove(calendarID)
+            if isLocal {
+                hiddenIDs.remove(calendarID)
+            }
+        } else {
+            disabledIDs.insert(calendarID)
+            if isLocal {
+                hiddenIDs.insert(calendarID)
+            }
+        }
+
+        updateConfig { config in
+            config.disabledCalendarIDs = disabledIDs.sorted()
+            if isLocal {
+                config.hiddenLocalCalendarIDs = hiddenIDs.sorted()
+            }
+        }
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.refreshUpcomingCalendarEvents()
+            self.checkUpcomingCalendarNotifications()
+            self.meetingMonitor.refreshState()
+        }
+    }
+
     func createMeetingFromCalendarEvent(_ event: UnifiedCalendarEvent, folderID: Int64?) {
         // Check ALL folders for existing meeting with this calendar event ID
         if let existing = existingMeeting(forCalendarEventID: event.id) {

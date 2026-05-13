@@ -725,14 +725,11 @@ struct SettingsView: View {
                     .padding(.horizontal, MuesliTheme.spacing16)
             }
 
-            settingsSection(L10n.text(.settingsCalendarSection, config: appState.config)) {
-                localCalendarsControl
-
-                Divider().background(MuesliTheme.surfaceBorder)
-                    .padding(.top, MuesliTheme.spacing12)
+            settingsSection(L10n.text(.settingsGoogleCalendar, config: appState.config)) {
                 settingsRow(L10n.text(.settingsGoogleCalendar, config: appState.config)) {
                     googleCalendarControl
                 }
+                googleCalendarListLoadStateView
             }
 
             settingsSection("Calendar Sources") {
@@ -1120,27 +1117,6 @@ struct SettingsView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(MuesliTheme.textSecondary)
             }
-        } else if !appState.isGoogleCalendarVerified {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 5) {
-                    Image(systemName: "calendar.badge.plus")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.white.opacity(0.4))
-                    Text(L10n.text(.settingsConnectGoogleCalendar, config: appState.config))
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.4))
-                        .lineLimit(1)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(MuesliTheme.textTertiary.opacity(0.3))
-                .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
-
-                Text(L10n.text(.settingsGoogleOAuthPending, config: appState.config))
-                    .font(.system(size: 10))
-                    .foregroundStyle(MuesliTheme.textTertiary)
-            }
         } else if !appState.isGoogleCalendarAvailable {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 5) {
@@ -1159,6 +1135,12 @@ struct SettingsView: View {
                 .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
 
                 Text(L10n.text(.settingsGoogleCalendarUnavailable, config: appState.config))
+                    .font(.system(size: 10))
+                    .foregroundStyle(MuesliTheme.textTertiary)
+                Text("config/google-oauth.json")
+                    .font(.system(size: 10))
+                    .foregroundStyle(MuesliTheme.textTertiary)
+                Text("~/.config/muesli/google-oauth.json")
                     .font(.system(size: 10))
                     .foregroundStyle(MuesliTheme.textTertiary)
             }
@@ -1189,6 +1171,12 @@ struct SettingsView: View {
                     .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
                 }
                 .buttonStyle(.plain)
+
+                if !appState.isGoogleCalendarVerified {
+                    Text(L10n.text(.settingsGoogleOAuthPending, config: appState.config))
+                        .font(.system(size: 10))
+                        .foregroundStyle(MuesliTheme.textTertiary)
+                }
 
                 if let googleCalSignInError {
                     Text(googleCalSignInError)
@@ -1677,6 +1665,7 @@ struct SettingsView: View {
         let title: String
         let colorHex: String?
         let isEnabled: Bool
+        let isLocalSource: Bool
     }
 
     private struct CalendarSourceGroup: Identifiable, Equatable {
@@ -1689,6 +1678,7 @@ struct SettingsView: View {
 
     private var calendarSourceGroups: [CalendarSourceGroup] {
         let disabled = Set(appState.config.disabledCalendarIDs)
+        let hiddenLocal = Set(appState.config.hiddenLocalCalendarIDs)
         var groups: [CalendarSourceGroup] = []
 
         let ekBySource = Dictionary(grouping: appState.availableEventKitCalendars) { $0.sourceTitle }
@@ -1700,7 +1690,8 @@ struct SettingsView: View {
                         id: cal.id,
                         title: cal.title,
                         colorHex: cal.colorHex,
-                        isEnabled: !disabled.contains(cal.id)
+                        isEnabled: !disabled.contains(cal.id) && !hiddenLocal.contains(cal.id),
+                        isLocalSource: true
                     )
                 }
             groups.append(CalendarSourceGroup(
@@ -1718,7 +1709,8 @@ struct SettingsView: View {
                     id: cal.id,
                     title: cal.summary + (cal.isPrimary ? " (Primary)" : ""),
                     colorHex: cal.colorHex,
-                    isEnabled: !disabled.contains(cal.id)
+                    isEnabled: !disabled.contains(cal.id),
+                    isLocalSource: false
                 )
             }
             groups.append(CalendarSourceGroup(
@@ -1758,9 +1750,6 @@ struct SettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if appState.isGoogleCalendarAuthenticated {
-                googleCalendarListLoadStateView
-            }
         }
     }
 
@@ -1831,7 +1820,11 @@ struct SettingsView: View {
 
     private func calendarToggleButton(_ item: CalendarToggleItem) -> some View {
         Button {
-            updateDisabledCalendar(item.id, isDisabled: item.isEnabled)
+            controller.setCalendarSourceEnabled(
+                item.id,
+                isEnabled: !item.isEnabled,
+                isLocal: item.isLocalSource
+            )
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: item.isEnabled ? "checkmark.square.fill" : "square")
@@ -1863,36 +1856,24 @@ struct SettingsView: View {
     private var googleCalendarListLoadStateView: some View {
         switch appState.googleCalendarListLoadState {
         case .loading:
-            Text("Loading Google calendars…")
-                .font(MuesliTheme.caption())
-                .foregroundStyle(MuesliTheme.textTertiary)
+            settingsDescription("Loading Google calendars…")
         case .failed(let message):
             HStack(spacing: 8) {
                 Text("Failed to load Google calendars: \(message)")
                     .font(MuesliTheme.caption())
                     .foregroundStyle(MuesliTheme.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
                 Button("Retry") {
                     Task { await controller.refreshGoogleCalendarList() }
                 }
                 .buttonStyle(.link)
                 .font(MuesliTheme.caption())
             }
+            .padding(.horizontal, MuesliTheme.spacing16)
+            .padding(.top, 8)
         case .idle, .loaded:
             EmptyView()
         }
-    }
-
-    private func updateDisabledCalendar(_ calendarID: String, isDisabled: Bool) {
-        controller.updateConfig { config in
-            var disabled = Set(config.disabledCalendarIDs)
-            if isDisabled {
-                disabled.insert(calendarID)
-            } else {
-                disabled.remove(calendarID)
-            }
-            config.disabledCalendarIDs = disabled.sorted()
-        }
-        Task { await controller.refreshUpcomingCalendarEvents() }
     }
 
     @ViewBuilder

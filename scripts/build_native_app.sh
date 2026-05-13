@@ -32,6 +32,7 @@ SKIP_SIGN="${MUESLI_SKIP_SIGN:-0}"
 SUPABASE_CONFIG_FILE="$ROOT/config/Supabase.xcconfig"
 SUPABASE_URL=""
 SUPABASE_ANON_KEY=""
+GOOGLE_OAUTH_CONFIG_FILE="${MUESLI_GOOGLE_OAUTH_CONFIG_FILE:-$ROOT/config/google-oauth.json}"
 if [[ -f "$SUPABASE_CONFIG_FILE" ]]; then
   while IFS='=' read -r key value; do
     case "$key" in
@@ -110,6 +111,10 @@ if [[ -d "$ROOT/assets/fonts" ]]; then
 fi
 if [[ -d "$ROOT/assets/audio" ]]; then
   ditto "$ROOT/assets/audio" "$STAGED_APP_DIR/Contents/Resources/audio"
+fi
+if [[ -f "$GOOGLE_OAUTH_CONFIG_FILE" ]]; then
+  cp "$GOOGLE_OAUTH_CONFIG_FILE" "$STAGED_APP_DIR/Contents/Resources/google-oauth.json"
+  echo "Bundled Google Calendar OAuth config from: $GOOGLE_OAUTH_CONFIG_FILE"
 fi
 
 cat > "$STAGED_APP_DIR/Contents/Info.plist" <<PLIST

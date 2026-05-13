@@ -207,6 +207,34 @@ Notes:
   "standard macOS edit commands", and "global hotkey capture" that should be
   cleaned up deliberately instead of growing by accident
 
+### 5c. Google Calendar auth cleanup
+
+Goal:
+keep the now-working Google Calendar path reliable and easier to debug without
+reopening the broader calendar UX stream.
+
+Possible scope:
+
+- make the Google OAuth callback success page less optimistic so it does not
+  imply the flow is fully complete before token exchange and first API load
+  finish
+- review whether Google auth/token failures should surface more explicit UI
+  causes instead of generic request text
+- clean up the remaining Swift concurrency warnings in
+  `GoogleCalendarAuthManager`
+- consider whether the local Google setup should eventually move into a more
+  intentional contributor/developer config pattern alongside other local
+  secrets
+
+Notes:
+
+- the fork now has a working local Google Calendar path via
+  `config/google-oauth.json`
+- the biggest functional blockers were fixed:
+  wrong sign-out behavior on `403` and missing `calendarList` scope
+- what remains is mostly auth-flow polish and technical debt, not a known
+  product blocker
+
 ### 6. In-meeting note handling
 
 Goal:

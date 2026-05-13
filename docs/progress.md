@@ -8,7 +8,7 @@ It is intended to serve three purposes at once:
 - make it easy to resume work without losing context
 - prepare a clean base for future beta release notes and README feature updates
 
-Last updated: `2026-05-12`
+Last updated: `2026-05-13`
 Working branch: `beta`
 Dev app: `muesli-beta.app`
 
@@ -27,6 +27,60 @@ Git workflow currently documented and aligned:
 - `main` is reserved as the stable product branch
 
 ## Incremental history
+
+### 2026-05-13
+
+This pass finished the latest upstream calendar integration, made Google
+Calendar usable in the fork's local beta workflow, and cleaned up the meetings
+settings presentation so the calendar controls are easier to trust.
+
+#### Upstream calendar merge promoted through mergework
+
+- the latest upstream `vendor` changes around per-calendar filtering and
+  retranscription recovery were reviewed and integrated through
+  `beta-mergework`
+- the validated merge was installed locally, tested in `muesli-beta.app`, and
+  then promoted into `beta`
+- the fork continued using the documented merge discipline:
+  refresh `vendor`, recreate `beta-mergework`, validate there, then promote
+
+#### Google Calendar activation for local beta builds
+
+- local Google Calendar OAuth credentials are now supported through
+  `config/google-oauth.json`, which stays ignored by git
+- a committed template now exists at `config/google-oauth.json.example`
+- local app builds now bundle that config automatically into the app resources
+  when present, so beta installs can test Google Calendar without relying on a
+  hidden home-directory setup
+- the fallback path `~/.config/muesli/google-oauth.json` still works, but the
+  fork now prefers the repo-local config because it is easier to reason about
+  during mergework and beta validation
+- README and dedicated local-setup documentation were added so the Google
+  Cloud / OAuth flow is no longer implicit tribal knowledge
+
+#### Google Calendar auth and API hardening
+
+- the Google Calendar sign-in UI now distinguishes between:
+  missing credentials, pending verification, active connection, and API load
+  failures
+- a real upstream auth bug was fixed: Google Calendar API `403` responses no
+  longer force an automatic sign-out as if the session were invalid
+- another real upstream scope mismatch was fixed: the app now requests both
+  `calendar.events.readonly` and `calendar.calendarlist.readonly`, which are
+  both required by the current calendar-list plus events flow
+- after this fix, direct Google Calendar connection was verified working in the
+  local beta app instead of only looking theoretically wired
+
+#### Calendar settings UX cleanup
+
+- the old overlap between the fork's local calendar controls and the newer
+  upstream `Calendar Sources` panel was consolidated
+- local EventKit calendars and direct Google OAuth calendars now flow through a
+  shared enable/disable path, so settings toggles are less contradictory
+- the `Google Calendar` connect/state area now lives in its own section above
+  `Calendar Sources`
+- `Calendar Sources` now focuses on sources and calendars only, instead of
+  mixing connection state with the source list
 
 ### 2026-05-12
 

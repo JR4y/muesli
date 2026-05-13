@@ -99,6 +99,21 @@ contributors can use the unsigned dev build for local testing; it installs
 `MuesliDev.app` with a separate bundle ID and app data directory.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full local development workflow.
 
+### Optional: Google Calendar for local builds
+
+Google Calendar OAuth credentials are not tracked in git.
+
+- Copy [config/google-oauth.json.example](config/google-oauth.json.example) to `config/google-oauth.json`
+- Fill in your Google OAuth `client_id` and `client_secret`
+- Re-run `./scripts/beta-test.sh` or `./scripts/build_native_app.sh`
+
+When `config/google-oauth.json` exists, local app builds automatically bundle it
+as `Contents/Resources/google-oauth.json`. As a fallback, Muesli also checks
+`~/.config/muesli/google-oauth.json`.
+
+See [docs/google-calendar-local-setup.md](docs/google-calendar-local-setup.md)
+for the exact Google Cloud setup flow.
+
 The transcription model (~450MB for Parakeet v3) downloads automatically on first use.
 
 ---

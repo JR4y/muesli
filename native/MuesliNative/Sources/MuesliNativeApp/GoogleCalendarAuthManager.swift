@@ -34,7 +34,10 @@ final class GoogleCalendarAuthManager {
     private static let authURL = "https://accounts.google.com/o/oauth2/v2/auth"
     private static let tokenURL = "https://oauth2.googleapis.com/token"
     private static let redirectURI = "http://localhost:1456/auth/callback"
-    private static let scopes = "https://www.googleapis.com/auth/calendar.events.readonly"
+    private static let scopes = [
+        "https://www.googleapis.com/auth/calendar.events.readonly",
+        "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+    ].joined(separator: " ")
     private static let callbackTimeoutSeconds: TimeInterval = 300
 
     private let credentials: GoogleCalendarCredentials?

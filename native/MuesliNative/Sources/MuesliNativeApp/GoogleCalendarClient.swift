@@ -219,11 +219,12 @@ final class GoogleCalendarClient {
 
             guard statusCode == 200 else {
                 let body = String(data: data, encoding: .utf8) ?? ""
-                fputs("[google-cal] API error \(statusCode) for \(calendarID): \(body.prefix(200))\n", stderr)
-                if statusCode == 401 || statusCode == 403 {
+                let summary = Self.summarizeErrorBody(body)
+                fputs("[google-cal] API error \(statusCode) for \(calendarID): \(summary)\n", stderr)
+                if statusCode == 401 {
                     throw GoogleCalendarAuthError.notAuthenticated
                 }
-                throw GoogleCalendarClientError.requestFailed("events returned \(statusCode)")
+                throw GoogleCalendarClientError.requestFailed("events returned \(statusCode): \(summary)")
             }
 
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -289,11 +290,12 @@ final class GoogleCalendarClient {
 
             guard statusCode == 200 else {
                 let body = String(data: data, encoding: .utf8) ?? ""
-                fputs("[google-cal] calendarList error \(statusCode): \(body.prefix(200))\n", stderr)
-                if statusCode == 401 || statusCode == 403 {
+                let summary = Self.summarizeErrorBody(body)
+                fputs("[google-cal] calendarList error \(statusCode): \(summary)\n", stderr)
+                if statusCode == 401 {
                     throw GoogleCalendarAuthError.notAuthenticated
                 }
-                throw GoogleCalendarClientError.requestFailed("calendarList returned \(statusCode)")
+                throw GoogleCalendarClientError.requestFailed("calendarList returned \(statusCode): \(summary)")
             }
 
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -344,6 +346,26 @@ final class GoogleCalendarClient {
         f.formatOptions = [.withInternetDateTime]
         return f
     }()
+
+    private static func summarizeErrorBody(_ body: String) -> String {
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "empty response body" }
+        if let data = trimmed.data(using: .utf8),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let error = json["error"] as? [String: Any] {
+            let message = (error["message"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let errors = error["errors"] as? [[String: Any]],
+               let reason = errors.first?["reason"] as? String,
+               let message, !message.isEmpty {
+                return "\(reason): \(message)"
+            }
+            if let message, !message.isEmpty {
+                return message
+            }
+        }
+        return String(trimmed.prefix(200))
+    }
+
     private static let dateOnlyFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
