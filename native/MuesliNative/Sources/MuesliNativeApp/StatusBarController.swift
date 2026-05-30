@@ -164,7 +164,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
         menu.addItem(actionItem(title: L10n.text(.statusSettings, config: controller.appState.config), action: #selector(MuesliController.openSettingsTab)))
-        menu.addItem(actionItem(title: L10n.text(.statusCheckForUpdates, config: controller.appState.config), action: #selector(MuesliController.checkForUpdates)))
+        menu.addItem(checkForUpdatesItem())
         if let statusMessage {
             statusLabel.title = statusMessage
             statusLabel.isEnabled = false
@@ -285,6 +285,17 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     private func actionItem(title: String, action: Selector) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
         item.target = controller
+        return item
+    }
+
+    private func checkForUpdatesItem() -> NSMenuItem {
+        let item = NSMenuItem(
+            title: "Check for Updates…",
+            action: #selector(MuesliController.checkForUpdates),
+            keyEquivalent: ""
+        )
+        item.target = controller
+        item.isEnabled = controller.updaterController != nil
         return item
     }
 }

@@ -20,6 +20,39 @@ separated.
 - `beta` is where validated fork work lives day to day
 - `main` only receives changes that are already validated in `beta`
 
+## Interpretation guardrails
+
+When discussing "updating vendor" or "reviewing what the author changed," the comparison must be:
+
+- local `vendor` versus `upstream/main`
+
+That question is never answered by comparing `vendor` with `beta`.
+
+Use these exact mental models:
+
+- `vendor` means: "our local mirror of the author's branch"
+- `upstream/main` means: "the author's current published branch"
+- `vendor..upstream/main` means: "what the author added since we last refreshed vendor"
+- `beta` means: "our fork's current integrated state"
+- `beta-mergework` means: "the rehearsal branch where refreshed vendor is trial-merged into beta"
+
+Operational rule:
+
+1. First compare `vendor` with `upstream/main`
+2. Then fast-forward `vendor` to `upstream/main`
+3. Only after that recreate `beta-mergework` from `beta`
+4. Only then merge refreshed `vendor` into `beta-mergework`
+
+If the question is "is vendor behind the author?" or "what did the author publish since our last vendor sync?", do this:
+
+```bash
+git fetch upstream
+git log --oneline vendor..upstream/main
+git diff --stat vendor..upstream/main
+```
+
+If the question is "what happens when we bring the author's latest changes into our fork?", that is a different step and belongs in `beta-mergework`, not in `vendor`.
+
 ## Required merge order
 
 When upstream changes need to be reviewed, the order is mandatory:

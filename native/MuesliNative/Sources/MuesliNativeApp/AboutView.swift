@@ -3,9 +3,8 @@ import MuesliCore
 
 struct AboutView: View {
     let appState: AppState
-    let controller: MuesliController
 
-    private let githubURL = "https://github.com/pHequals7/muesli"
+    private let githubURL = "https://github.com/Muesli-HQ/muesli"
     private let donateURL = "https://buymeacoffee.com/phequals7"
 
     private var version: String {
@@ -40,10 +39,11 @@ struct AboutView: View {
                     Divider().background(MuesliTheme.surfaceBorder)
 
                     aboutRow(L10n.text(.aboutCheckForUpdates, config: appState.config)) {
-                        let action = updatePrimaryAction
-                        actionButton(actionTitle(action), icon: action.icon) {
-                            performUpdateAction(action)
-                        }
+                        Text(updateRowGuidance)
+                            .font(MuesliTheme.callout())
+                            .foregroundStyle(MuesliTheme.textSecondary)
+                            .multilineTextAlignment(.trailing)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
 
@@ -110,6 +110,11 @@ struct AboutView: View {
                     )
                     Divider().background(MuesliTheme.surfaceBorder)
                     acknowledgement(
+                        name: "LocalVQE by localai-org",
+                        description: "On-device acoustic echo cancellation powering cleaner meeting transcription."
+                    )
+                    Divider().background(MuesliTheme.surfaceBorder)
+                    acknowledgement(
                         name: "WhisperKit by Argmax",
                         description: "Swift Whisper inference on CoreML/ANE powering the app's Whisper Small, Medium, and Large Turbo backends."
                     )
@@ -152,48 +157,20 @@ struct AboutView: View {
         let title: String
         let message: String
         let tint: Color
-        let action: UpdateBannerAction?
     }
 
-    private enum UpdateBannerAction {
-        case check
-        case install
-        case restartInstall
-        case retry
-
-        var icon: String {
-            switch self {
-            case .check:
-                return "arrow.triangle.2.circlepath"
-            case .install:
-                return "arrow.down.circle"
-            case .restartInstall:
-                return "arrow.clockwise.circle"
-            case .retry:
-                return "arrow.triangle.2.circlepath"
-            }
-        }
-    }
-
-    private var updatePrimaryAction: UpdateBannerAction {
+    private var updateRowGuidance: String {
         switch appState.sparkleUpdateStatus {
         case .available:
-            return .install
+            return "Use the menu bar icon > Check for Updates..."
         case .downloaded:
-            return .restartInstall
+            return "Use the menu bar updater to finish installation."
+        case .checking, .busy, .installing:
+            return "Checking..."
         case .failed:
-            return .retry
-        case .idle, .checking, .busy, .installing, .upToDate, .disabled:
-            return .check
-        }
-    }
-
-    private func performUpdateAction(_ action: UpdateBannerAction) {
-        switch action {
-        case .check, .retry:
-            controller.retryUpdateCheck()
-        case .install, .restartInstall:
-            controller.installAvailableUpdate()
+            return "Use the menu bar icon > Check for Updates..."
+        case .idle, .upToDate, .disabled:
+            return "Use the menu bar icon > Check for Updates..."
         }
     }
 
@@ -206,64 +183,56 @@ struct AboutView: View {
                 icon: "arrow.triangle.2.circlepath",
                 title: L10n.text(.aboutCheckingForUpdatesTitle, config: appState.config),
                 message: L10n.text(.aboutCheckingForUpdatesMessage, config: appState.config),
-                tint: MuesliTheme.transcribing,
-                action: nil
+                tint: MuesliTheme.transcribing
             )
         case .busy(let message):
             return UpdateBanner(
                 icon: "clock.arrow.circlepath",
                 title: L10n.text(.aboutUpdaterBusyTitle, config: appState.config),
                 message: message,
-                tint: MuesliTheme.transcribing,
-                action: nil
+                tint: MuesliTheme.transcribing
             )
         case .available(let version):
             return UpdateBanner(
                 icon: "exclamationmark.triangle.fill",
                 title: L10n.text(.aboutUpdateAvailableTitle(version: version), config: appState.config),
                 message: L10n.text(.aboutUpdateAvailableMessage, config: appState.config),
-                tint: MuesliTheme.transcribing,
-                action: .install
+                tint: MuesliTheme.transcribing
             )
         case .downloaded(let version):
             return UpdateBanner(
                 icon: "exclamationmark.triangle.fill",
                 title: L10n.text(.aboutUpdateReadyTitle(version: version), config: appState.config),
                 message: L10n.text(.aboutUpdateReadyMessage, config: appState.config),
-                tint: MuesliTheme.transcribing,
-                action: .restartInstall
+                tint: MuesliTheme.transcribing
             )
         case .installing(let version):
             return UpdateBanner(
                 icon: "arrow.down.circle.fill",
                 title: L10n.text(.aboutInstallingUpdateTitle(version: version), config: appState.config),
                 message: L10n.text(.aboutInstallingUpdateMessage, config: appState.config),
-                tint: MuesliTheme.transcribing,
-                action: nil
+                tint: MuesliTheme.transcribing
             )
         case .upToDate:
             return UpdateBanner(
                 icon: "checkmark.circle.fill",
                 title: L10n.text(.aboutUpToDateTitle, config: appState.config),
                 message: L10n.text(.aboutUpToDateMessage, config: appState.config),
-                tint: MuesliTheme.success,
-                action: nil
+                tint: MuesliTheme.success
             )
         case .disabled(let message):
             return UpdateBanner(
                 icon: "minus.circle.fill",
                 title: L10n.text(.aboutUpdatesDisabledTitle, config: appState.config),
                 message: message,
-                tint: MuesliTheme.textTertiary,
-                action: nil
+                tint: MuesliTheme.textTertiary
             )
         case .failed(let message):
             return UpdateBanner(
                 icon: "xmark.octagon.fill",
                 title: L10n.text(.aboutUpdateCheckFailedTitle, config: appState.config),
                 message: message,
-                tint: MuesliTheme.recording,
-                action: .retry
+                tint: MuesliTheme.recording
             )
         }
     }
@@ -287,12 +256,6 @@ struct AboutView: View {
             }
 
             Spacer(minLength: MuesliTheme.spacing16)
-
-            if let action = banner.action {
-                actionButton(actionTitle(action), icon: action.icon) {
-                    performUpdateAction(action)
-                }
-            }
         }
         .padding(MuesliTheme.spacing16)
         .background(banner.tint.opacity(0.14))
@@ -301,19 +264,6 @@ struct AboutView: View {
             RoundedRectangle(cornerRadius: MuesliTheme.cornerMedium)
                 .strokeBorder(banner.tint.opacity(0.45), lineWidth: 1)
         )
-    }
-
-    private func actionTitle(_ action: UpdateBannerAction) -> String {
-        switch action {
-        case .check:
-            return L10n.text(.aboutCheckNow, config: appState.config)
-        case .install:
-            return L10n.text(.aboutInstallUpdate, config: appState.config)
-        case .restartInstall:
-            return L10n.text(.sidebarRestart, config: appState.config)
-        case .retry:
-            return L10n.text(.aboutTryAgain, config: appState.config)
-        }
     }
 
     @ViewBuilder

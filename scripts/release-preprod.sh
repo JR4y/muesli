@@ -11,7 +11,7 @@ set -euo pipefail
 #   - App name: MuesliPreprod
 #   - Bundle ID: com.muesli.preprod
 #   - Support dir: ~/Library/Application Support/MuesliPreprod
-#   - Sparkle feed: https://pHequals7.github.io/muesli/appcast-preprod.xml
+#   - Sparkle feed: https://muesli-hq.github.io/muesli/appcast-preprod.xml
 #
 # Usage: ./scripts/release-preprod.sh [version]
 #   e.g. ./scripts/release-preprod.sh 0.6.3-preprod.1
@@ -20,17 +20,19 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+PACKAGE_DIR="$ROOT/native/MuesliNative"
+SWIFTPM_SCRATCH_PATH="${MUESLI_SWIFTPM_SCRATCH_PATH:-$HOME/Library/Caches/muesli-spm/preprod}"
 PROFILE_NAME="${MUESLI_NOTARY_PROFILE:-MuesliNotary}"
 SIGN_IDENTITY="${MUESLI_SIGN_IDENTITY:-Developer ID Application: Pranav Hari Guruvayurappan (58W55QJ567)}"
 APP_NAME="MuesliPreprod"
 BUNDLE_ID="com.muesli.preprod"
 SUPPORT_DIR_NAME="MuesliPreprod"
-PREPROD_FEED_URL="https://pHequals7.github.io/muesli/appcast-preprod.xml"
+PREPROD_FEED_URL="https://muesli-hq.github.io/muesli/appcast-preprod.xml"
 OUTPUT_DIR="$ROOT/dist-preprod"
 INSTALL_DIR="$OUTPUT_DIR/install-root"
 APP_DIR="$INSTALL_DIR/${APP_NAME}.app"
 APPCAST_PATH="$ROOT/docs/appcast-preprod.xml"
-GENERATE_APPCAST="$ROOT/native/MuesliNative/.build/artifacts/sparkle/Sparkle/bin/generate_appcast"
+GENERATE_APPCAST="$SWIFTPM_SCRATCH_PATH/artifacts/sparkle/Sparkle/bin/generate_appcast"
 UPDATE_APPCAST_RELEASE_NOTES="$ROOT/scripts/update_appcast_release_notes.py"
 VERIFY_DIR=""
 HOSTED_MOUNT_POINT=""
@@ -85,11 +87,6 @@ if [[ -n "$(git status --porcelain)" ]]; then
   exit 1
 fi
 
-if [[ ! -x "$GENERATE_APPCAST" ]]; then
-  echo "ERROR: generate_appcast not found at $GENERATE_APPCAST" >&2
-  exit 1
-fi
-
 if [[ ! -f "$UPDATE_APPCAST_RELEASE_NOTES" ]]; then
   echo "ERROR: update_appcast_release_notes.py not found at $UPDATE_APPCAST_RELEASE_NOTES" >&2
   exit 1
@@ -132,12 +129,15 @@ mkdir -p "$INSTALL_DIR"
 
 # --- Step 1: Run tests ---
 echo "[1/11] Running tests..."
-swift test --package-path "$ROOT/native/MuesliNative"
+mkdir -p "$SWIFTPM_SCRATCH_PATH"
+echo "  SwiftPM scratch path: $SWIFTPM_SCRATCH_PATH"
+swift test --package-path "$PACKAGE_DIR" --scratch-path "$SWIFTPM_SCRATCH_PATH"
 echo "  Tests passed."
 
 # --- Step 2: Build and sign ---
 echo "[2/11] Building and signing..."
 MUESLI_INSTALL_DIR="$INSTALL_DIR" \
+  MUESLI_SWIFTPM_SCRATCH_PATH="$SWIFTPM_SCRATCH_PATH" \
   MUESLI_BUILD_VERSION="$VERSION" \
   MUESLI_BUNDLE_VERSION="$SPARKLE_BUILD_VERSION" \
   MUESLI_SHORT_VERSION="$VERSION" \
@@ -150,6 +150,10 @@ MUESLI_INSTALL_DIR="$INSTALL_DIR" \
   MUESLI_SIGN_IDENTITY="$SIGN_IDENTITY" \
   "$ROOT/scripts/build_native_app.sh" > /dev/null
 echo "  Installed to $APP_DIR"
+if [[ ! -x "$GENERATE_APPCAST" ]]; then
+  echo "ERROR: generate_appcast not found at $GENERATE_APPCAST" >&2
+  exit 1
+fi
 
 FLAGS=$(codesign -dvvv "$APP_DIR" 2>&1 | grep -o 'flags=0x[0-9a-f]*([^)]*)')
 echo "  Signature: $FLAGS"
@@ -312,7 +316,7 @@ echo "  Hosted asset verified and prerelease published."
 echo "[11/11] Updating preprod appcast..."
 "$GENERATE_APPCAST" "$OUTPUT_DIR" -o "$APPCAST_PATH"
 
-perl -0pi -e 's{https://pHequals7\.github\.io/muesli/(MuesliPreprod-([0-9][0-9A-Za-z\.\-]*)\.dmg)}{"https://github.com/pHequals7/muesli/releases/download/v$2/$1"}ge' "$APPCAST_PATH"
+perl -0pi -e 's{https://muesli-hq\.github\.io/muesli/(MuesliPreprod-([0-9][0-9A-Za-z\.\-]*)\.dmg)}{"https://github.com/Muesli-HQ/muesli/releases/download/v$2/$1"}ge' "$APPCAST_PATH"
 perl -0pi -e 's{^\h*<enclosure\b[^>]*\bsparkle:deltaFrom="[^"]*"[^>]*/>\n}{}mg' "$APPCAST_PATH"
 perl -0pi -e 's{^\h*<sparkle:deltas>\s*</sparkle:deltas>\n}{}mg' "$APPCAST_PATH"
 python3 - "$APPCAST_PATH" "$SPARKLE_BUILD_VERSION" "$VERSION" <<'PY'

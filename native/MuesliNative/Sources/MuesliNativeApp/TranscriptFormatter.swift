@@ -16,8 +16,8 @@ enum TranscriptFormatter {
         meetingStart: Date,
         consolidationGapThreshold: TimeInterval = defaultConsolidationGapThreshold
     ) -> String {
-        // Bleed filtering is now handled upstream by MeetingBleedDetector
-        // (speaker-embedding comparison), not text-based heuristics.
+        // The formatter is intentionally source-agnostic: upstream capture decides
+        // which mic/system segments are valid, then this layer only labels/merges.
         let displayMicSegments = micSegments
         let taggedMic = displayMicSegments.map { TaggedSegment(segment: $0, speaker: "You") }
 
@@ -128,13 +128,10 @@ enum TranscriptFormatter {
             return true
         }
 
-        if compact.count == 1 {
-            return true
-        }
-
         guard compact.count <= 2, duration <= 0.45 else { return false }
 
         return neighboringSegments(for: index, in: segments).contains { neighbor in
+            guard neighbor.speaker == taggedSegment.speaker else { return false }
             let neighborText = normalizedText(neighbor.segment.text).replacingOccurrences(of: " ", with: "")
             guard neighborText.count >= 6 else { return false }
             return temporalDistance(between: taggedSegment.segment, and: neighbor.segment) <= 0.35
@@ -304,7 +301,6 @@ enum TranscriptFormatter {
             partialResult + (CharacterSet.whitespacesAndNewlines.contains(scalar) ? 0 : 1)
         }
     }
-
     private static func appendText(_ lhs: String, _ rhs: String, gap: TimeInterval) -> String {
         if shouldConcatenateDirectly(lhs, rhs, gap: gap) {
             return lhs + rhs

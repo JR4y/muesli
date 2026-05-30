@@ -20,8 +20,9 @@ final class StreamingVadController: @unchecked Sendable {
             timeResolution: 1
         )
     }
-
     /// Called when VAD detects a natural chunk boundary.
+    /// Delivery is not main-thread guaranteed; handlers must dispatch before
+    /// touching queue- or actor-isolated state.
     var onChunkBoundary: (() -> Void)?
     /// Called when VAD detects a speech start or end boundary.
     var onSpeechEvent: ((VadStreamEvent) -> Void)?
@@ -195,7 +196,9 @@ final class StreamingVadController: @unchecked Sendable {
         }
         guard shouldRotate else { return }
         fputs("[vad] max chunk duration reached, forcing rotation\n", stderr)
-        onChunkBoundary?()
+        DispatchQueue.main.async { [weak self] in
+            self?.onChunkBoundary?()
+        }
     }
 
     private func startDrainIfNeeded() {
@@ -265,8 +268,8 @@ final class StreamingVadController: @unchecked Sendable {
                     fputs("[vad] speech end detected, rotating chunk\n", stderr)
                     DispatchQueue.main.async { [weak self] in
                         guard let self else { return }
-                        self.maxDurationTimer?.fireDate = Date().addingTimeInterval(self.maxChunkDuration)
                         self.onChunkBoundary?()
+                        self.maxDurationTimer?.fireDate = Date().addingTimeInterval(self.maxChunkDuration)
                     }
                 }
             } catch {

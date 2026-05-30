@@ -8,7 +8,7 @@ It is intended to serve three purposes at once:
 - make it easy to resume work without losing context
 - prepare a clean base for future beta release notes and README feature updates
 
-Last updated: `2026-05-13`
+Last updated: `2026-05-30`
 Working branch: `beta`
 Dev app: `muesli-beta.app`
 
@@ -27,6 +27,55 @@ Git workflow currently documented and aligned:
 - `main` is reserved as the stable product branch
 
 ## Incremental history
+
+### 2026-05-30
+
+This pass refreshed the fork from the author's latest upstream branch through
+`vendor`, resolved the larger meetings and audio merge conflicts in
+`beta-mergework`, validated the result in the local beta app, and prepared the
+consolidated promotion into `beta`.
+
+#### Upstream merge refreshed from the author's current branch
+
+- `vendor` was treated as the local mirror of `upstream/main`, not as a
+  comparison target against `beta`
+- the current review window was the author's changes published after the prior
+  vendor sync on `2026-05-12`
+- `docs/fork-workflow.md` was tightened again so the interpretation guardrails
+  are explicit: first compare `vendor..upstream/main`, then refresh `vendor`,
+  then recreate `beta-mergework`, then merge there
+
+#### Meetings and lifecycle integration
+
+- the upstream meetings stack was absorbed while preserving the fork's
+  beta-specific work around live transcript, calendar association, folders,
+  quick notes, note-only entries, local title and note caching, and transcript
+  repair fallback behavior
+- the merge now includes upstream support for more robust meeting lifecycle
+  handling, concurrent recording and transcription flow, browser and media
+  session improvements, audio import, and newer summary backends
+- the merge conflict resolution favored the newer upstream core where it
+  reduced future divergence, then reintroduced the fork features that remain
+  product-significant for daily beta use
+
+#### Stability fixes applied during validation
+
+- `TranscriptFormatter` was adjusted so very short transcript fragments are not
+  discarded when they are valid standalone content
+- the `HotkeyMonitor` test suite was serialized and timing margins were widened
+  to remove flaky hold-threshold failures during automated validation
+- the update badge in the sidebar was restored to the fork's intended
+  informational state after the upstream merge
+
+#### Verification and local beta install
+
+- `swift build` passed in `beta-mergework`
+- `swift test` passed in full with `985 tests in 114 suites`
+- the validated app was installed through `./scripts/beta-test.sh` as
+  `/Applications/muesli-beta.app`
+- the local beta build was smoke-tested manually before promotion
+- promotion to `beta` is only performed after that validation gate, keeping the
+  fork aligned with the documented merge discipline
 
 ### 2026-05-13
 
