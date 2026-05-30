@@ -8,7 +8,7 @@ separated.
 
 - `upstream` (remote): the original author's repository
 - `origin` (remote): this fork on GitHub
-- `vendor` (branch): clean local mirror of `upstream/main`
+- `vendor` (branch): clean local mirror of `upstream/main`; this is our local source branch for the author's latest published state
 - `beta-mergework` (branch/worktree): temporary merge desk used to trial upstream integration before touching `beta`
 - `beta` (branch): integration and day-to-day development branch
 - `main` (branch): stable branch for the final product
