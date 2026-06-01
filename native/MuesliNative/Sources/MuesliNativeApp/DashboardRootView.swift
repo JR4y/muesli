@@ -5,7 +5,7 @@ struct DashboardRootView: View {
     let appState: AppState
     let controller: MuesliController
 
-    static func showsQuickNoteTitlebarControl(isSearchActive: Bool, selectedTab: DashboardTab) -> Bool {
+    nonisolated static func showsQuickNoteTitlebarControl(isSearchActive: Bool, selectedTab: DashboardTab) -> Bool {
         guard !isSearchActive, selectedTab == .meetings else { return false }
         return true
     }

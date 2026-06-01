@@ -8,6 +8,7 @@ final class RecentHistoryWindowController: NSObject, NSWindowDelegate {
     private let store: DictationStore
     private let controller: MuesliController
     private var window: NSWindow?
+    private var titlebarController: MainWindowTitlebarController?
     private var keyMonitor: Any?
 
     var presentationWindow: NSWindow? {
@@ -58,14 +59,13 @@ final class RecentHistoryWindowController: NSObject, NSWindowDelegate {
     private func buildWindow() {
         let window = NSWindow(
             contentRect: NSRect(x: 180, y: 140, width: 1120, height: 790),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         window.title = AppIdentity.displayName
         window.isReleasedWhenClosed = false
         window.delegate = self
-        window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.backgroundColor = MuesliTheme.nsBackgroundColor()
 
@@ -74,6 +74,13 @@ final class RecentHistoryWindowController: NSObject, NSWindowDelegate {
             controller: controller
         )
         window.contentView = NSHostingView(rootView: rootView)
+
+        let titlebarController = MainWindowTitlebarController(
+            appState: controller.appState,
+            controller: controller
+        )
+        titlebarController.install(on: window)
+        self.titlebarController = titlebarController
 
         self.window = window
 
