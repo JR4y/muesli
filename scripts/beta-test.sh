@@ -14,10 +14,12 @@ set -euo pipefail
 #   ./scripts/beta-test.sh --reset # Reset onboarding only (keep data)
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/scripts/lib/supabase_config.sh"
 BETA_SUPPORT_DIR="$HOME/Library/Application Support/MuesliBeta"
 BETA_APP="/Applications/muesli-beta.app"
 LEGACY_BETA_APP="/Applications/MuesliBeta.app"
 ONBOARDING_PROGRESS_FILE="$BETA_SUPPORT_DIR/onboarding-progress.json"
+SUPABASE_CONFIG_FILE="$ROOT/config/Supabase.xcconfig"
 
 RESET=0
 for arg in "$@"; do
@@ -58,6 +60,12 @@ if [[ "${MUESLI_SKIP_SIGN:-0}" != "1" ]]; then
     echo "No matching codesign identity for local beta build; continuing unsigned."
     export MUESLI_SKIP_SIGN=1
   fi
+fi
+
+if [[ "${MUESLI_REQUIRE_SUPABASE_CONFIG:-1}" == "1" ]] && ! muesli_has_supabase_sync_config "$SUPABASE_CONFIG_FILE"; then
+  echo "muesli-beta requires config/Supabase.xcconfig with MUESLI_SUPABASE_URL and MUESLI_SUPABASE_ANON_KEY." >&2
+  echo "Set MUESLI_REQUIRE_SUPABASE_CONFIG=0 if you intentionally want a beta build with sync disabled." >&2
+  exit 1
 fi
 
 echo "Building muesli-beta (debug, signed when identity is available)..."

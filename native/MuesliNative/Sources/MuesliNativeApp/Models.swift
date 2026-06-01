@@ -768,6 +768,7 @@ struct AppConfig: Codable {
     var hasCompletedOnboarding: Bool = false
     var onboardingUseCase: String = OnboardingUseCase.dictation.rawValue
     var userName: String = ""
+    var lastSupabaseEmail: String = ""
     var customMeetingTemplates: [CustomMeetingTemplate] = []
     var hiddenBuiltInTemplateIDs: [String] = []
     var customWords: [CustomWord] = [
@@ -854,6 +855,7 @@ struct AppConfig: Codable {
         case hasCompletedOnboarding = "has_completed_onboarding"
         case onboardingUseCase = "onboarding_use_case"
         case userName = "user_name"
+        case lastSupabaseEmail = "last_supabase_email"
         case customMeetingTemplates = "custom_meeting_templates"
         case hiddenBuiltInTemplateIDs = "hidden_built_in_template_ids"
         case customWords = "custom_words"
@@ -968,6 +970,7 @@ struct AppConfig: Codable {
             onboardingUseCase = defaults.onboardingUseCase
         }
         userName = (try? c.decode(String.self, forKey: .userName)) ?? defaults.userName
+        lastSupabaseEmail = (try? c.decode(String.self, forKey: .lastSupabaseEmail)) ?? defaults.lastSupabaseEmail
         customMeetingTemplates = (try? c.decode([CustomMeetingTemplate].self, forKey: .customMeetingTemplates)) ?? defaults.customMeetingTemplates
         hiddenBuiltInTemplateIDs = (try? c.decode([String].self, forKey: .hiddenBuiltInTemplateIDs)) ?? defaults.hiddenBuiltInTemplateIDs
         customWords = (try? c.decode([CustomWord].self, forKey: .customWords)) ?? defaults.customWords

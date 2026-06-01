@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/scripts/lib/supabase_config.sh"
 PACKAGE_DIR="$ROOT/native/MuesliNative"
 DIST_DIR="$ROOT/dist-native"
 INSTALL_DIR="${MUESLI_INSTALL_DIR:-/Applications}"
@@ -37,13 +38,10 @@ SUPABASE_CONFIG_FILE="$ROOT/config/Supabase.xcconfig"
 SUPABASE_URL=""
 SUPABASE_ANON_KEY=""
 GOOGLE_OAUTH_CONFIG_FILE="${MUESLI_GOOGLE_OAUTH_CONFIG_FILE:-$ROOT/config/google-oauth.json}"
-if [[ -f "$SUPABASE_CONFIG_FILE" ]]; then
-  while IFS='=' read -r key value; do
-    case "$key" in
-      MUESLI_SUPABASE_URL) SUPABASE_URL="$value" ;;
-      MUESLI_SUPABASE_ANON_KEY) SUPABASE_ANON_KEY="$value" ;;
-    esac
-  done < <(grep -E '^[A-Z_]+=' "$SUPABASE_CONFIG_FILE")
+if muesli_has_supabase_sync_config "$SUPABASE_CONFIG_FILE"; then
+  muesli_load_supabase_config "$SUPABASE_CONFIG_FILE" SUPABASE_URL SUPABASE_ANON_KEY
+else
+  echo "Supabase sync is not configured for this build; the installed app will keep sync disabled."
 fi
 
 SWIFT_BUILD_ARGS=(--package-path "$PACKAGE_DIR" -c "$BUILD_CONFIG")

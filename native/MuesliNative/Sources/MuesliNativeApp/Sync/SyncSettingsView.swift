@@ -10,6 +10,12 @@ struct SyncSettingsView: View {
     @State private var inFlight: Bool = false
     @State private var localError: String?
 
+    init(appState: AppState, controller: MuesliController) {
+        self.appState = appState
+        self.controller = controller
+        _email = State(initialValue: Self.suggestedEmail(appState: appState))
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: MuesliTheme.spacing24) {
             header
@@ -22,6 +28,20 @@ struct SyncSettingsView: View {
                 signInCard
             }
         }
+        .onAppear {
+            syncSuggestedEmailIfNeeded()
+        }
+        .onChange(of: appState.supabaseEmail) { _, _ in
+            syncSuggestedEmailIfNeeded()
+        }
+    }
+
+    static func suggestedEmail(appState: AppState) -> String {
+        let liveEmail = appState.supabaseEmail?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !liveEmail.isEmpty {
+            return liveEmail
+        }
+        return appState.config.lastSupabaseEmail.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var header: some View {
@@ -138,6 +158,13 @@ struct SyncSettingsView: View {
         f.unitsStyle = .abbreviated
         return f
     }()
+
+    private func syncSuggestedEmailIfNeeded() {
+        guard email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let suggested = Self.suggestedEmail(appState: appState)
+        guard !suggested.isEmpty else { return }
+        email = suggested
+    }
 
     private func runSignIn() async {
         inFlight = true

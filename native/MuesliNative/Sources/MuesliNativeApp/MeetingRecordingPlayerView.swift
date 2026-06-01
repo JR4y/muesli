@@ -163,6 +163,7 @@ private extension Data {
 
 struct MeetingRecordingPlayerView: View {
     let recordingPath: String
+    private let accessory: AnyView?
 
     @State private var waveform: RecordingWaveformData?
     @State private var player: AVAudioPlayer?
@@ -171,6 +172,16 @@ struct MeetingRecordingPlayerView: View {
     @State private var loadFailed = false
 
     private let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
+
+    init(recordingPath: String) {
+        self.recordingPath = recordingPath
+        self.accessory = nil
+    }
+
+    init<Accessory: View>(recordingPath: String, @ViewBuilder accessory: () -> Accessory) {
+        self.recordingPath = recordingPath
+        self.accessory = AnyView(accessory())
+    }
 
     var body: some View {
         HStack(spacing: MuesliTheme.spacing12) {
@@ -221,6 +232,10 @@ struct MeetingRecordingPlayerView: View {
                 .font(.system(size: 12, weight: .medium, design: .monospaced))
                 .foregroundStyle(MuesliTheme.textSecondary)
                 .frame(minWidth: 88, alignment: .trailing)
+
+            if let accessory {
+                accessory
+            }
         }
         .padding(.horizontal, MuesliTheme.spacing12)
         .padding(.vertical, MuesliTheme.spacing8)

@@ -625,7 +625,7 @@ enum L10n {
         case .meetingAttendees:
             return "Attendees"
         case .meetingOpenJoinLink:
-            return "Open meeting link"
+            return "Open meeting"
         case .meetingAttendeeOrganizer:
             return "Organizer"
         case .meetingAttendeeYou:
@@ -1381,7 +1381,7 @@ enum L10n {
         case .meetingAttendees:
             return "Asistentes"
         case .meetingOpenJoinLink:
-            return "Abrir enlace de reunion"
+            return "Abrir reunion"
         case .meetingAttendeeOrganizer:
             return "Organizador"
         case .meetingAttendeeYou:

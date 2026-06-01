@@ -6,6 +6,11 @@ private enum MeetingDocumentMode: Hashable {
     case transcript
 }
 
+enum MeetingDetailHeaderLayout {
+    case horizontalHeader
+    case stackedHeader
+}
+
 private enum ManualNotesSaveStatus {
     case saved
     case saving
@@ -53,7 +58,7 @@ struct MeetingDetailView: View {
     @State private var isCalendarEventPickerPresented = false
     @State private var nearbyCalendarEvents: [UnifiedCalendarEvent] = []
     @State private var isLoadingNearbyCalendarEvents = false
-    @State private var isAssociatedEventExpanded = true
+    @State private var isAssociatedEventExpanded = false
     @State private var showFolderPopover = false
     @State private var showNewFolderPrompt = false
     @State private var newFolderName = ""
@@ -217,7 +222,9 @@ struct MeetingDetailView: View {
 
                     Spacer(minLength: MuesliTheme.spacing16)
 
-                    headerActions(for: meeting, appliedTemplate: appliedTemplate)
+                    VStack(alignment: .trailing, spacing: MuesliTheme.spacing8) {
+                        headerActions(for: meeting, appliedTemplate: appliedTemplate)
+                    }
                         .fixedSize()
                 }
 
@@ -226,21 +233,13 @@ struct MeetingDetailView: View {
 
                     HStack {
                         Spacer(minLength: 0)
-                        if !showsManualNotesEditor(for: meeting) {
-                        documentModePicker
-                        }
                         headerActions(for: meeting, appliedTemplate: appliedTemplate)
                     }
                 }
             }
 
-            if let savedRecordingPath = meeting.savedRecordingPath,
-               FileManager.default.fileExists(atPath: savedRecordingPath) {
-                MeetingRecordingPlayerView(recordingPath: savedRecordingPath)
-            }
-
-            if !showsManualNotesEditor(for: meeting), isRawTranscript(meeting), documentMode == .notes {
-                transcriptCTA
+            if let savedRecordingPath = resolvedSavedRecordingPath(for: meeting) {
+                completedAudioSection(for: meeting, recordingPath: savedRecordingPath)
             }
         }
         .frame(maxWidth: detailColumnWidth, alignment: .leading)
@@ -274,7 +273,7 @@ struct MeetingDetailView: View {
     }
 
     @ViewBuilder
-    private func headerActions(for meeting: MeetingRecord, appliedTemplate: MeetingTemplateSnapshot) -> some View {
+    private func headerActions(for meeting: MeetingRecord, appliedTemplate _: MeetingTemplateSnapshot) -> some View {
         if showsManualNotesEditor(for: meeting) {
             HStack(spacing: MuesliTheme.spacing8) {
                 if meeting.status == .recording {
@@ -295,14 +294,14 @@ struct MeetingDetailView: View {
                 }
             }
         } else {
-            VStack(alignment: .trailing, spacing: MuesliTheme.spacing8) {
-                HStack(spacing: MuesliTheme.spacing8) {
-                    if hasRecordingAction(for: meeting) {
-                        recordingAction(for: meeting)
-                    }
-                    mergeButton(for: meeting)
-                    summaryAction(for: meeting)
-                    templateMenu(for: meeting, appliedTemplate: appliedTemplate)
+            HStack(spacing: MuesliTheme.spacing8) {
+                statusChip(for: meeting)
+                if Self.showsCompletedOverflowActions(
+                    for: meeting,
+                    canDelete: controller.canDeleteMeeting(meeting),
+                    canMerge: canMergeMeeting(meeting)
+                ) {
+                    moreActionsMenu(for: meeting)
                 }
             }
         }
@@ -441,6 +440,8 @@ struct MeetingDetailView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         } else if isEditingTranscript {
             VStack(alignment: .leading, spacing: MuesliTheme.spacing12) {
+                eventSnapshotSection(for: meeting)
+                mergedSourceSection(for: meeting)
                 contentToolbar(for: meeting)
 
                 TextEditor(text: $editableTranscript)
@@ -463,6 +464,10 @@ struct MeetingDetailView: View {
                 eventSnapshotSection(for: meeting)
                 mergedSourceSection(for: meeting)
                 contentToolbar(for: meeting)
+
+                if Self.usesCompletedDocumentToolbar(for: meeting), isRawTranscript(meeting), documentMode == .notes {
+                    transcriptCTA
+                }
 
                 ZStack(alignment: .topLeading) {
                     MeetingNotesView(markdown: Self.notesContent(for: meeting))
@@ -514,10 +519,6 @@ struct MeetingDetailView: View {
                     Spacer(minLength: MuesliTheme.spacing12)
 
                     HStack(spacing: MuesliTheme.spacing8) {
-                        if snapshot.attendees.isEmpty == false {
-                            collapseAssociatedEventButton
-                        }
-
                         if let meetingURL = snapshot.meetingURL,
                            let url = URL(string: meetingURL) {
                             Link(destination: url) {
@@ -540,6 +541,10 @@ struct MeetingDetailView: View {
                                 )
                             }
                             .buttonStyle(.plain)
+                        }
+
+                        if snapshot.attendees.isEmpty == false {
+                            collapseAssociatedEventButton
                         }
                     }
                 }
@@ -645,6 +650,46 @@ struct MeetingDetailView: View {
         .disabled(isEditingNotes || isEditingTranscript)
     }
 
+    static func usesCompletedDocumentToolbar(for meeting: MeetingRecord) -> Bool {
+        meeting.status == .completed
+    }
+
+    static func usesSummaryTemplateSplitControl(for meeting: MeetingRecord) -> Bool {
+        usesCompletedDocumentToolbar(for: meeting)
+    }
+
+    static func showsCompletedAudioActions(for meeting: MeetingRecord) -> Bool {
+        meeting.status == .completed
+            && !(meeting.savedRecordingPath?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+    }
+
+    static func showsCompletedOverflowActions(
+        for meeting: MeetingRecord,
+        canDelete: Bool,
+        canMerge: Bool
+    ) -> Bool {
+        meeting.status == .completed && (canDelete || canMerge)
+    }
+
+    static func showsCompletedDocumentOverflowMenu(
+        for meeting: MeetingRecord,
+        isEditing: Bool
+    ) -> Bool {
+        usesCompletedDocumentToolbar(for: meeting) && !isEditing
+    }
+
+    static func showsDocumentModePicker(
+        for meeting: MeetingRecord,
+        in _: MeetingDetailHeaderLayout
+    ) -> Bool {
+        switch meeting.status {
+        case .recording, .processing, .noteOnly, .failed:
+            return false
+        case .completed:
+            return true
+        }
+    }
+
     private func showsManualNotesEditor(for meeting: MeetingRecord) -> Bool {
         switch meeting.status {
         case .recording, .processing, .noteOnly, .failed:
@@ -724,29 +769,63 @@ struct MeetingDetailView: View {
             }
             .padding(.horizontal, MuesliTheme.spacing8)
         } else {
-            compactIconButton("sparkles", label: primarySummaryActionLabel(for: meeting)) {
-                isSummarizing = true
-                let completion: (Result<Void, Error>) -> Void = { [meeting] result in
-                    isSummarizing = false
-                    switch result {
-                    case .success:
-                        if let updated = controller.meeting(id: meeting.id) {
-                            syncLocalState(with: updated)
-                        }
-                    case .failure(let error):
-                        syncPendingTemplateSelectionIfNeeded(
-                            for: controller.meeting(id: meeting.id) ?? meeting
-                        )
-                        summaryErrorMessage = error.localizedDescription
-                    }
+            Button {
+                runPrimarySummaryAction(for: meeting)
+            } label: {
+                summaryPrimaryActionLabel(for: meeting)
+                    .background(
+                        RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
+                            .fill(MuesliTheme.accent.opacity(0.18))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
+                            .strokeBorder(MuesliTheme.accent.opacity(0.35), lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func runPrimarySummaryAction(for meeting: MeetingRecord) {
+        isSummarizing = true
+        let completion: (Result<Void, Error>) -> Void = { [meeting] result in
+            isSummarizing = false
+            switch result {
+            case .success:
+                if let updated = controller.meeting(id: meeting.id) {
+                    syncLocalState(with: updated)
                 }
-                if hasPendingTemplateChange(for: meeting) {
-                    controller.applyMeetingTemplate(id: pendingTemplateID, to: meeting, completion: completion)
-                } else {
-                    controller.resummarize(meeting: meeting, completion: completion)
-                }
+            case .failure(let error):
+                syncPendingTemplateSelectionIfNeeded(
+                    for: controller.meeting(id: meeting.id) ?? meeting
+                )
+                summaryErrorMessage = error.localizedDescription
             }
         }
+        if hasPendingTemplateChange(for: meeting) {
+            controller.applyMeetingTemplate(id: pendingTemplateID, to: meeting, completion: completion)
+        } else {
+            controller.resummarize(meeting: meeting, completion: completion)
+        }
+    }
+
+    private func summaryPrimaryActionLabel(for meeting: MeetingRecord) -> some View {
+        HStack(spacing: 6) {
+            if isSummarizing {
+                ProgressView()
+                    .controlSize(.small)
+                Text(L10n.text(.meetingSummarizing, config: appState.config))
+                    .font(.system(size: 12, weight: .semibold))
+            } else {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 10, weight: .semibold))
+                Text(primarySummaryActionLabel(for: meeting))
+                    .font(.system(size: 12, weight: .semibold))
+            }
+        }
+        .foregroundStyle(MuesliTheme.textPrimary)
+        .padding(.horizontal, MuesliTheme.spacing12)
+        .padding(.vertical, 7)
     }
 
     @ViewBuilder
@@ -755,36 +834,40 @@ struct MeetingDetailView: View {
             isEditingNotes || isEditingTranscript ? "checkmark.circle" : "pencil",
             label: editButtonLabel
         ) {
-            if isEditingNotes {
-                notesSaveTask?.cancel()
-                notesSaveTask = nil
-                controller.updateMeetingNotes(id: meeting.id, notes: editableNotes)
-                isEditingNotes = false
-            } else if isEditingTranscript {
-                guard !isRetranscribing else { return }
-                transcriptSaveTask?.cancel()
-                transcriptSaveTask = nil
-                let shouldPromptForResummary = Self.shouldPromptForTranscriptResummary(
-                    hadStructuredNotes: transcriptEditHadStructuredNotes,
-                    originalTranscript: transcriptEditOriginalTranscript,
-                    editedTranscript: editableTranscript
-                )
-                controller.updateMeetingTranscript(id: meeting.id, transcript: editableTranscript)
-                isEditingTranscript = false
-                transcriptEditOriginalTranscript = nil
-                transcriptEditHadStructuredNotes = false
-                if shouldPromptForResummary {
-                    transcriptResummaryPromptMeetingID = meeting.id
-                }
-            } else if documentMode == .transcript {
-                editableTranscript = meeting.rawTranscript
-                transcriptEditOriginalTranscript = meeting.rawTranscript
-                transcriptEditHadStructuredNotes = meeting.notesState == .structuredNotes
-                isEditingTranscript = true
-            } else {
-                editableNotes = Self.notesContent(for: meeting)
-                isEditingNotes = true
+            toggleDocumentEditing(for: meeting)
+        }
+    }
+
+    private func toggleDocumentEditing(for meeting: MeetingRecord) {
+        if isEditingNotes {
+            notesSaveTask?.cancel()
+            notesSaveTask = nil
+            controller.updateMeetingNotes(id: meeting.id, notes: editableNotes)
+            isEditingNotes = false
+        } else if isEditingTranscript {
+            guard !isRetranscribing else { return }
+            transcriptSaveTask?.cancel()
+            transcriptSaveTask = nil
+            let shouldPromptForResummary = Self.shouldPromptForTranscriptResummary(
+                hadStructuredNotes: transcriptEditHadStructuredNotes,
+                originalTranscript: transcriptEditOriginalTranscript,
+                editedTranscript: editableTranscript
+            )
+            controller.updateMeetingTranscript(id: meeting.id, transcript: editableTranscript)
+            isEditingTranscript = false
+            transcriptEditOriginalTranscript = nil
+            transcriptEditHadStructuredNotes = false
+            if shouldPromptForResummary {
+                transcriptResummaryPromptMeetingID = meeting.id
             }
+        } else if documentMode == .transcript {
+            editableTranscript = meeting.rawTranscript
+            transcriptEditOriginalTranscript = meeting.rawTranscript
+            transcriptEditHadStructuredNotes = meeting.notesState == .structuredNotes
+            isEditingTranscript = true
+        } else {
+            editableNotes = Self.notesContent(for: meeting)
+            isEditingNotes = true
         }
     }
 
@@ -837,6 +920,46 @@ struct MeetingDetailView: View {
 
     private func hasRecordingAction(for meeting: MeetingRecord) -> Bool {
         meeting.savedRecordingPath != nil
+    }
+
+    private func resolvedSavedRecordingPath(for meeting: MeetingRecord) -> String? {
+        guard let savedRecordingPath = meeting.savedRecordingPath,
+              FileManager.default.fileExists(atPath: savedRecordingPath) else {
+            return nil
+        }
+        return savedRecordingPath
+    }
+
+    @ViewBuilder
+    private func completedAudioSection(for meeting: MeetingRecord, recordingPath: String) -> some View {
+        ViewThatFits(in: .horizontal) {
+            MeetingRecordingPlayerView(recordingPath: recordingPath) {
+                if Self.showsCompletedAudioActions(for: meeting) {
+                    playerAudioAccessory(for: meeting)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: MuesliTheme.spacing12) {
+                MeetingRecordingPlayerView(recordingPath: recordingPath)
+
+                if Self.showsCompletedAudioActions(for: meeting) {
+                    HStack(spacing: MuesliTheme.spacing8) {
+                        Spacer(minLength: 0)
+                        recordingAction(for: meeting)
+                        retranscribeAction(for: meeting)
+                    }
+                    .frame(maxWidth: detailColumnWidth, alignment: .trailing)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func playerAudioAccessory(for meeting: MeetingRecord) -> some View {
+        HStack(spacing: MuesliTheme.spacing8) {
+            recordingAction(for: meeting)
+            compactRetranscribeAction(for: meeting)
+        }
     }
 
     @ViewBuilder
@@ -921,60 +1044,36 @@ struct MeetingDetailView: View {
     }
 
     @ViewBuilder
+    private func compactRetranscribeAction(for meeting: MeetingRecord) -> some View {
+        if meeting.savedRecordingPath != nil {
+            if isRetranscribing {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(width: 30, height: 28)
+            } else {
+                compactIconButton("arrow.clockwise", label: "Re-transcribe") {
+                    isRetranscribing = true
+                    controller.retranscribe(meeting: meeting) { [meeting] result in
+                        isRetranscribing = false
+                        switch result {
+                        case .success:
+                            if let updated = controller.meeting(id: meeting.id) {
+                                syncLocalState(with: updated)
+                            }
+                        case .failure(let error):
+                            retranscriptionErrorMessage = error.localizedDescription
+                        }
+                    }
+                }
+                .disabled(meeting.status == .recording || meeting.status == .processing || isEditingNotes || isEditingTranscript)
+            }
+        }
+    }
+
+    @ViewBuilder
     private func templateMenu(for meeting: MeetingRecord, appliedTemplate: MeetingTemplateSnapshot) -> some View {
-        let autoTarget = controller.effectiveAutoMeetingTemplate()
-        let autoTitle = autoTarget.id == MeetingTemplates.autoID
-            ? MeetingTemplates.auto.title
-            : "\(MeetingTemplates.auto.title) (\(autoTarget.title))"
         Menu {
-            Button {
-                pendingTemplateID = MeetingTemplates.autoID
-            } label: {
-                templateMenuItem(
-                    title: autoTitle,
-                    systemImage: MeetingTemplates.auto.icon,
-                    isSelected: pendingTemplateID == MeetingTemplates.autoID
-                )
-            }
-
-            if !controller.customMeetingTemplates().isEmpty {
-                Section(L10n.text(.meetingCustomTemplates, config: appState.config)) {
-                    ForEach(controller.customMeetingTemplates()) { template in
-                        Button {
-                            pendingTemplateID = template.id
-                        } label: {
-                            let resolved = MeetingTemplates.customDefinition(from: template)
-                            templateMenuItem(
-                                title: template.name,
-                                systemImage: resolved.icon,
-                                isSelected: pendingTemplateID == template.id
-                            )
-                        }
-                    }
-                }
-            }
-
-            if !controller.visibleBuiltInMeetingTemplates().isEmpty {
-                Section(L10n.text(.meetingBuiltInTemplates, config: appState.config)) {
-                    ForEach(controller.visibleBuiltInMeetingTemplates()) { template in
-                        Button {
-                            pendingTemplateID = template.id
-                        } label: {
-                            templateMenuItem(
-                                title: template.title,
-                                systemImage: template.icon,
-                                isSelected: pendingTemplateID == template.id
-                            )
-                        }
-                    }
-                }
-            }
-
-            Divider()
-
-            Button(L10n.text(.meetingManageTemplates, config: appState.config)) {
-                controller.showMeetingTemplatesManager()
-            }
+            templateMenuContent(for: meeting, appliedTemplate: appliedTemplate)
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: iconName(forSelectionOn: meeting, appliedTemplate: appliedTemplate))
@@ -999,6 +1098,62 @@ struct MeetingDetailView: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
+    }
+
+    @ViewBuilder
+    private func templateMenuContent(for meeting: MeetingRecord, appliedTemplate _: MeetingTemplateSnapshot) -> some View {
+        let autoTarget = controller.effectiveAutoMeetingTemplate()
+        let autoTitle = autoTarget.id == MeetingTemplates.autoID
+            ? MeetingTemplates.auto.title
+            : "\(MeetingTemplates.auto.title) (\(autoTarget.title))"
+        Button {
+            pendingTemplateID = MeetingTemplates.autoID
+        } label: {
+            templateMenuItem(
+                title: autoTitle,
+                systemImage: MeetingTemplates.auto.icon,
+                isSelected: pendingTemplateID == MeetingTemplates.autoID
+            )
+        }
+
+        if !controller.customMeetingTemplates().isEmpty {
+            Section(L10n.text(.meetingCustomTemplates, config: appState.config)) {
+                ForEach(controller.customMeetingTemplates()) { template in
+                    Button {
+                        pendingTemplateID = template.id
+                    } label: {
+                        let resolved = MeetingTemplates.customDefinition(from: template)
+                        templateMenuItem(
+                            title: template.name,
+                            systemImage: resolved.icon,
+                            isSelected: pendingTemplateID == template.id
+                        )
+                    }
+                }
+            }
+        }
+
+        if !controller.visibleBuiltInMeetingTemplates().isEmpty {
+            Section(L10n.text(.meetingBuiltInTemplates, config: appState.config)) {
+                ForEach(controller.visibleBuiltInMeetingTemplates()) { template in
+                    Button {
+                        pendingTemplateID = template.id
+                    } label: {
+                        templateMenuItem(
+                            title: template.title,
+                            systemImage: template.icon,
+                            isSelected: pendingTemplateID == template.id
+                        )
+                    }
+                }
+            }
+        }
+
+        Divider()
+
+        Button(L10n.text(.meetingManageTemplates, config: appState.config)) {
+            controller.showMeetingTemplatesManager()
+        }
     }
 
     @ViewBuilder
@@ -1033,39 +1188,55 @@ struct MeetingDetailView: View {
 
     @ViewBuilder
     private func contentToolbar(for meeting: MeetingRecord) -> some View {
-        HStack {
-            Spacer()
+        Group {
+            if Self.usesCompletedDocumentToolbar(for: meeting) {
+                let appliedTemplate = controller.meetingTemplateSnapshot(for: meeting)
+                let isEditingDocument = isEditingNotes || isEditingTranscript
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .center, spacing: MuesliTheme.spacing12) {
+                        documentModePicker
 
-            editButton(for: meeting)
+                        Spacer(minLength: MuesliTheme.spacing12)
 
-            if controller.canDeleteMeeting(meeting) {
-                deleteButton
-            }
+                        HStack(spacing: MuesliTheme.spacing8) {
+                            summaryTemplateSplitControl(for: meeting, appliedTemplate: appliedTemplate)
+                            if isEditingDocument {
+                                editButton(for: meeting)
+                                copyButton(for: meeting)
+                            } else if Self.showsCompletedDocumentOverflowMenu(for: meeting, isEditing: isEditingDocument) {
+                                completedDocumentOverflowMenu(for: meeting)
+                            }
+                        }
+                    }
 
-            retranscribeAction(for: meeting)
+                    VStack(alignment: .leading, spacing: MuesliTheme.spacing12) {
+                        documentModePicker
 
-            Button(action: {
-                controller.copyToClipboard(activeCopyText(for: meeting))
-            }) {
-                HStack(spacing: 6) {
-                    Image(systemName: "doc.on.doc")
-                        .font(.system(size: 10, weight: .semibold))
-                    Text(copyButtonLabel)
-                        .font(.system(size: 12, weight: .semibold))
+                        HStack(spacing: MuesliTheme.spacing8) {
+                            summaryTemplateSplitControl(for: meeting, appliedTemplate: appliedTemplate)
+                            if isEditingDocument {
+                                editButton(for: meeting)
+                                copyButton(for: meeting)
+                            } else if Self.showsCompletedDocumentOverflowMenu(for: meeting, isEditing: isEditingDocument) {
+                                completedDocumentOverflowMenu(for: meeting)
+                            }
+                        }
+                    }
                 }
-                .foregroundStyle(MuesliTheme.textPrimary)
-                .padding(.horizontal, MuesliTheme.spacing12)
-                .padding(.vertical, 7)
-                .background(
-                    RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
-                        .fill(MuesliTheme.accent.opacity(0.18))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
-                        .strokeBorder(MuesliTheme.accent.opacity(0.35), lineWidth: 1)
-                )
+            } else {
+                HStack {
+                    Spacer()
+
+                    editButton(for: meeting)
+
+                    if controller.canDeleteMeeting(meeting) {
+                        deleteButton
+                    }
+
+                    retranscribeAction(for: meeting)
+                    copyButton(for: meeting)
+                }
             }
-            .buttonStyle(.plain)
         }
         .frame(maxWidth: detailColumnWidth, alignment: .leading)
     }
@@ -1506,18 +1677,23 @@ struct MeetingDetailView: View {
 
     @ViewBuilder
     private func moreActionsMenu(for meeting: MeetingRecord) -> some View {
-        if meeting.savedRecordingPath != nil || controller.canDeleteMeeting(meeting) {
+        if Self.showsCompletedOverflowActions(
+            for: meeting,
+            canDelete: controller.canDeleteMeeting(meeting),
+            canMerge: canMergeMeeting(meeting)
+        ) {
             Menu {
-                if let savedRecordingPath = meeting.savedRecordingPath {
+                if canMergeMeeting(meeting) {
                     Button {
-                        controller.revealMeetingRecordingInFinder(path: savedRecordingPath)
+                        selectedMergeCandidateIDs = []
+                        isMergeSheetPresented = true
                     } label: {
-                        Label("Show Recording", systemImage: "folder")
+                        Label(L10n.text(.meetingMerge, config: appState.config), systemImage: "arrow.triangle.merge")
                     }
                 }
 
                 if controller.canDeleteMeeting(meeting) {
-                    if meeting.savedRecordingPath != nil {
+                    if canMergeMeeting(meeting) {
                         Divider()
                     }
                     Button(role: .destructive) {
@@ -1552,6 +1728,43 @@ struct MeetingDetailView: View {
                 .frame(width: 12)
             Text(title)
         }
+    }
+
+    private func copyButton(for meeting: MeetingRecord) -> some View {
+        iconButton("doc.on.doc", label: copyButtonLabel) {
+            controller.copyToClipboard(activeCopyText(for: meeting))
+        }
+    }
+
+    private func compactIconButtonLabel(_ systemImage: String) -> some View {
+        Image(systemName: systemImage)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(MuesliTheme.textSecondary)
+            .frame(width: 30, height: 28)
+            .background(MuesliTheme.surfacePrimary)
+            .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
+            .overlay(
+                RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
+                    .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
+            )
+    }
+
+    @ViewBuilder
+    private func completedDocumentOverflowMenu(for meeting: MeetingRecord) -> some View {
+        Menu {
+            Button(editButtonLabel) {
+                toggleDocumentEditing(for: meeting)
+            }
+
+            Button(copyButtonLabel) {
+                controller.copyToClipboard(activeCopyText(for: meeting))
+            }
+        } label: {
+            compactIconButtonLabel("ellipsis")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("More options")
     }
 
     @ViewBuilder
@@ -1710,6 +1923,46 @@ struct MeetingDetailView: View {
         iconButton("xmark", label: L10n.text(.meetingDiscard, config: appState.config)) {
             controller.discardMeetingWithConfirmation()
         }
+    }
+
+    private func summaryTemplateSplitControl(
+        for meeting: MeetingRecord,
+        appliedTemplate: MeetingTemplateSnapshot
+    ) -> some View {
+        HStack(spacing: 0) {
+            Button {
+                runPrimarySummaryAction(for: meeting)
+            } label: {
+                summaryPrimaryActionLabel(for: meeting)
+                    .frame(minHeight: 32)
+                    .background(MuesliTheme.accent.opacity(0.18))
+            }
+            .buttonStyle(.plain)
+            .disabled(isEditingNotes || isEditingTranscript || isSummarizing)
+
+            Menu {
+                templateMenuContent(for: meeting, appliedTemplate: appliedTemplate)
+            } label: {
+                HStack(spacing: 0) {
+                    Rectangle()
+                        .fill(MuesliTheme.accent.opacity(0.35))
+                        .frame(width: 1, height: 18)
+                        .frame(height: 18)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(MuesliTheme.textSecondary)
+                        .frame(width: 30, height: 32)
+                }
+                .background(MuesliTheme.accent.opacity(0.18))
+            }
+            .menuStyle(.borderlessButton)
+            .disabled(isEditingNotes || isEditingTranscript || isSummarizing)
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
+                .strokeBorder(MuesliTheme.accent.opacity(0.35), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
     }
 
     private var transcriptCTA: some View {
@@ -2133,7 +2386,7 @@ struct MeetingDetailView: View {
         if meetingChanged {
             editableManualNotes = meeting?.manualNotes ?? ""
             manualNotesSaveStatus = .saved
-            isAssociatedEventExpanded = true
+            isAssociatedEventExpanded = false
             isLiveTranscriptExpanded = false
             liveTranscriptPanelHeight = defaultTranscriptPanelHeight
             liveTranscriptResizeStartHeight = nil

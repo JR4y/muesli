@@ -22,4 +22,23 @@ struct AppConfigLiveTranscriptTests {
         let config = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
         #expect(config.enableLiveMeetingTranscript)
     }
+
+    @Test("last Supabase email is empty by default")
+    func lastSupabaseEmailDefaultIsEmpty() {
+        let config = AppConfig()
+        #expect(config.lastSupabaseEmail.isEmpty)
+    }
+
+    @Test("legacy config payloads default last Supabase email to empty")
+    func legacyConfigDefaultsLastSupabaseEmailToEmpty() throws {
+        let json = """
+        {
+          "meeting_transcription_backend": "whisper",
+          "meeting_transcription_model": "small.en"
+        }
+        """
+
+        let config = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
+        #expect(config.lastSupabaseEmail.isEmpty)
+    }
 }

@@ -944,6 +944,7 @@ final class MuesliController: NSObject {
     }
 
     func supabaseSignIn(email: String, password: String) async throws {
+        persistLastSupabaseEmail(email)
         guard let auth = supabaseAuth else { return }
         try await auth.signIn(email: email, password: password)
         syncAppState()
@@ -954,6 +955,7 @@ final class MuesliController: NSObject {
     }
 
     func supabaseSignUp(email: String, password: String) async throws {
+        persistLastSupabaseEmail(email)
         guard let auth = supabaseAuth else { return }
         try await auth.signUp(email: email, password: password)
         syncAppState()
@@ -964,6 +966,7 @@ final class MuesliController: NSObject {
     }
 
     func supabaseSignOut() {
+        persistLastSupabaseEmail(supabaseAuth?.email ?? appState.supabaseEmail)
         supabaseAuth?.signOut()
         syncAppState()
     }
@@ -972,6 +975,12 @@ final class MuesliController: NSObject {
         guard let syncManager else { return }
         await syncManager.syncNow(reason: "manual")
         syncAppState()
+    }
+
+    private func persistLastSupabaseEmail(_ candidate: String?) {
+        let trimmed = candidate?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty, config.lastSupabaseEmail != trimmed else { return }
+        updateConfig { $0.lastSupabaseEmail = trimmed }
     }
 
     /// Snapshot of the sync-relevant slice of `AppConfig`. Used by
