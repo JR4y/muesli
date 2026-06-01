@@ -4,6 +4,17 @@ import MuesliCore
 
 @MainActor
 final class MainWindowTitlebarController {
+    struct QuickNoteAccessoryMetrics: Equatable {
+        let accessorySize: CGSize
+        let controlHeight: CGFloat
+        let showsLabel: Bool
+        let trailingPadding: CGFloat
+    }
+
+    nonisolated private static let sidebarAccessorySize = CGSize(width: 58, height: 40)
+    nonisolated private static let compactQuickNoteAccessorySize = CGSize(width: 52, height: 40)
+    nonisolated private static let fullQuickNoteAccessorySize = CGSize(width: 92, height: 40)
+
     private weak var window: NSWindow?
     private let appState: AppState
     private let controller: MuesliController
@@ -23,7 +34,17 @@ final class MainWindowTitlebarController {
     }
 
     nonisolated static func usesCompactQuickNoteLayout(availableWidth: CGFloat) -> Bool {
-        availableWidth < 140
+        availableWidth < 760
+    }
+
+    nonisolated static func quickNoteAccessoryMetrics(availableWidth: CGFloat) -> QuickNoteAccessoryMetrics {
+        let compact = usesCompactQuickNoteLayout(availableWidth: availableWidth)
+        return QuickNoteAccessoryMetrics(
+            accessorySize: compact ? compactQuickNoteAccessorySize : fullQuickNoteAccessorySize,
+            controlHeight: 26,
+            showsLabel: !compact,
+            trailingPadding: compact ? 10 : 12
+        )
     }
 
     func install(on window: NSWindow) {
@@ -37,9 +58,10 @@ final class MainWindowTitlebarController {
     private func installLeadingAccessory(on window: NSWindow) {
         let accessory = NSTitlebarAccessoryViewController()
         accessory.layoutAttribute = .left
-        accessory.fullScreenMinHeight = 36
-        accessory.view = NSHostingView(
-            rootView: TitlebarSidebarToggleButton(appState: appState)
+        accessory.fullScreenMinHeight = Self.sidebarAccessorySize.height
+        accessory.view = hostingAccessoryView(
+            rootView: TitlebarSidebarToggleButton(appState: appState),
+            size: Self.sidebarAccessorySize
         )
         leadingAccessory = accessory
         window.addTitlebarAccessoryViewController(accessory)
@@ -48,16 +70,26 @@ final class MainWindowTitlebarController {
     private func installTrailingAccessory(on window: NSWindow) {
         let accessory = NSTitlebarAccessoryViewController()
         accessory.layoutAttribute = .right
-        accessory.fullScreenMinHeight = 36
-        accessory.view = NSHostingView(
+        let metrics = Self.quickNoteAccessoryMetrics(availableWidth: window.frame.width)
+        accessory.view = hostingAccessoryView(
             rootView: TitlebarQuickNoteButton(
                 appState: appState,
                 controller: controller,
-                compact: Self.usesCompactQuickNoteLayout(availableWidth: window.frame.width)
-            )
+                metrics: metrics
+            ),
+            size: metrics.accessorySize
         )
         trailingAccessory = accessory
         window.addTitlebarAccessoryViewController(accessory)
+    }
+
+    private func hostingAccessoryView<Content: View>(rootView: Content, size: CGSize) -> NSView {
+        let hostingView = NSHostingView(
+            rootView: rootView
+                .frame(width: size.width, height: size.height, alignment: .center)
+        )
+        hostingView.frame = NSRect(origin: .zero, size: size)
+        return hostingView
     }
 }
 
@@ -80,14 +112,15 @@ private struct TitlebarSidebarToggleButton: View {
         }
         .buttonStyle(.plain)
         .help(L10n.text(.titlebarToggleSidebarHelp, config: appState.config))
-        .padding(.leading, 6)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .padding(.leading, 12)
     }
 }
 
 private struct TitlebarQuickNoteButton: View {
     let appState: AppState
     let controller: MuesliController
-    let compact: Bool
+    let metrics: MainWindowTitlebarController.QuickNoteAccessoryMetrics
 
     private var isVisible: Bool {
         MainWindowTitlebarController.showsQuickNoteAccessory(
@@ -109,15 +142,15 @@ private struct TitlebarQuickNoteButton: View {
                     HStack(spacing: 6) {
                         Image(systemName: "plus")
                             .font(.system(size: 11, weight: .semibold))
-                        if !compact {
-                            Text(L10n.text(.quickNoteButton, config: appState.config))
+                        if metrics.showsLabel {
+                            Text(L10n.text(.quickNoteButtonShort, config: appState.config))
                                 .font(.system(size: 12, weight: .semibold))
                                 .lineLimit(1)
                         }
                     }
                     .foregroundStyle(isDisabled ? MuesliTheme.textTertiary : MuesliTheme.accent)
-                    .padding(.horizontal, compact ? 10 : MuesliTheme.spacing12)
-                    .frame(height: 30)
+                    .padding(.horizontal, metrics.showsLabel ? 10 : 8)
+                    .frame(height: metrics.controlHeight)
                     .background(
                         Capsule().fill(
                             isDisabled ? MuesliTheme.surfacePrimary.opacity(0.6) : MuesliTheme.accentSubtle
@@ -134,7 +167,8 @@ private struct TitlebarQuickNoteButton: View {
                 .buttonStyle(.plain)
                 .disabled(isDisabled)
                 .help(L10n.text(.quickNoteButtonHelp, config: appState.config))
-                .padding(.trailing, 6)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                .padding(.trailing, metrics.trailingPadding)
             } else {
                 Color.clear
                     .frame(width: 0, height: 0)

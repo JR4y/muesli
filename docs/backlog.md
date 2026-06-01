@@ -52,17 +52,23 @@ Completed or largely completed:
 - The quick-note / live-notes surface now localizes placeholder copy, save state, editor helpers, and recording actions
 - Quick notes now default to note-only mode, with an independent `Auto-record Quick Notes` setting and the ability to start recording later from the same note
 - The dashboard `Quick Note` button now follows the configured app language
+- The main window now uses an app-owned split shell plus real AppKit titlebar accessories, so the sidebar toggle is no longer duplicated and the quick-note action stays anchored in the native titlebar
 - Manual-note editor toolbar commands were stabilized so formatting actions work reliably after button clicks
 - Upstream Slack meeting detection hardening and stronger meeting-prompt suppression are now integrated into `beta`
 - `Coming Up` now caps visible upcoming meetings to 5 for the moment, pending a more intentional pagination/expansion design
 - Multi-Mac sync via Supabase (project `molli`, `eu-west-1`), scoped to `muesli-beta.app`. New tables, triggers, and tombstones live in `MuesliCore/Sync/`; auth, REST client, and orchestrator live in `MuesliNativeApp/Sync/`. Configured per build via `config/Supabase.xcconfig` (gitignored, with committed `.example` template). Settings → Sync pane handles signup, signin, manual sync, and surfaces status. Same-day beta fixes covered first-sync metadata backfill for existing local data, PostgREST cursor timestamp normalization, and safe parent-before-child upload ordering for nested folders. See `docs/progress.md` 2026-05-04 entry for the implementation map and `docs/plans/2026-05-04-supabase-sync-corrected-plan.md` for the design rationale.
 - Live meeting transcript is now isolated behind a real `Settings → Meetings → Live transcript` toggle instead of being an always-on behavior
 - Meeting detail now renders the final transcript as a chat-style conversation while keeping `rawTranscript` as the storage/export source of truth
+- Meeting detail now keeps notes/transcript visibility consistent, uses a cleaner action hierarchy in completed meetings, and defaults the associated event block to a denser collapsed presentation
+- Supabase beta builds now fail fast if local config is missing, and the sync UI keeps the last-used email available locally without storing the password
 
 Known limitation:
 
 - macOS permissions are currently re-requested after beta reinstalls because the
   app is being rebuilt without a stable local signing identity
+- AppKit titlebar accessories on the left/right edges remain vertically
+  constrained by the native titlebar lane, so the quick-note control there
+  should stay compact rather than relying on extra vertical padding
 
 ## Principles
 
@@ -176,6 +182,7 @@ Notes:
 - meetings list now shows a subtle indicator when a note already has an associated calendar event
 - in-meeting note capture could use a more discreet mode so starting a meeting does not always force the note window open in front of the user
 - the meeting detail action area is cleaner than before, but it should still be watched in real usage to confirm the final control grouping feels stable
+- the new titlebar shell solved duplication and position drift, but the quick-note control should still be watched in real usage to confirm `+ Nota` is the right balance between clarity and compactness
 - transcript viewing is now visually stronger thanks to the shared chat-style transcript UI, so the next UX work should focus more on live quality and interaction behavior than on transcript styling basics
 
 ### 5b. Shortcut system consolidation

@@ -11,6 +11,13 @@ struct DashboardRootViewTests {
         #expect(!DashboardRootView.showsQuickNoteTitlebarControl(isSearchActive: false, selectedTab: .settings))
     }
 
+    @Test("meetings reserve extra titlebar breathing room for quick note")
+    func quickNoteTitlebarInset() {
+        #expect(DashboardRootView.titlebarContentInset(isSearchActive: false, selectedTab: .meetings) == 36)
+        #expect(DashboardRootView.titlebarContentInset(isSearchActive: true, selectedTab: .meetings) == 0)
+        #expect(DashboardRootView.titlebarContentInset(isSearchActive: false, selectedTab: .dictations) == 0)
+    }
+
     @Test("sidebar shell starts visible by default")
     @MainActor
     func sidebarStartsVisible() {

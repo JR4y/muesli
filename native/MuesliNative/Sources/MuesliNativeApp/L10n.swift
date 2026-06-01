@@ -335,6 +335,7 @@ enum L10nKey {
     case settingsLoadingModels
     case settingsLoadModels
     case quickNoteButton
+    case quickNoteButtonShort
     case quickNoteButtonHelp
     case titlebarToggleSidebarHelp
     case settingsRecordingSaveNever
@@ -1019,6 +1020,8 @@ enum L10n {
             return "Load"
         case .quickNoteButton:
             return "Quick Note"
+        case .quickNoteButtonShort:
+            return "Note"
         case .quickNoteButtonHelp:
             return "Start a quick meeting note"
         case .titlebarToggleSidebarHelp:
@@ -1777,6 +1780,8 @@ enum L10n {
             return "Cargar"
         case .quickNoteButton:
             return "Nota rapida"
+        case .quickNoteButtonShort:
+            return "Nota"
         case .quickNoteButtonHelp:
             return "Crear una nota rapida de reunion"
         case .titlebarToggleSidebarHelp:

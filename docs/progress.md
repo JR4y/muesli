@@ -8,7 +8,7 @@ It is intended to serve three purposes at once:
 - make it easy to resume work without losing context
 - prepare a clean base for future beta release notes and README feature updates
 
-Last updated: `2026-05-30`
+Last updated: `2026-06-01`
 Working branch: `beta`
 Dev app: `muesli-beta.app`
 
@@ -27,6 +27,76 @@ Git workflow currently documented and aligned:
 - `main` is reserved as the stable product branch
 
 ## Incremental history
+
+### 2026-06-01
+
+This pass tightened the meeting-detail UX, restored the local Supabase beta
+path, and then reworked the main dashboard window chrome so the fork uses an
+app-owned split shell plus real AppKit titlebar accessories instead of the old
+SwiftUI/native toolbar mix.
+
+#### Meeting detail polish and transcript consistency
+
+- the completed meeting detail view was reorganized so actions now live next to
+  the object they affect:
+  audio actions near the player, event actions inside the associated event
+  block, and notes/transcript actions in a dedicated document toolbar
+- the earlier transcript-button inconsistency was fixed by unifying the
+  visibility logic across both layout branches in the detail header
+- the associated event block now defaults to collapsed in completed meetings,
+  uses a shorter `Abrir reunion` action label, and keeps expand/collapse on the
+  right side of the event action row
+- the player/document action flow was refined further with:
+  a tighter audio action strip,
+  a split summary/template control,
+  and lower-frequency document actions moved out of the main visual lane
+
+#### Supabase beta recovery and persistence hardening
+
+- the local fork beta now guards against shipping a build with empty Supabase
+  config values
+- sync settings now keep the user email available locally even if the active
+  Supabase session expires, while authentication tokens remain in Keychain
+- the beta deploy scripts were hardened so missing Supabase config is treated
+  as a build-time problem instead of silently producing an inert sync build
+
+#### Main window titlebar and dashboard shell
+
+- the main dashboard window no longer depends on `NavigationSplitView` for the
+  primary chrome
+- sidebar visibility is now explicit app state and is rendered through a small
+  app-owned split shell
+- the window installs custom left/right titlebar accessories through
+  `MainWindowTitlebarController`
+- the left titlebar control is now the single visible sidebar toggle
+- the right titlebar control is now a compact quick-note pill that stays fixed
+  on the right edge of the titlebar
+- the meetings browser was also adjusted so `Proximamente` can remain pinned
+  while the historical meetings list scrolls independently
+
+#### AppKit constraint discovered during titlebar validation
+
+- this pass also documented a real AppKit limitation that affected the earlier
+  spacing experiments:
+  for `NSTitlebarAccessoryViewController` placed at `.left` or `.right`,
+  AppKit effectively owns the vertical geometry of the titlebar lane
+- in practice, increasing the hosted SwiftUI view height or vertical padding
+  did not make the accessory breathe more, because the native titlebar clipped
+  that extra space
+- because of that constraint, the final quick-note control was adjusted toward
+  a compact `+ Nota` presentation for standard widths, with icon-only fallback
+  only on narrower windows
+
+#### Verification and local beta install
+
+- focused Swift test suites were expanded for dashboard chrome and titlebar
+  behavior:
+  `DashboardRootViewTests`,
+  `DashboardSplitShellTests`,
+  and `MainWindowTitlebarControllerTests`
+- the beta app was rebuilt and reinstalled repeatedly through
+  `./scripts/beta-test.sh` during the titlebar iteration
+- the current validated local install remains `/Applications/muesli-beta.app`
 
 ### 2026-05-30
 

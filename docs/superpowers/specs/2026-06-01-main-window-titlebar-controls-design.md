@@ -1,7 +1,7 @@
 # Main Window Titlebar Controls Design
 
 Date: 2026-06-01
-Status: Proposed
+Status: Implemented with native-titlebar constraints
 Scope:
 - `native/MuesliNative/Sources/MuesliNativeApp/RecentHistoryWindowController.swift`
 - `native/MuesliNative/Sources/MuesliNativeApp/DashboardRootView.swift`
@@ -168,6 +168,14 @@ The sidebar toggle button in the titlebar should read and mutate this state dire
 - acceptable fallback: icon-only compact version if future width constraints require it
 - accent color remains the visual cue
 
+Implementation note after validation:
+
+- the final shipped compromise for this pass is `+ Nota` at standard dashboard
+  widths, with icon-only fallback only for narrower windows
+- this is intentionally shorter than the original preference because the native
+  titlebar lane clipped attempts to gain extra vertical breathing room through
+  larger accessory heights or vertical padding
+
 ### Spacing
 
 - left control should visually clear the traffic lights and match macOS titlebar rhythm
@@ -225,6 +233,14 @@ Titlebar accessory views can be fragile if their coordinator is not retained cor
 ### macOS chrome alignment risk
 
 Traffic-light spacing and titlebar insets can vary enough that accessory sizing may need small iteration on real builds.
+
+Observed during implementation:
+
+- AppKit-owned lateral titlebar accessory placement (`.left` / `.right`) gave
+  much less vertical flexibility than the early experiments implied
+- hosted SwiftUI height and vertical padding changes were not sufficient to
+  create more visible breathing room because the native titlebar lane clipped
+  the accessory content
 
 ### Keyboard/behavior parity risk
 

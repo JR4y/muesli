@@ -324,6 +324,10 @@ struct MeetingsView: View {
         controller.activeLiveMeetingRecord()
     }
 
+    private var hasPinnedTopSection: Bool {
+        !appState.upcomingCalendarEvents.isEmpty || appState.isMeetingStarting || activeLiveMeeting != nil
+    }
+
     var body: some View {
         Group {
             if let meeting = currentDocumentMeeting {
@@ -375,55 +379,69 @@ struct MeetingsView: View {
 
     @ViewBuilder
     private var browserView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: MuesliTheme.spacing24) {
-                if !appState.upcomingCalendarEvents.isEmpty {
-                    comingUpSection
+        VStack(spacing: 0) {
+            if hasPinnedTopSection {
+                VStack(alignment: .leading, spacing: MuesliTheme.spacing24) {
+                    if !appState.upcomingCalendarEvents.isEmpty {
+                        comingUpSection
+                    }
+
+                    if appState.isMeetingStarting {
+                        MeetingPreparationBanner(
+                            status: appState.meetingStartStatus,
+                            onCancel: { controller.cancelMeetingPreparation() }
+                        )
+                    }
+
+                    if let activeLiveMeeting {
+                        activeMeetingBanner(activeLiveMeeting)
+                    }
                 }
+                .frame(maxWidth: 960, alignment: .leading)
+                .padding(.horizontal, 40)
+                .padding(.top, 12)
+                .padding(.bottom, 24)
+                .frame(maxWidth: .infinity, alignment: .center)
+            }
 
-                if appState.isMeetingStarting {
-                    MeetingPreparationBanner(
-                        status: appState.meetingStartStatus,
-                        onCancel: { controller.cancelMeetingPreparation() }
-                    )
-                }
+            ScrollView {
+                VStack(alignment: .leading, spacing: MuesliTheme.spacing24) {
+                    browserHeader
 
-                if let activeLiveMeeting {
-                    activeMeetingBanner(activeLiveMeeting)
-                }
-
-                browserHeader
-
-                if filteredMeetings.isEmpty {
-                    emptyState
-                } else {
-                    LazyVStack(spacing: MuesliTheme.spacing12) {
-                        ForEach(filteredMeetings) { meeting in
-                            MeetingListItemView(
-                                record: meeting,
-                                config: appState.config,
-                                isSelected: appState.selectedMeetingID == meeting.id,
-                                folders: appState.folders,
-                                onSelect: { controller.showMeetingDocument(id: meeting.id) },
-                                onMove: { folderID in
-                                    controller.moveMeeting(id: meeting.id, toFolder: folderID)
-                                },
-                                onCreateFolderAndMove: { name in
-                                    controller.createFolderAndMoveMeeting(name: name, meetingID: meeting.id)
-                                },
-                                onDelete: controller.canDeleteMeeting(meeting) ? {
-                                    controller.deleteMeeting(id: meeting.id)
-                                } : nil
-                            )
+                    if filteredMeetings.isEmpty {
+                        emptyState
+                    } else {
+                        LazyVStack(spacing: MuesliTheme.spacing12) {
+                            ForEach(filteredMeetings) { meeting in
+                                MeetingListItemView(
+                                    record: meeting,
+                                    config: appState.config,
+                                    isSelected: appState.selectedMeetingID == meeting.id,
+                                    folders: appState.folders,
+                                    onSelect: { controller.showMeetingDocument(id: meeting.id) },
+                                    onMove: { folderID in
+                                        controller.moveMeeting(id: meeting.id, toFolder: folderID)
+                                    },
+                                    onCreateFolderAndMove: { name in
+                                        controller.createFolderAndMoveMeeting(name: name, meetingID: meeting.id)
+                                    },
+                                    onDelete: controller.canDeleteMeeting(meeting) ? {
+                                        controller.deleteMeeting(id: meeting.id)
+                                    } : nil
+                                )
+                            }
                         }
                     }
                 }
+                .frame(maxWidth: 960, alignment: .leading)
+                .padding(.horizontal, 40)
+                .padding(.top, hasPinnedTopSection ? 0 : 12)
+                .padding(.bottom, 32)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
-            .frame(maxWidth: 960, alignment: .leading)
-            .padding(.horizontal, 40)
-            .padding(.vertical, 32)
-            .frame(maxWidth: .infinity, alignment: .center)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(MuesliTheme.backgroundBase)
         .onDrop(of: ["public.file-url"], isTargeted: nil) { providers in
             guard let provider = providers.first else { return false }
             provider.loadItem(forTypeIdentifier: "public.file-url", options: nil) { item, _ in
