@@ -121,6 +121,7 @@ final class AppState {
     // Navigation
     var selectedTab: DashboardTab = .meetings
     var selectedSettingsPane: SettingsPane = .general
+    var isSidebarVisible: Bool = true
 
     // Supabase sync
     var supabaseSyncConfigured: Bool = false

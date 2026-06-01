@@ -1,37 +1,74 @@
+import AppKit
 import SwiftUI
 import MuesliCore
 
 struct DashboardRootView: View {
+    private static let customTopBarHeight: CGFloat = 54
+
     let appState: AppState
     let controller: MuesliController
 
-    private var showsMeetingsToolbarActions: Bool {
-        guard !appState.isSearchActive, appState.selectedTab == .meetings else { return false }
+    static func showsQuickNoteTitlebarControl(isSearchActive: Bool, selectedTab: DashboardTab) -> Bool {
+        guard !isSearchActive, selectedTab == .meetings else { return false }
         return true
     }
 
+    private var showsQuickNoteTopBar: Bool {
+        Self.showsQuickNoteTitlebarControl(
+            isSearchActive: appState.isSearchActive,
+            selectedTab: appState.selectedTab
+        )
+    }
+
     var body: some View {
+        ZStack(alignment: .top) {
+            splitViewContent
+                .padding(.top, showsQuickNoteTopBar ? Self.customTopBarHeight : 0)
+
+            if showsQuickNoteTopBar {
+                customTopBar
+            }
+        }
+        .frame(minWidth: 900, minHeight: 600)
+        .background(MuesliTheme.backgroundBase)
+        .preferredColorScheme(appState.config.darkMode ? .dark : .light)
+    }
+
+    private var splitViewContent: some View {
         NavigationSplitView {
             SidebarView(appState: appState, controller: controller)
                 .navigationSplitViewColumnWidth(min: 240, ideal: 260, max: 300)
         } detail: {
             detailContent
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(MuesliTheme.backgroundBase)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(MuesliTheme.backgroundBase)
         }
         .navigationSplitViewStyle(.balanced)
-        .frame(minWidth: 900, minHeight: 600)
-        .preferredColorScheme(appState.config.darkMode ? .dark : .light)
-        .toolbar {
-            if showsMeetingsToolbarActions {
-                ToolbarItem(placement: .automatic) {
-                    quickNoteToolbarButton
-                }
-            }
+    }
+
+    private var customTopBar: some View {
+        HStack(spacing: MuesliTheme.spacing12) {
+            topBarIconButton(
+                systemImage: "sidebar.left",
+                help: "Toggle sidebar",
+                action: toggleSidebar
+            )
+            Spacer(minLength: MuesliTheme.spacing16)
+            quickNoteTopBarButton
+        }
+        .padding(.horizontal, MuesliTheme.spacing16)
+        .padding(.top, MuesliTheme.spacing8)
+        .padding(.bottom, MuesliTheme.spacing8)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(MuesliTheme.backgroundBase)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(MuesliTheme.surfaceBorder)
+                .frame(height: 1)
         }
     }
 
-    private var quickNoteToolbarButton: some View {
+    private var quickNoteTopBarButton: some View {
         let language = AppLanguage.resolved(appState.config.appLanguage)
         let isDisabled = appState.isMeetingRecording
         return Button {
@@ -46,14 +83,11 @@ struct DashboardRootView: View {
             }
             .foregroundStyle(isDisabled ? MuesliTheme.textTertiary : MuesliTheme.accent)
             .padding(.horizontal, MuesliTheme.spacing12)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
-                    .fill(isDisabled ? MuesliTheme.surfacePrimary : MuesliTheme.accent.opacity(0.14))
-            )
-            .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
+            .frame(height: 32)
+            .background(Capsule().fill(isDisabled ? MuesliTheme.surfacePrimary.opacity(0.6) : MuesliTheme.accentSubtle))
+            .clipShape(Capsule())
             .overlay(
-                RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
+                Capsule()
                     .strokeBorder(
                         isDisabled ? MuesliTheme.surfaceBorder : MuesliTheme.accent.opacity(0.35),
                         lineWidth: 1
@@ -63,6 +97,30 @@ struct DashboardRootView: View {
         .buttonStyle(.plain)
         .disabled(isDisabled)
         .help(L10n.text(.quickNoteButtonHelp, language: language))
+    }
+
+    private func topBarIconButton(systemImage: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(MuesliTheme.textSecondary)
+                .frame(width: 32, height: 32)
+                .background(Circle().fill(MuesliTheme.backgroundRaised))
+                .overlay(
+                    Circle()
+                        .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .help(help)
+    }
+
+    private func toggleSidebar() {
+        let action = #selector(NSSplitViewController.toggleSidebar(_:))
+        if NSApp.sendAction(action, to: nil, from: nil) {
+            return
+        }
+        NSApp.keyWindow?.firstResponder?.tryToPerform(action, with: nil)
     }
 
     @ViewBuilder
