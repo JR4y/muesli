@@ -950,6 +950,48 @@ struct MeetingBrowserLogicTests {
         #expect(filtered.map(\.id) == [12, 11, 10])
     }
 
+    @Test("meetings home keeps the canonical import action ahead of sort and filter")
+    func meetingsHomeToolbarOrder() {
+        #expect(MeetingsHomeChrome.trailingToolbarItems == [.importAudio, .sort, .filter])
+    }
+
+    @Test("coming up toggle uses icon-only expand and collapse symbols")
+    func comingUpToggleSymbols() {
+        #expect(MeetingsHomeChrome.comingUpToggleSymbolName(isExpanded: true) == "rectangle.compress.vertical")
+        #expect(MeetingsHomeChrome.comingUpToggleSymbolName(isExpanded: false) == "rectangle.expand.vertical")
+    }
+
+    @Test("inline quick note action follows meetings dashboard visibility")
+    func inlineQuickNoteVisibility() {
+        #expect(MeetingsHomeChrome.showsInlineQuickNoteButton(isSearchActive: false, selectedTab: .meetings))
+        #expect(!MeetingsHomeChrome.showsInlineQuickNoteButton(isSearchActive: true, selectedTab: .meetings))
+        #expect(!MeetingsHomeChrome.showsInlineQuickNoteButton(isSearchActive: false, selectedTab: .dictations))
+    }
+
+    @Test("inline quick note does not change meetings home top spacing")
+    func inlineQuickNoteTopSpacing() {
+        #expect(MeetingsHomeChrome.pinnedTopPadding(showsInlineQuickNoteButton: false) == 12)
+        #expect(MeetingsHomeChrome.pinnedTopPadding(showsInlineQuickNoteButton: true) == 12)
+        #expect(
+            MeetingsHomeChrome.scrollTopPadding(
+                hasPinnedTopSection: false,
+                showsInlineQuickNoteButton: false
+            ) == 12
+        )
+        #expect(
+            MeetingsHomeChrome.scrollTopPadding(
+                hasPinnedTopSection: false,
+                showsInlineQuickNoteButton: true
+            ) == 12
+        )
+        #expect(
+            MeetingsHomeChrome.scrollTopPadding(
+                hasPinnedTopSection: true,
+                showsInlineQuickNoteButton: true
+            ) == 0
+        )
+    }
+
     private static func isoDate(daysAgo: Int, now: Date, calendar: Calendar) -> String {
         let date = calendar.date(byAdding: .day, value: -daysAgo, to: now) ?? now
         let formatter = ISO8601DateFormatter()

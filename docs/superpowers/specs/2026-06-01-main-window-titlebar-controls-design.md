@@ -1,7 +1,7 @@
 # Main Window Titlebar Controls Design
 
 Date: 2026-06-01
-Status: Implemented with native-titlebar constraints
+Status: Implemented, then partially superseded on 2026-06-02 when quick note moved into meetings content
 Scope:
 - `native/MuesliNative/Sources/MuesliNativeApp/RecentHistoryWindowController.swift`
 - `native/MuesliNative/Sources/MuesliNativeApp/DashboardRootView.swift`
@@ -16,6 +16,13 @@ Give the main window a stable, intentional top chrome layout:
 - no duplicate sidebar buttons
 - no toolbar background artifacts around the quick note control
 - behavior that remains stable while resizing, collapsing the sidebar, or navigating between app sections
+
+Implementation follow-up:
+
+- the sidebar-toggle portion of this design remains valid and shipped
+- the quick-note-in-titlebar portion was later reversed after beta validation
+  showed the meetings surface worked better with a content-level `Nota rápida`
+  CTA and no right-side titlebar action
 
 ## Problem Summary
 

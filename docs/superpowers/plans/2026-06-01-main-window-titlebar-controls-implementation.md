@@ -1,6 +1,6 @@
 # Main Window Titlebar Controls Implementation Plan
 
-Status: Completed on `beta` with a compact titlebar quick-note control
+Status: Completed on `beta`, later partially superseded when quick note moved out of the titlebar on 2026-06-02
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -26,6 +26,9 @@ Status: Completed on `beta` with a compact titlebar quick-note control
 - The meetings browser was also adjusted during validation so the top
   `Proximamente` block can stay pinned while the lower meetings list scrolls
   independently.
+- Follow-up validation on `2026-06-02` kept the left sidebar accessory but
+  removed the right quick-note titlebar control entirely; the final quick-note
+  CTA now lives inside the meetings surface as `Nota rápida`.
 
 ---
 

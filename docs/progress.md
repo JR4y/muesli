@@ -8,7 +8,7 @@ It is intended to serve three purposes at once:
 - make it easy to resume work without losing context
 - prepare a clean base for future beta release notes and README feature updates
 
-Last updated: `2026-06-01`
+Last updated: `2026-06-02`
 Working branch: `beta`
 Dev app: `muesli-beta.app`
 
@@ -27,6 +27,44 @@ Git workflow currently documented and aligned:
 - `main` is reserved as the stable product branch
 
 ## Incremental history
+
+### 2026-06-02
+
+This pass finished the meetings-home header cleanup and then closed the loop on
+the quick-note placement experiment by removing the titlebar quick-note control
+in favor of a clearer in-content CTA.
+
+#### Meetings home header simplification
+
+- the meetings home now keeps a single canonical `Import Audio` action, with
+  sort and date filter aligned beside it on the right side of the header
+- the old meetings-home `Manage Templates` shortcut was removed because that
+  workflow already lives in `Settings`
+- the `Coming Up` collapse control now uses an icon-only affordance instead of
+  repeating explicit expand/collapse copy
+- the legacy WAV harness entrypoint was deprecated in code so the product
+  surface now points toward the author/vendor `Import Audio` path as the
+  default import flow
+
+#### Quick note moved out of the titlebar
+
+- real beta validation showed that keeping both `Import Audio` and quick note as
+  strong actions inside the meetings surface worked better than reserving the
+  right titlebar lane for quick note
+- the titlebar quick-note accessory was removed, along with the extra titlebar
+  top inset that had been introduced to support it
+- the main window titlebar now keeps only the custom sidebar toggle on the left
+- the meetings surface now exposes the final quick-note action inline as
+  `Nota rápida`, positioned above `Coming Up` and styled to match the titlebar
+  accent capsule treatment without consuming additional vertical layout space
+
+#### Verification and local beta install
+
+- focused Swift tests covering dashboard spacing and meetings-home chrome passed:
+  `DashboardRootViewTests`
+  and `MeetingBrowserLogicTests`
+- the validated build was reinstalled through `./scripts/beta-test.sh` as
+  `/Applications/muesli-beta.app`
 
 ### 2026-06-01
 

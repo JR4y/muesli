@@ -2496,6 +2496,7 @@ final class MuesliController: NSObject {
         appState.isMeetingTemplatesManagerPresented = true
     }
 
+    @available(*, deprecated, message: "Use importAudioFile() for the canonical meetings import flow.")
     func importMeetilyStyleLiveTranscriptWAV() {
         guard !isMeetingRecording(), !isStartingMeetingRecording else {
             let alert = NSAlert()

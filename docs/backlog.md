@@ -52,7 +52,7 @@ Completed or largely completed:
 - The quick-note / live-notes surface now localizes placeholder copy, save state, editor helpers, and recording actions
 - Quick notes now default to note-only mode, with an independent `Auto-record Quick Notes` setting and the ability to start recording later from the same note
 - The dashboard `Quick Note` button now follows the configured app language
-- The main window now uses an app-owned split shell plus real AppKit titlebar accessories, so the sidebar toggle is no longer duplicated and the quick-note action stays anchored in the native titlebar
+- The main window now uses an app-owned split shell plus a real AppKit titlebar accessory for the sidebar toggle, while the quick-note CTA lives inside the meetings content as `Nota rápida`
 - Manual-note editor toolbar commands were stabilized so formatting actions work reliably after button clicks
 - Upstream Slack meeting detection hardening and stronger meeting-prompt suppression are now integrated into `beta`
 - `Coming Up` now caps visible upcoming meetings to 5 for the moment, pending a more intentional pagination/expansion design
@@ -66,9 +66,9 @@ Known limitation:
 
 - macOS permissions are currently re-requested after beta reinstalls because the
   app is being rebuilt without a stable local signing identity
-- AppKit titlebar accessories on the left/right edges remain vertically
-  constrained by the native titlebar lane, so the quick-note control there
-  should stay compact rather than relying on extra vertical padding
+- AppKit titlebar accessories remain vertically constrained by the native
+  titlebar lane, so expressive primary actions are a better fit in content than
+  in the titlebar
 
 ## Principles
 
@@ -182,7 +182,7 @@ Notes:
 - meetings list now shows a subtle indicator when a note already has an associated calendar event
 - in-meeting note capture could use a more discreet mode so starting a meeting does not always force the note window open in front of the user
 - the meeting detail action area is cleaner than before, but it should still be watched in real usage to confirm the final control grouping feels stable
-- the new titlebar shell solved duplication and position drift, but the quick-note control should still be watched in real usage to confirm `+ Nota` is the right balance between clarity and compactness
+- the new titlebar shell solved duplication and position drift for the sidebar toggle; the next UX validation should focus on whether `Nota rápida` and `Import Audio` now feel balanced inside the meetings surface
 - transcript viewing is now visually stronger thanks to the shared chat-style transcript UI, so the next UX work should focus more on live quality and interaction behavior than on transcript styling basics
 
 ### 5b. Shortcut system consolidation

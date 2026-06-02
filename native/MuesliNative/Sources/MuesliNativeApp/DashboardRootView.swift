@@ -2,20 +2,11 @@ import SwiftUI
 import MuesliCore
 
 struct DashboardRootView: View {
-    nonisolated private static let meetingsTitlebarContentInset: CGFloat = 36
-
     let appState: AppState
     let controller: MuesliController
 
-    nonisolated static func showsQuickNoteTitlebarControl(isSearchActive: Bool, selectedTab: DashboardTab) -> Bool {
-        guard !isSearchActive, selectedTab == .meetings else { return false }
-        return true
-    }
-
     nonisolated static func titlebarContentInset(isSearchActive: Bool, selectedTab: DashboardTab) -> CGFloat {
-        showsQuickNoteTitlebarControl(isSearchActive: isSearchActive, selectedTab: selectedTab)
-            ? meetingsTitlebarContentInset
-            : 0
+        0
     }
 
     var body: some View {

@@ -1779,7 +1779,7 @@ enum L10n {
         case .settingsLoadModels:
             return "Cargar"
         case .quickNoteButton:
-            return "Nota rapida"
+            return "Nota rápida"
         case .quickNoteButtonShort:
             return "Nota"
         case .quickNoteButtonHelp:

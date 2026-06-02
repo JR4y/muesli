@@ -181,6 +181,36 @@ enum MeetingBrowserSort: Hashable {
     }
 }
 
+enum MeetingsHomeToolbarItem: Hashable {
+    case importAudio
+    case sort
+    case filter
+}
+
+enum MeetingsHomeChrome {
+    static let trailingToolbarItems: [MeetingsHomeToolbarItem] = [
+        .importAudio,
+        .sort,
+        .filter
+    ]
+
+    static func comingUpToggleSymbolName(isExpanded: Bool) -> String {
+        isExpanded ? "rectangle.compress.vertical" : "rectangle.expand.vertical"
+    }
+
+    static func showsInlineQuickNoteButton(isSearchActive: Bool, selectedTab: DashboardTab) -> Bool {
+        !isSearchActive && selectedTab == .meetings
+    }
+
+    static func pinnedTopPadding(showsInlineQuickNoteButton: Bool) -> CGFloat {
+        12
+    }
+
+    static func scrollTopPadding(hasPinnedTopSection: Bool, showsInlineQuickNoteButton: Bool) -> CGFloat {
+        hasPinnedTopSection ? 0 : 12
+    }
+}
+
 enum MeetingBrowserLogic {
     static func availableFilters(
         for meetings: [MeetingRecord],
@@ -328,6 +358,13 @@ struct MeetingsView: View {
         !appState.upcomingCalendarEvents.isEmpty || appState.isMeetingStarting || activeLiveMeeting != nil
     }
 
+    private var showsInlineQuickNoteButton: Bool {
+        MeetingsHomeChrome.showsInlineQuickNoteButton(
+            isSearchActive: appState.isSearchActive,
+            selectedTab: appState.selectedTab
+        )
+    }
+
     var body: some View {
         Group {
             if let meeting = currentDocumentMeeting {
@@ -399,7 +436,7 @@ struct MeetingsView: View {
                 }
                 .frame(maxWidth: 960, alignment: .leading)
                 .padding(.horizontal, 40)
-                .padding(.top, 12)
+                .padding(.top, MeetingsHomeChrome.pinnedTopPadding(showsInlineQuickNoteButton: showsInlineQuickNoteButton))
                 .padding(.bottom, 24)
                 .frame(maxWidth: .infinity, alignment: .center)
             }
@@ -435,13 +472,31 @@ struct MeetingsView: View {
                 }
                 .frame(maxWidth: 960, alignment: .leading)
                 .padding(.horizontal, 40)
-                .padding(.top, hasPinnedTopSection ? 0 : 12)
+                .padding(
+                    .top,
+                    MeetingsHomeChrome.scrollTopPadding(
+                        hasPinnedTopSection: hasPinnedTopSection,
+                        showsInlineQuickNoteButton: showsInlineQuickNoteButton
+                    )
+                )
                 .padding(.bottom, 32)
                 .frame(maxWidth: .infinity, alignment: .center)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(MuesliTheme.backgroundBase)
+        .overlay(alignment: .top) {
+            if showsInlineQuickNoteButton {
+                HStack {
+                    Spacer(minLength: 0)
+                    inlineQuickNoteButton
+                }
+                .frame(maxWidth: 960, alignment: .trailing)
+                .padding(.horizontal, 40)
+                .padding(.top, -20)
+                .frame(maxWidth: .infinity, alignment: .center)
+            }
+        }
         .onDrop(of: ["public.file-url"], isTargeted: nil) { providers in
             guard let provider = providers.first else { return false }
             provider.loadItem(forTypeIdentifier: "public.file-url", options: nil) { item, _ in
@@ -576,26 +631,26 @@ struct MeetingsView: View {
                         isComingUpExpanded.toggle()
                     }
                 } label: {
-                    HStack(spacing: 6) {
-                        Text(L10n.text(
-                            isComingUpExpanded ? .meetingsCollapseComingUp : .meetingsExpandComingUp,
-                            config: appState.config
-                        ))
-                        .font(.system(size: 11, weight: .medium))
-                        Image(systemName: isComingUpExpanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 10, weight: .semibold))
-                    }
-                    .foregroundStyle(MuesliTheme.textSecondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(MuesliTheme.surfacePrimary)
-                    .clipShape(RoundedRectangle(cornerRadius: 7))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 7)
-                            .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 0.5)
-                    )
+                    Image(systemName: MeetingsHomeChrome.comingUpToggleSymbolName(isExpanded: isComingUpExpanded))
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 30, height: 30)
+                        .foregroundStyle(MuesliTheme.textSecondary)
+                        .background(MuesliTheme.surfacePrimary)
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7)
+                                .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 0.5)
+                        )
                 }
                 .buttonStyle(.plain)
+                .help(L10n.text(
+                    isComingUpExpanded ? .meetingsCollapseComingUp : .meetingsExpandComingUp,
+                    config: appState.config
+                ))
+                .accessibilityLabel(L10n.text(
+                    isComingUpExpanded ? .meetingsCollapseComingUp : .meetingsExpandComingUp,
+                    config: appState.config
+                ))
             }
             .padding(.bottom, 4)
 
@@ -815,82 +870,92 @@ struct MeetingsView: View {
     @ViewBuilder
     private var browserHeaderActions: some View {
         HStack(spacing: MuesliTheme.spacing8) {
-            sortButton
-            dateFilterButton
-
-            Button {
-                controller.importMeetilyStyleLiveTranscriptWAV()
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "waveform")
-                        .font(.system(size: 11, weight: .medium))
-                    Text("Import WAV")
-                        .font(.system(size: 12, weight: .semibold))
-                        .lineLimit(1)
-                }
-                .foregroundStyle(appState.isMeetingRecording ? MuesliTheme.textTertiary : MuesliTheme.textPrimary)
-                .padding(.horizontal, MuesliTheme.spacing12)
-                .padding(.vertical, 8)
-                .background(appState.isMeetingRecording || appState.isMeetingStarting ? MuesliTheme.surfacePrimary : MuesliTheme.accent)
-                .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
-                .overlay(
-                    RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
-                        .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
-                )
+            ForEach(MeetingsHomeChrome.trailingToolbarItems, id: \.self) { item in
+                toolbarItemView(item)
             }
-            .buttonStyle(.plain)
-            .disabled(appState.isMeetingRecording || appState.isMeetingStarting)
-            .help("Import a WAV meeting recording")
-            .fixedSize()
-
-            Button {
-                controller.importAudioFile()
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "square.and.arrow.down")
-                        .font(.system(size: 11, weight: .semibold))
-                    Text("Import Audio")
-                        .font(.system(size: 12, weight: .semibold))
-                        .lineLimit(1)
-                }
-                .foregroundStyle(MuesliTheme.textPrimary)
-                .padding(.horizontal, MuesliTheme.spacing12)
-                .padding(.vertical, 8)
-                .background(MuesliTheme.surfacePrimary)
-                .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
-                .overlay(
-                    RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
-                        .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
-                )
-            }
-            .buttonStyle(.plain)
-            .disabled(appState.isMeetingRecording || appState.isMeetingStarting)
-            .help("Import an audio file for offline transcription")
-            .fixedSize()
-            Button {
-                controller.showMeetingTemplatesManager()
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "square.and.pencil")
-                        .font(.system(size: 11, weight: .medium))
-                    Text(L10n.text(.meetingsManageTemplates, config: appState.config))
-                        .font(.system(size: 12, weight: .semibold))
-                        .lineLimit(1)
-                }
-                .foregroundStyle(MuesliTheme.textPrimary)
-                .padding(.horizontal, MuesliTheme.spacing12)
-                .padding(.vertical, 8)
-                .background(MuesliTheme.surfacePrimary)
-                .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
-                .overlay(
-                    RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
-                        .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
-                )
-            }
-            .buttonStyle(.plain)
-            .fixedSize()
         }
         .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var isImportAudioDisabled: Bool {
+        appState.isMeetingRecording || appState.isMeetingStarting
+    }
+
+    private var isQuickNoteDisabled: Bool {
+        appState.isMeetingRecording || appState.isMeetingStarting
+    }
+
+    @ViewBuilder
+    private func toolbarItemView(_ item: MeetingsHomeToolbarItem) -> some View {
+        switch item {
+        case .importAudio:
+            importAudioButton
+        case .sort:
+            sortButton
+        case .filter:
+            dateFilterButton
+        }
+    }
+
+    private var importAudioButton: some View {
+        accentCapsuleButton(
+            systemImage: "square.and.arrow.down",
+            title: "Import Audio",
+            isDisabled: isImportAudioDisabled,
+            helpText: "Import an audio file for offline transcription",
+            action: {
+                controller.importAudioFile()
+            }
+        )
+    }
+
+    private var inlineQuickNoteButton: some View {
+        accentCapsuleButton(
+            systemImage: "plus",
+            title: L10n.text(.quickNoteButton, config: appState.config),
+            isDisabled: isQuickNoteDisabled,
+            helpText: L10n.text(.quickNoteButtonHelp, config: appState.config),
+            action: {
+                controller.startQuickNoteMeeting()
+            }
+        )
+    }
+
+    private func accentCapsuleButton(
+        systemImage: String,
+        title: String,
+        isDisabled: Bool,
+        helpText: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 11, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(isDisabled ? MuesliTheme.textTertiary : MuesliTheme.accent)
+            .padding(.horizontal, 10)
+            .frame(height: 26)
+            .background(
+                Capsule().fill(
+                    isDisabled ? MuesliTheme.surfacePrimary.opacity(0.6) : MuesliTheme.accentSubtle
+                )
+            )
+            .overlay(
+                Capsule()
+                    .strokeBorder(
+                        isDisabled ? MuesliTheme.surfaceBorder : MuesliTheme.accent.opacity(0.35),
+                        lineWidth: 1
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .help(helpText)
+        .fixedSize()
     }
 
     @ViewBuilder
