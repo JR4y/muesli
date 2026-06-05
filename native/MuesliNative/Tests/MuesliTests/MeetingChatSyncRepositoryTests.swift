@@ -149,6 +149,61 @@ struct MeetingChatSyncRepositoryTests {
         #expect(after.first?.scopeRemoteID == "meeting-remote")
     }
 
+    @Test("apply remote thread and message writes local chat")
+    func applyRemoteThreadAndMessage() throws {
+        let fixture = try makeFixtureWithDictationStore()
+        let meetingID = try fixture.store.insertMeeting(
+            title: "Remote Meeting",
+            calendarEventID: nil,
+            startTime: Date(timeIntervalSince1970: 1_780_000_000),
+            endTime: Date(timeIntervalSince1970: 1_780_000_060),
+            rawTranscript: "",
+            formattedNotes: "",
+            micAudioPath: nil,
+            systemAudioPath: nil
+        )
+        try fixture.localSyncRepo.markMeetingSynced(
+            localID: meetingID,
+            remoteID: "meeting-remote-apply",
+            remoteVersion: 1,
+            clientUpdatedAt: "2026-06-05T10:00:00.000Z",
+            serverUpdatedAt: "2026-06-05T10:00:00.000Z",
+            payloadHash: "meeting-hash",
+            lastWriterDeviceID: "device-a"
+        )
+
+        try fixture.chatSyncRepo.applyRemoteThread(RemoteMeetingChatThreadPayload(
+            remoteID: "thread-remote-apply",
+            scopeKind: "meeting",
+            scopeRemoteID: "meeting-remote-apply",
+            title: "Remote Chat",
+            summary: "Older turns",
+            clientUpdatedAt: "2026-06-05T10:01:00.000Z",
+            serverUpdatedAt: "2026-06-05T10:01:01.000Z",
+            remoteVersion: 1,
+            lastWriterDeviceID: "device-b",
+            deletedAt: nil
+        ))
+        try fixture.chatSyncRepo.applyRemoteMessage(RemoteMeetingChatMessagePayload(
+            remoteID: "message-remote-apply",
+            threadRemoteID: "thread-remote-apply",
+            role: .assistant,
+            content: "Remote answer",
+            sources: [],
+            createdAt: "2026-06-05T10:01:02.000Z",
+            clientUpdatedAt: "2026-06-05T10:01:02.000Z",
+            serverUpdatedAt: "2026-06-05T10:01:03.000Z",
+            remoteVersion: 1,
+            lastWriterDeviceID: "device-b",
+            deletedAt: nil
+        ))
+
+        let snapshot = try fixture.chatStore.loadThread(scope: .meeting(meetingID), title: "Remote Meeting")
+        #expect(snapshot.thread.title == "Remote Meeting")
+        #expect(snapshot.thread.summary == "Older turns")
+        #expect(snapshot.messages.map(\.text) == ["Remote answer"])
+    }
+
     private func makeFixture() throws -> (chatStore: SQLiteMeetingChatStore, syncRepo: MeetingChatSyncRepository, url: URL) {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("muesli-chat-sync-\(UUID().uuidString).db")

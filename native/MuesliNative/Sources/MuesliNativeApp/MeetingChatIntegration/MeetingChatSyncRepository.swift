@@ -213,6 +213,100 @@ final class MeetingChatSyncRepository {
         try recordDelete(entityKind: .thread, localID: localID.uuidString)
     }
 
+    func applyRemoteThread(_ payload: RemoteMeetingChatThreadPayload) throws {
+        try migrateIfNeeded()
+        try withDB { db in
+            guard let scope = try localScope(kind: payload.scopeKind, remoteID: payload.scopeRemoteID) else {
+                return
+            }
+            if payload.deletedAt != nil {
+                if let localID = try localID(forRemoteID: payload.remoteID, entityKind: .thread, db: db) {
+                    try deleteLocalThread(localID: localID, db: db)
+                    try clearTombstone(entityKind: .thread, localID: localID, db: db)
+                }
+                try removeMetadata(entityKind: .thread, remoteID: payload.remoteID, db: db)
+                return
+            }
+
+            let localID = try localID(forRemoteID: payload.remoteID, entityKind: .thread, db: db)
+                .flatMap(UUID.init(uuidString:)) ?? UUID()
+            let thread = MeetingChatThread(
+                id: localID,
+                scope: scope,
+                title: payload.title,
+                summary: payload.summary,
+                createdAt: Date(),
+                updatedAt: dateFormatter.date(from: payload.clientUpdatedAt) ?? Date()
+            )
+            try upsertLocalThread(thread, db: db)
+            let hash = MeetingChatSyncHasher.threadHash(
+                scopeKind: payload.scopeKind,
+                scopeRemoteID: payload.scopeRemoteID,
+                title: payload.title,
+                summary: payload.summary
+            )
+            try writeMetadata(
+                entityKind: .thread,
+                localID: localID.uuidString,
+                remoteID: payload.remoteID,
+                remoteVersion: payload.remoteVersion,
+                clientUpdatedAt: payload.clientUpdatedAt,
+                serverUpdatedAt: payload.serverUpdatedAt,
+                payloadHash: hash,
+                lastWriterDeviceID: payload.lastWriterDeviceID,
+                dirty: false,
+                db: db
+            )
+        }
+    }
+
+    func applyRemoteMessage(_ payload: RemoteMeetingChatMessagePayload) throws {
+        try migrateIfNeeded()
+        try withDB { db in
+            guard let threadLocalIDString = try localID(forRemoteID: payload.threadRemoteID, entityKind: .thread, db: db),
+                  let threadLocalID = UUID(uuidString: threadLocalIDString) else {
+                return
+            }
+            if payload.deletedAt != nil {
+                if let localID = try localID(forRemoteID: payload.remoteID, entityKind: .message, db: db) {
+                    try deleteLocalMessage(localID: localID, db: db)
+                    try clearTombstone(entityKind: .message, localID: localID, db: db)
+                }
+                try removeMetadata(entityKind: .message, remoteID: payload.remoteID, db: db)
+                return
+            }
+
+            let localID = try localID(forRemoteID: payload.remoteID, entityKind: .message, db: db)
+                .flatMap(UUID.init(uuidString:)) ?? UUID()
+            let message = MeetingChatMessage(
+                id: localID,
+                role: payload.role,
+                text: payload.content,
+                sources: payload.sources,
+                createdAt: dateFormatter.date(from: payload.createdAt) ?? Date()
+            )
+            try upsertLocalMessage(message, threadID: threadLocalID, db: db)
+            let hash = MeetingChatSyncHasher.messageHash(
+                role: payload.role,
+                content: payload.content,
+                sources: payload.sources,
+                createdAt: payload.createdAt
+            )
+            try writeMetadata(
+                entityKind: .message,
+                localID: localID.uuidString,
+                remoteID: payload.remoteID,
+                remoteVersion: payload.remoteVersion,
+                clientUpdatedAt: payload.clientUpdatedAt,
+                serverUpdatedAt: payload.serverUpdatedAt,
+                payloadHash: hash,
+                lastWriterDeviceID: payload.lastWriterDeviceID,
+                dirty: false,
+                db: db
+            )
+        }
+    }
+
     private func backfillExistingRowsAsDirty(db: OpaquePointer?) throws {
         let nowExpr = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
         try exec(
@@ -270,36 +364,62 @@ final class MeetingChatSyncRepository {
     ) throws {
         try migrateIfNeeded()
         try withDB { db in
-            try exec(
-                """
-                INSERT INTO meeting_chat_sync_metadata (
-                    entity_kind, local_id, remote_id, client_updated_at, remote_version,
-                    last_seen_server_updated_at, last_payload_hash, dirty, last_writer_device_id, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-                ON CONFLICT(entity_kind, local_id) DO UPDATE SET
-                    remote_id = excluded.remote_id,
-                    client_updated_at = excluded.client_updated_at,
-                    remote_version = excluded.remote_version,
-                    last_seen_server_updated_at = excluded.last_seen_server_updated_at,
-                    last_payload_hash = excluded.last_payload_hash,
-                    dirty = excluded.dirty,
-                    last_writer_device_id = excluded.last_writer_device_id,
-                    updated_at = datetime('now')
-                """,
-                params: [
-                    entityKind.rawValue,
-                    localID,
-                    remoteID,
-                    clientUpdatedAt,
-                    String(remoteVersion),
-                    serverUpdatedAt,
-                    payloadHash,
-                    dirty ? "1" : "0",
-                    lastWriterDeviceID,
-                ],
+            try writeMetadata(
+                entityKind: entityKind,
+                localID: localID,
+                remoteID: remoteID,
+                remoteVersion: remoteVersion,
+                clientUpdatedAt: clientUpdatedAt,
+                serverUpdatedAt: serverUpdatedAt,
+                payloadHash: payloadHash,
+                lastWriterDeviceID: lastWriterDeviceID,
+                dirty: dirty,
                 db: db
             )
         }
+    }
+
+    private func writeMetadata(
+        entityKind: MeetingChatSyncEntityKind,
+        localID: String,
+        remoteID: String,
+        remoteVersion: Int64,
+        clientUpdatedAt: String,
+        serverUpdatedAt: String,
+        payloadHash: String,
+        lastWriterDeviceID: String,
+        dirty: Bool,
+        db: OpaquePointer?
+    ) throws {
+        try exec(
+            """
+            INSERT INTO meeting_chat_sync_metadata (
+                entity_kind, local_id, remote_id, client_updated_at, remote_version,
+                last_seen_server_updated_at, last_payload_hash, dirty, last_writer_device_id, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(entity_kind, local_id) DO UPDATE SET
+                remote_id = excluded.remote_id,
+                client_updated_at = excluded.client_updated_at,
+                remote_version = excluded.remote_version,
+                last_seen_server_updated_at = excluded.last_seen_server_updated_at,
+                last_payload_hash = excluded.last_payload_hash,
+                dirty = excluded.dirty,
+                last_writer_device_id = excluded.last_writer_device_id,
+                updated_at = datetime('now')
+            """,
+            params: [
+                entityKind.rawValue,
+                localID,
+                remoteID,
+                clientUpdatedAt,
+                String(remoteVersion),
+                serverUpdatedAt,
+                payloadHash,
+                dirty ? "1" : "0",
+                lastWriterDeviceID,
+            ],
+            db: db
+        )
     }
 
     private func recordDelete(entityKind: MeetingChatSyncEntityKind, localID: String) throws {
@@ -397,6 +517,120 @@ final class MeetingChatSyncRepository {
         case let .folder(id):
             return try localSyncRepository.remoteID(forLocalID: id, entityType: .folder)
         }
+    }
+
+    private func localScope(kind: String, remoteID: String) throws -> MeetingChatScope? {
+        guard let localSyncRepository else { return nil }
+        switch kind {
+        case "meeting":
+            guard let id = try localSyncRepository.localID(forRemoteID: remoteID, entityType: .meeting) else {
+                return nil
+            }
+            return .meeting(id)
+        case "folder":
+            guard let id = try localSyncRepository.localID(forRemoteID: remoteID, entityType: .folder) else {
+                return nil
+            }
+            return .folder(id)
+        default:
+            return nil
+        }
+    }
+
+    private func localID(
+        forRemoteID remoteID: String,
+        entityKind: MeetingChatSyncEntityKind,
+        db: OpaquePointer?
+    ) throws -> String? {
+        let sql = """
+        SELECT local_id
+        FROM meeting_chat_sync_metadata
+        WHERE entity_kind = ? AND remote_id = ?
+        LIMIT 1
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw lastError(db)
+        }
+        defer { sqlite3_finalize(statement) }
+        bindText(entityKind.rawValue, at: 1, statement: statement)
+        bindText(remoteID, at: 2, statement: statement)
+        guard sqlite3_step(statement) == SQLITE_ROW else { return nil }
+        return stringColumn(statement, index: 0)
+    }
+
+    private func upsertLocalThread(_ thread: MeetingChatThread, db: OpaquePointer?) throws {
+        let (kind, scopeID): (String, Int64)
+        switch thread.scope {
+        case let .meeting(id):
+            kind = "meeting"
+            scopeID = id
+        case let .folder(id):
+            kind = "folder"
+            scopeID = id
+        }
+        try exec(
+            """
+            INSERT OR REPLACE INTO meeting_chat_threads
+            (id, scope_kind, scope_id, title, summary, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            params: [
+                thread.id.uuidString,
+                kind,
+                String(scopeID),
+                thread.title,
+                thread.summary,
+                dateFormatter.string(from: thread.createdAt),
+                dateFormatter.string(from: thread.updatedAt),
+            ],
+            db: db
+        )
+    }
+
+    private func upsertLocalMessage(_ message: MeetingChatMessage, threadID: UUID, db: OpaquePointer?) throws {
+        let sourcesData = try JSONEncoder().encode(message.sources)
+        let sourcesJSON = String(data: sourcesData, encoding: .utf8) ?? "[]"
+        try exec(
+            """
+            INSERT OR REPLACE INTO meeting_chat_messages
+            (id, thread_id, role, content, sources_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            params: [
+                message.id.uuidString,
+                threadID.uuidString,
+                message.role.rawValue,
+                message.text,
+                sourcesJSON,
+                dateFormatter.string(from: message.createdAt),
+            ],
+            db: db
+        )
+    }
+
+    private func deleteLocalThread(localID: String, db: OpaquePointer?) throws {
+        try exec("DELETE FROM meeting_chat_threads WHERE id = ?", params: [localID], db: db)
+    }
+
+    private func deleteLocalMessage(localID: String, db: OpaquePointer?) throws {
+        try exec("DELETE FROM meeting_chat_messages WHERE id = ?", params: [localID], db: db)
+    }
+
+    private func clearTombstone(entityKind: MeetingChatSyncEntityKind, localID: String, db: OpaquePointer?) throws {
+        try exec(
+            "DELETE FROM meeting_chat_sync_tombstones WHERE entity_kind = ? AND local_id = ?",
+            params: [entityKind.rawValue, localID],
+            db: db
+        )
+    }
+
+    private func removeMetadata(entityKind: MeetingChatSyncEntityKind, remoteID: String, db: OpaquePointer?) throws {
+        try exec(
+            "DELETE FROM meeting_chat_sync_metadata WHERE entity_kind = ? AND remote_id = ?",
+            params: [entityKind.rawValue, remoteID],
+            db: db
+        )
     }
 
     private func withDB<T>(_ body: (OpaquePointer?) throws -> T) throws -> T {
