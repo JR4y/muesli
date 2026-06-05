@@ -25,7 +25,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let appIcon = runtime.appIcon, let image = NSImage(contentsOf: appIcon) {
                 NSApplication.shared.applicationIconImage = image
             }
-            let controller = MuesliController(runtime: runtime)
+            let dbURL = MuesliPaths.defaultDatabaseURL(appName: AppIdentity.supportDirectoryName)
+            let syncRepo = LocalSyncRepository(databaseURL: dbURL)
+            let meetingChatSyncRepo = MeetingChatSyncRepository(
+                databaseURL: dbURL,
+                localSyncRepository: syncRepo
+            )
+            let controller = MuesliController(
+                runtime: runtime,
+                syncRepository: syncRepo,
+                meetingChatSyncRepository: meetingChatSyncRepo
+            )
             sparkleUpdateDelegate.appState = controller.appState
             if Self.hasConfiguredSparkleFeed {
                 let updaterController = SPUStandardUpdaterController(
@@ -43,10 +53,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // config/Supabase.xcconfig present, the auth manager and REST
             // client are inert (auth.isConfigured == false) and the Sync
             // settings pane shows a "not configured" state.
-            let dbURL = MuesliPaths.defaultDatabaseURL(appName: AppIdentity.supportDirectoryName)
-            let syncRepo = LocalSyncRepository(databaseURL: dbURL)
             do {
                 try syncRepo.migrateIfNeeded()
+                try meetingChatSyncRepo.migrateIfNeeded()
             } catch {
                 fputs("[muesli-sync] failed to migrate sync schema: \(error)\n", stderr)
             }
@@ -77,6 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             let syncManager = SupabaseSyncManager(
                 repo: syncRepo,
+                chatRepo: meetingChatSyncRepo,
                 auth: auth,
                 rest: rest,
                 preferencesBridge: bridge,

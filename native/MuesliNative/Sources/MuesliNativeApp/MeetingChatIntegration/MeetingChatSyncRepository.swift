@@ -53,6 +53,12 @@ final class MeetingChatSyncRepository {
                 );
                 CREATE INDEX IF NOT EXISTS idx_meeting_chat_sync_tombstones_dirty
                     ON meeting_chat_sync_tombstones(entity_kind, dirty, client_deleted_at);
+
+                CREATE TABLE IF NOT EXISTS sync_state (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                );
                 """,
                 db: db
             )
@@ -124,17 +130,51 @@ final class MeetingChatSyncRepository {
                 guard let threadID = UUID(uuidString: stringColumn(statement, index: 1)) else {
                     throw MeetingChatStorageError.database("Invalid chat thread id.")
                 }
+                let threadRemoteID = try remoteID(forLocalID: threadID.uuidString, entityKind: .thread, db: db)
                 let metadata = metadata(statement, entityKind: .message, localIDColumn: 0, baseColumn: 6)
                 rows.append(
                     DirtyMeetingChatMessage(
                         metadata: metadata,
                         message: try message(statement),
                         threadLocalID: threadID,
-                        threadRemoteID: nil
+                        threadRemoteID: threadRemoteID
                     )
                 )
             }
             return rows
+        }
+    }
+
+    func loadCursor(key: String) throws -> SyncCursor? {
+        try migrateIfNeeded()
+        return try withDB { db in
+            let sql = "SELECT value FROM sync_state WHERE key = ? LIMIT 1"
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+                throw lastError(db)
+            }
+            defer { sqlite3_finalize(statement) }
+            bindText(key, at: 1, statement: statement)
+            guard sqlite3_step(statement) == SQLITE_ROW else { return nil }
+            let raw = stringColumn(statement, index: 0)
+            return try? JSONDecoder().decode(SyncCursor.self, from: Data(raw.utf8))
+        }
+    }
+
+    func saveCursor(_ cursor: SyncCursor, key: String) throws {
+        try migrateIfNeeded()
+        let data = try JSONEncoder().encode(cursor)
+        guard let json = String(data: data, encoding: .utf8) else { return }
+        try withDB { db in
+            try exec(
+                """
+                INSERT INTO sync_state (key, value, updated_at)
+                VALUES (?, ?, datetime('now'))
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
+                """,
+                params: [key, json],
+                db: db
+            )
         }
     }
 
@@ -157,6 +197,28 @@ final class MeetingChatSyncRepository {
     ) throws {
         try writeMetadata(
             entityKind: .thread,
+            localID: localID.uuidString,
+            remoteID: remoteID,
+            remoteVersion: remoteVersion,
+            clientUpdatedAt: clientUpdatedAt,
+            serverUpdatedAt: serverUpdatedAt,
+            payloadHash: payloadHash,
+            lastWriterDeviceID: lastWriterDeviceID,
+            dirty: false
+        )
+    }
+
+    func markMessageSynced(
+        localID: UUID,
+        remoteID: String,
+        remoteVersion: Int64,
+        clientUpdatedAt: String,
+        serverUpdatedAt: String,
+        payloadHash: String,
+        lastWriterDeviceID: String
+    ) throws {
+        try writeMetadata(
+            entityKind: .message,
             localID: localID.uuidString,
             remoteID: remoteID,
             remoteVersion: remoteVersion,
@@ -557,6 +619,28 @@ final class MeetingChatSyncRepository {
         bindText(remoteID, at: 2, statement: statement)
         guard sqlite3_step(statement) == SQLITE_ROW else { return nil }
         return stringColumn(statement, index: 0)
+    }
+
+    private func remoteID(
+        forLocalID localID: String,
+        entityKind: MeetingChatSyncEntityKind,
+        db: OpaquePointer?
+    ) throws -> String? {
+        let sql = """
+        SELECT remote_id
+        FROM meeting_chat_sync_metadata
+        WHERE entity_kind = ? AND local_id = ?
+        LIMIT 1
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw lastError(db)
+        }
+        defer { sqlite3_finalize(statement) }
+        bindText(entityKind.rawValue, at: 1, statement: statement)
+        bindText(localID, at: 2, statement: statement)
+        guard sqlite3_step(statement) == SQLITE_ROW else { return nil }
+        return optionalStringColumn(statement, index: 0)
     }
 
     private func upsertLocalThread(_ thread: MeetingChatThread, db: OpaquePointer?) throws {

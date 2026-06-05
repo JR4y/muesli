@@ -5,6 +5,38 @@ import Testing
 @MainActor
 @Suite("Supabase auth persistence")
 struct SupabaseAuthPersistenceTests {
+    @Test("sync cycle downloads and uploads meeting chat after meetings")
+    func syncCycleOrdersMeetingChatAfterMeetings() throws {
+        let sourceURL = URL(fileURLWithPath: "Sources/MuesliNativeApp/Sync/SupabaseSyncManager.swift")
+        let source = try String(contentsOf: sourceURL)
+        let downloadMeetings = try #require(source.range(of: "try await downloadMeetings(rest: rest)"))
+        let downloadChatThreads = try #require(
+            source.range(
+                of: "try await downloadMeetingChatThreads(rest: rest)",
+                range: downloadMeetings.upperBound..<source.endIndex
+            )
+        )
+        _ = try #require(
+            source.range(
+                of: "try await downloadMeetingChatMessages(rest: rest)",
+                range: downloadChatThreads.upperBound..<source.endIndex
+            )
+        )
+        let uploadMeetings = try #require(source.range(of: "try await uploadMeetings(rest: rest, userID: userID)"))
+        let uploadChatThreads = try #require(
+            source.range(
+                of: "try await uploadMeetingChatThreads(rest: rest, userID: userID)",
+                range: uploadMeetings.upperBound..<source.endIndex
+            )
+        )
+        _ = try #require(
+            source.range(
+                of: "try await uploadMeetingChatMessages(rest: rest, userID: userID)",
+                range: uploadChatThreads.upperBound..<source.endIndex
+            )
+        )
+    }
+
     @Test("file-backed session store restores auth across manager instances")
     func fileBackedSessionRestoresAuth() throws {
         let fixture = try makeFixture()

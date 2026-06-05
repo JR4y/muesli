@@ -47,6 +47,7 @@ final class SupabaseSyncStateObserver {
 /// triggers, a 5-minute heartbeat, and explicit `syncNow(reason:)` calls.
 actor SupabaseSyncManager {
     private let repo: LocalSyncRepository
+    private let chatRepo: MeetingChatSyncRepository
     private let auth: SupabaseAuthManager
     private let rest: SupabaseRESTClient?
     private let preferencesBridge: SupabasePreferencesBridge
@@ -61,12 +62,14 @@ actor SupabaseSyncManager {
 
     init(
         repo: LocalSyncRepository,
+        chatRepo: MeetingChatSyncRepository,
         auth: SupabaseAuthManager,
         rest: SupabaseRESTClient?,
         preferencesBridge: SupabasePreferencesBridge,
         observer: SupabaseSyncStateObserver
     ) {
         self.repo = repo
+        self.chatRepo = chatRepo
         self.auth = auth
         self.rest = rest
         self.preferencesBridge = preferencesBridge
@@ -81,6 +84,7 @@ actor SupabaseSyncManager {
         if heartbeatTask != nil { return }
         do {
             try repo.migrateIfNeeded()
+            try chatRepo.migrateIfNeeded()
             cachedDeviceID = try repo.ensureDeviceID()
             let preferencesState = try repo.loadPreferencesState()
             if preferencesState.remoteVersion == 0, preferencesState.clientUpdatedAt == nil {
@@ -184,10 +188,14 @@ actor SupabaseSyncManager {
             try await downloadPreferences(rest: rest, userID: userID)
             try await downloadDictations(rest: rest)
             try await downloadMeetings(rest: rest)
+            try await downloadMeetingChatThreads(rest: rest)
+            try await downloadMeetingChatMessages(rest: rest)
 
             try await uploadFolders(rest: rest, userID: userID)
             try await uploadDictations(rest: rest, userID: userID)
             try await uploadMeetings(rest: rest, userID: userID)
+            try await uploadMeetingChatThreads(rest: rest, userID: userID)
+            try await uploadMeetingChatMessages(rest: rest, userID: userID)
             try await uploadPreferences(rest: rest, userID: userID)
             try await uploadTombstones(rest: rest, entityType: .meeting)
             try await uploadTombstones(rest: rest, entityType: .dictation)
@@ -255,6 +263,34 @@ actor SupabaseSyncManager {
             if rows.count < pageSize { break }
         }
         await observer.update(syncedMeetingCount: try countMetadata(.meeting))
+    }
+
+    private func downloadMeetingChatThreads(rest: SupabaseRESTClient) async throws {
+        var current = try chatRepo.loadCursor(key: "pull_cursor:meeting_chat_threads")
+        while true {
+            let rows = try await rest.selectMeetingChatThreads(after: current, limit: pageSize)
+            if rows.isEmpty { break }
+            for row in rows {
+                try chatRepo.applyRemoteThread(row)
+            }
+            current = SyncCursor(serverUpdatedAt: rows.last!.serverUpdatedAt, id: rows.last!.remoteID)
+            try chatRepo.saveCursor(current!, key: "pull_cursor:meeting_chat_threads")
+            if rows.count < pageSize { break }
+        }
+    }
+
+    private func downloadMeetingChatMessages(rest: SupabaseRESTClient) async throws {
+        var current = try chatRepo.loadCursor(key: "pull_cursor:meeting_chat_messages")
+        while true {
+            let rows = try await rest.selectMeetingChatMessages(after: current, limit: pageSize)
+            if rows.isEmpty { break }
+            for row in rows {
+                try chatRepo.applyRemoteMessage(row)
+            }
+            current = SyncCursor(serverUpdatedAt: rows.last!.serverUpdatedAt, id: rows.last!.remoteID)
+            try chatRepo.saveCursor(current!, key: "pull_cursor:meeting_chat_messages")
+            if rows.count < pageSize { break }
+        }
     }
 
     private func downloadPreferences(rest: SupabaseRESTClient, userID: String) async throws {
@@ -745,6 +781,104 @@ actor SupabaseSyncManager {
                 remoteVersion: inserted.remoteVersion,
                 clientUpdatedAt: inserted.clientUpdatedAt,
                 serverUpdatedAt: inserted.serverUpdatedAt,
+                payloadHash: hash,
+                lastWriterDeviceID: deviceID
+            )
+        }
+    }
+
+    private func uploadMeetingChatThreads(rest: SupabaseRESTClient, userID: String) async throws {
+        let deviceID = try repo.ensureDeviceID()
+        let dirty = try chatRepo.dirtyThreads(limit: pageSize)
+        for entry in dirty {
+            guard let scopeRemoteID = entry.scopeRemoteID else {
+                continue
+            }
+            let hash = MeetingChatSyncHasher.threadHash(
+                scopeKind: entry.scopeKind,
+                scopeRemoteID: scopeRemoteID,
+                title: entry.thread.title,
+                summary: entry.thread.summary
+            )
+            if entry.metadata.lastPayloadHash == hash, let remoteID = entry.metadata.remoteID {
+                try chatRepo.markThreadSynced(
+                    localID: entry.thread.id,
+                    remoteID: remoteID,
+                    remoteVersion: entry.metadata.remoteVersion,
+                    clientUpdatedAt: entry.metadata.clientUpdatedAt,
+                    serverUpdatedAt: entry.metadata.lastSeenServerUpdatedAt ?? SyncTimestamp.now(),
+                    payloadHash: hash,
+                    lastWriterDeviceID: entry.metadata.lastWriterDeviceID ?? deviceID
+                )
+                continue
+            }
+            let remote = try await rest.upsertMeetingChatThread(
+                remoteID: entry.metadata.remoteID,
+                userID: userID,
+                scopeKind: entry.scopeKind,
+                scopeRemoteID: scopeRemoteID,
+                title: entry.thread.title,
+                summary: entry.thread.summary,
+                clientUpdatedAt: entry.metadata.clientUpdatedAt,
+                deviceID: deviceID,
+                deletedAt: nil
+            )
+            try chatRepo.markThreadSynced(
+                localID: entry.thread.id,
+                remoteID: remote.remoteID,
+                remoteVersion: remote.remoteVersion,
+                clientUpdatedAt: remote.clientUpdatedAt,
+                serverUpdatedAt: remote.serverUpdatedAt,
+                payloadHash: hash,
+                lastWriterDeviceID: deviceID
+            )
+        }
+    }
+
+    private func uploadMeetingChatMessages(rest: SupabaseRESTClient, userID: String) async throws {
+        let deviceID = try repo.ensureDeviceID()
+        let dirty = try chatRepo.dirtyMessages(limit: pageSize)
+        for entry in dirty {
+            guard let threadRemoteID = entry.threadRemoteID else {
+                continue
+            }
+            let createdAt = SyncTimestamp.format(entry.message.createdAt)
+            let hash = MeetingChatSyncHasher.messageHash(
+                role: entry.message.role,
+                content: entry.message.text,
+                sources: entry.message.sources,
+                createdAt: createdAt
+            )
+            if entry.metadata.lastPayloadHash == hash, let remoteID = entry.metadata.remoteID {
+                try chatRepo.markMessageSynced(
+                    localID: entry.message.id,
+                    remoteID: remoteID,
+                    remoteVersion: entry.metadata.remoteVersion,
+                    clientUpdatedAt: entry.metadata.clientUpdatedAt,
+                    serverUpdatedAt: entry.metadata.lastSeenServerUpdatedAt ?? SyncTimestamp.now(),
+                    payloadHash: hash,
+                    lastWriterDeviceID: entry.metadata.lastWriterDeviceID ?? deviceID
+                )
+                continue
+            }
+            let remote = try await rest.upsertMeetingChatMessage(
+                remoteID: entry.metadata.remoteID,
+                userID: userID,
+                threadRemoteID: threadRemoteID,
+                role: entry.message.role,
+                content: entry.message.text,
+                sources: entry.message.sources,
+                createdAt: createdAt,
+                clientUpdatedAt: entry.metadata.clientUpdatedAt,
+                deviceID: deviceID,
+                deletedAt: nil
+            )
+            try chatRepo.markMessageSynced(
+                localID: entry.message.id,
+                remoteID: remote.remoteID,
+                remoteVersion: remote.remoteVersion,
+                clientUpdatedAt: remote.clientUpdatedAt,
+                serverUpdatedAt: remote.serverUpdatedAt,
                 payloadHash: hash,
                 lastWriterDeviceID: deviceID
             )

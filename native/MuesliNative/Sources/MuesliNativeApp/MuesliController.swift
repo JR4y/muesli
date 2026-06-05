@@ -321,6 +321,8 @@ final class MuesliController: NSObject {
     init(
         runtime: RuntimePaths,
         dictationStore: DictationStore? = nil,
+        syncRepository: LocalSyncRepository? = nil,
+        meetingChatSyncRepository: MeetingChatSyncRepository? = nil,
         meetingHookDispatcher: MeetingHookDispatching = MeetingHookRunner(),
         launchAtLoginManager: LaunchAtLoginManaging = SystemLaunchAtLoginManager(),
         audioDuckingController: AudioDuckingManaging = AudioDuckingController(),
@@ -331,7 +333,16 @@ final class MuesliController: NSObject {
         self.dictationStore = dictationStore ?? DictationStore(
             databaseURL: MuesliPaths.defaultDatabaseURL(appName: AppIdentity.supportDirectoryName)
         )
-        self.meetingChatStore = SQLiteMeetingChatStore(databaseURL: self.dictationStore.resolvedDatabaseURL)
+        let resolvedSyncRepository = syncRepository ?? LocalSyncRepository(databaseURL: self.dictationStore.resolvedDatabaseURL)
+        self.syncRepo = resolvedSyncRepository
+        let resolvedMeetingChatSyncRepository = meetingChatSyncRepository ?? MeetingChatSyncRepository(
+            databaseURL: self.dictationStore.resolvedDatabaseURL,
+            localSyncRepository: resolvedSyncRepository
+        )
+        self.meetingChatStore = SQLiteMeetingChatStore(
+            databaseURL: self.dictationStore.resolvedDatabaseURL,
+            syncRepository: resolvedMeetingChatSyncRepository
+        )
         self.meetingHookDispatcher = meetingHookDispatcher
         self.launchAtLoginCoordinator = LaunchAtLoginCoordinator(manager: launchAtLoginManager)
         self.audioDuckingController = audioDuckingController
