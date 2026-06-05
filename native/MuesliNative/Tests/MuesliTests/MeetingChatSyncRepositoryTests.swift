@@ -204,6 +204,31 @@ struct MeetingChatSyncRepositoryTests {
         #expect(snapshot.messages.map(\.text) == ["Remote answer"])
     }
 
+    @Test("mark thread tombstone synced clears dirty flag")
+    func markThreadTombstoneSynced() throws {
+        let fixture = try makeFixture()
+        let snapshot = try fixture.chatStore.loadThread(scope: .meeting(88), title: "Delete Sync")
+        try fixture.syncRepo.markThreadSynced(
+            localID: snapshot.thread.id,
+            remoteID: "thread-delete-sync",
+            remoteVersion: 2,
+            clientUpdatedAt: "2026-06-05T10:00:00.000Z",
+            serverUpdatedAt: "2026-06-05T10:00:00.000Z",
+            payloadHash: "hash",
+            lastWriterDeviceID: "device-a"
+        )
+        try fixture.chatStore.clearThread(scope: .meeting(88))
+        let tombstone = try #require(fixture.syncRepo.dirtyTombstones(entityKind: .thread, limit: 10).first)
+
+        try fixture.syncRepo.markTombstoneSynced(
+            entityKind: .thread,
+            localID: tombstone.localID,
+            lastKnownRemoteVersion: 3
+        )
+
+        #expect(try fixture.syncRepo.dirtyTombstones(entityKind: .thread, limit: 10).isEmpty)
+    }
+
     private func makeFixture() throws -> (chatStore: SQLiteMeetingChatStore, syncRepo: MeetingChatSyncRepository, url: URL) {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("muesli-chat-sync-\(UUID().uuidString).db")

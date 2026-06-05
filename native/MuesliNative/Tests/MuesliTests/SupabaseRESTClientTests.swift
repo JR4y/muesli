@@ -88,9 +88,11 @@ struct SupabaseRESTClientTests {
         try await client.purgeDeletedSyncRows()
 
         let requests = recorder.requests
-        #expect(requests.count == 3)
-        #expect(requests.map(\.httpMethod) == ["DELETE", "DELETE", "DELETE"])
+        #expect(requests.count == 5)
+        #expect(requests.map(\.httpMethod) == ["DELETE", "DELETE", "DELETE", "DELETE", "DELETE"])
         #expect(requests.map { $0.url?.path } == [
+            "/rest/v1/meeting_chat_messages",
+            "/rest/v1/meeting_chat_threads",
             "/rest/v1/meetings",
             "/rest/v1/dictations",
             "/rest/v1/meeting_folders",

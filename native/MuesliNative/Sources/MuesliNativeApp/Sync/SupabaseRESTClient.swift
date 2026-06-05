@@ -243,7 +243,7 @@ final class SupabaseRESTClient {
     }
 
     func purgeDeletedSyncRows() async throws {
-        for table in ["meetings", "dictations", "meeting_folders"] {
+        for table in ["meeting_chat_messages", "meeting_chat_threads", "meetings", "dictations", "meeting_folders"] {
             try await sendDelete(
                 path: table,
                 query: [URLQueryItem(name: "deleted_at", value: "not.is.null")]
@@ -440,6 +440,19 @@ final class SupabaseRESTClient {
             URLQueryItem(name: "remote_version", value: "eq.\(expectedVersion)"),
         ]
         let data = try await sendUpdate(path: "meeting_chat_threads", query: query, body: body)
+        guard let row = try Self.firstObject(from: data) else { return nil }
+        return Self.parseMeetingChatThread(row)
+    }
+
+    func fetchMeetingChatThread(remoteID: String) async throws -> RemoteMeetingChatThreadPayload? {
+        let data = try await get(
+            path: "meeting_chat_threads",
+            query: [
+                URLQueryItem(name: "id", value: "eq.\(remoteID)"),
+                URLQueryItem(name: "select", value: "*"),
+                URLQueryItem(name: "limit", value: "1"),
+            ]
+        )
         guard let row = try Self.firstObject(from: data) else { return nil }
         return Self.parseMeetingChatThread(row)
     }

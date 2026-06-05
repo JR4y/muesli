@@ -275,6 +275,32 @@ final class MeetingChatSyncRepository {
         try recordDelete(entityKind: .thread, localID: localID.uuidString)
     }
 
+    func markTombstoneSynced(
+        entityKind: MeetingChatSyncEntityKind,
+        localID: String,
+        lastKnownRemoteVersion: Int64
+    ) throws {
+        try migrateIfNeeded()
+        try withDB { db in
+            try exec(
+                """
+                UPDATE meeting_chat_sync_tombstones
+                SET dirty = 0, last_known_remote_version = ?, updated_at = datetime('now')
+                WHERE entity_kind = ? AND local_id = ?
+                """,
+                params: [String(lastKnownRemoteVersion), entityKind.rawValue, localID],
+                db: db
+            )
+        }
+    }
+
+    func clearTombstone(entityKind: MeetingChatSyncEntityKind, localID: String) throws {
+        try migrateIfNeeded()
+        try withDB { db in
+            try clearTombstone(entityKind: entityKind, localID: localID, db: db)
+        }
+    }
+
     func applyRemoteThread(_ payload: RemoteMeetingChatThreadPayload) throws {
         try migrateIfNeeded()
         try withDB { db in

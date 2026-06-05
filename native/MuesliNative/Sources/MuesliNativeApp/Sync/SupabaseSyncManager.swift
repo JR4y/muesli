@@ -200,6 +200,8 @@ actor SupabaseSyncManager {
             try await uploadTombstones(rest: rest, entityType: .meeting)
             try await uploadTombstones(rest: rest, entityType: .dictation)
             try await uploadTombstones(rest: rest, entityType: .folder)
+            try await uploadMeetingChatTombstones(rest: rest, userID: userID, entityKind: .message)
+            try await uploadMeetingChatTombstones(rest: rest, userID: userID, entityKind: .thread)
 
             try repo.purgeCleanTombstones(olderThanDays: 30)
 
@@ -987,6 +989,54 @@ actor SupabaseSyncManager {
                 localID: tombstone.localID,
                 lastKnownRemoteVersion: tombstone.lastKnownRemoteVersion + 1
             )
+        }
+    }
+
+    private func uploadMeetingChatTombstones(
+        rest: SupabaseRESTClient,
+        userID: String,
+        entityKind: MeetingChatSyncEntityKind
+    ) async throws {
+        let tombstones = try chatRepo.dirtyTombstones(entityKind: entityKind, limit: pageSize)
+        let deviceID = try repo.ensureDeviceID()
+        for tombstone in tombstones {
+            guard let remoteID = tombstone.remoteID, !remoteID.isEmpty else {
+                try chatRepo.clearTombstone(entityKind: entityKind, localID: tombstone.localID)
+                continue
+            }
+            switch entityKind {
+            case .thread:
+                guard let existing = try await rest.fetchMeetingChatThread(remoteID: remoteID) else {
+                    try chatRepo.markTombstoneSynced(
+                        entityKind: entityKind,
+                        localID: tombstone.localID,
+                        lastKnownRemoteVersion: tombstone.lastKnownRemoteVersion
+                    )
+                    continue
+                }
+                let remote = try await rest.upsertMeetingChatThread(
+                    remoteID: remoteID,
+                    userID: userID,
+                    scopeKind: existing.scopeKind,
+                    scopeRemoteID: existing.scopeRemoteID,
+                    title: existing.title,
+                    summary: existing.summary,
+                    clientUpdatedAt: tombstone.clientDeletedAt,
+                    deviceID: deviceID,
+                    deletedAt: tombstone.clientDeletedAt
+                )
+                try chatRepo.markTombstoneSynced(
+                    entityKind: entityKind,
+                    localID: tombstone.localID,
+                    lastKnownRemoteVersion: remote.remoteVersion
+                )
+            case .message:
+                try chatRepo.markTombstoneSynced(
+                    entityKind: entityKind,
+                    localID: tombstone.localID,
+                    lastKnownRemoteVersion: tombstone.lastKnownRemoteVersion
+                )
+            }
         }
     }
 
