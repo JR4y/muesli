@@ -1,5 +1,6 @@
 import Foundation
 import MuesliCore
+import MuesliMeetingChat
 
 enum SupabaseRESTError: Error, LocalizedError {
     case notConfigured
@@ -370,6 +371,144 @@ final class SupabaseRESTClient {
         return Self.parseMeeting(row)
     }
 
+    // MARK: - Meeting Chat
+
+    func selectMeetingChatThreads(after cursor: SyncCursor?, limit: Int) async throws -> [RemoteMeetingChatThreadPayload] {
+        let items = try await selectPage(table: "meeting_chat_threads", after: cursor, limit: limit)
+        return items.compactMap { Self.parseMeetingChatThread($0) }
+    }
+
+    func selectMeetingChatMessages(after cursor: SyncCursor?, limit: Int) async throws -> [RemoteMeetingChatMessagePayload] {
+        let items = try await selectPage(table: "meeting_chat_messages", after: cursor, limit: limit)
+        return items.compactMap { Self.parseMeetingChatMessage($0) }
+    }
+
+    func upsertMeetingChatThread(
+        remoteID: String?,
+        userID: String,
+        scopeKind: String,
+        scopeRemoteID: String,
+        title: String,
+        summary: String,
+        clientUpdatedAt: String,
+        deviceID: String,
+        deletedAt: String?
+    ) async throws -> RemoteMeetingChatThreadPayload {
+        var body: [String: Any] = [
+            "user_id": userID,
+            "scope_kind": scopeKind,
+            "scope_id": scopeRemoteID,
+            "title": title,
+            "summary": summary,
+            "client_updated_at": clientUpdatedAt,
+            "last_writer_device_id": deviceID,
+            "deleted_at": deletedAt as Any? ?? NSNull(),
+        ]
+        if let remoteID {
+            body["id"] = remoteID
+        }
+        let data = try await sendUpsert(path: "meeting_chat_threads", body: body)
+        guard let row = try Self.firstObject(from: data),
+              let thread = Self.parseMeetingChatThread(row) else {
+            throw SupabaseRESTError.decoding(message: "missing meeting chat thread row")
+        }
+        return thread
+    }
+
+    func updateMeetingChatThread(
+        remoteID: String,
+        expectedVersion: Int64,
+        scopeKind: String,
+        scopeRemoteID: String,
+        title: String,
+        summary: String,
+        clientUpdatedAt: String,
+        deviceID: String,
+        deletedAt: String?
+    ) async throws -> RemoteMeetingChatThreadPayload? {
+        let body: [String: Any] = [
+            "scope_kind": scopeKind,
+            "scope_id": scopeRemoteID,
+            "title": title,
+            "summary": summary,
+            "client_updated_at": clientUpdatedAt,
+            "last_writer_device_id": deviceID,
+            "deleted_at": deletedAt as Any? ?? NSNull(),
+        ]
+        let query: [URLQueryItem] = [
+            URLQueryItem(name: "id", value: "eq.\(remoteID)"),
+            URLQueryItem(name: "remote_version", value: "eq.\(expectedVersion)"),
+        ]
+        let data = try await sendUpdate(path: "meeting_chat_threads", query: query, body: body)
+        guard let row = try Self.firstObject(from: data) else { return nil }
+        return Self.parseMeetingChatThread(row)
+    }
+
+    func upsertMeetingChatMessage(
+        remoteID: String?,
+        userID: String,
+        threadRemoteID: String,
+        role: MeetingChatRole,
+        content: String,
+        sources: [MeetingChatSource],
+        createdAt: String,
+        clientUpdatedAt: String,
+        deviceID: String,
+        deletedAt: String?
+    ) async throws -> RemoteMeetingChatMessagePayload {
+        var body: [String: Any] = [
+            "user_id": userID,
+            "thread_id": threadRemoteID,
+            "role": role.rawValue,
+            "content": content,
+            "sources_json": Self.meetingChatSourcesJSON(sources),
+            "created_at": createdAt,
+            "client_updated_at": clientUpdatedAt,
+            "last_writer_device_id": deviceID,
+            "deleted_at": deletedAt as Any? ?? NSNull(),
+        ]
+        if let remoteID {
+            body["id"] = remoteID
+        }
+        let data = try await sendUpsert(path: "meeting_chat_messages", body: body)
+        guard let row = try Self.firstObject(from: data),
+              let message = Self.parseMeetingChatMessage(row) else {
+            throw SupabaseRESTError.decoding(message: "missing meeting chat message row")
+        }
+        return message
+    }
+
+    func updateMeetingChatMessage(
+        remoteID: String,
+        expectedVersion: Int64,
+        threadRemoteID: String,
+        role: MeetingChatRole,
+        content: String,
+        sources: [MeetingChatSource],
+        createdAt: String,
+        clientUpdatedAt: String,
+        deviceID: String,
+        deletedAt: String?
+    ) async throws -> RemoteMeetingChatMessagePayload? {
+        let body: [String: Any] = [
+            "thread_id": threadRemoteID,
+            "role": role.rawValue,
+            "content": content,
+            "sources_json": Self.meetingChatSourcesJSON(sources),
+            "created_at": createdAt,
+            "client_updated_at": clientUpdatedAt,
+            "last_writer_device_id": deviceID,
+            "deleted_at": deletedAt as Any? ?? NSNull(),
+        ]
+        let query: [URLQueryItem] = [
+            URLQueryItem(name: "id", value: "eq.\(remoteID)"),
+            URLQueryItem(name: "remote_version", value: "eq.\(expectedVersion)"),
+        ]
+        let data = try await sendUpdate(path: "meeting_chat_messages", query: query, body: body)
+        guard let row = try Self.firstObject(from: data) else { return nil }
+        return Self.parseMeetingChatMessage(row)
+    }
+
     // MARK: - Preferences
 
     func fetchPreferences(userID: String) async throws -> RemotePreferencesPayload? {
@@ -684,6 +823,82 @@ final class SupabaseRESTClient {
             lastWriterDeviceID: deviceID,
             deletedAt: deletedAt
         )
+    }
+
+    private static func parseMeetingChatThread(_ row: [String: Any]) -> RemoteMeetingChatThreadPayload? {
+        guard let id = row["id"] as? String,
+              let scopeKind = row["scope_kind"] as? String,
+              let scopeRemoteID = row["scope_id"] as? String,
+              let title = row["title"] as? String,
+              let clientUpdatedAt = row["client_updated_at"] as? String,
+              let serverUpdatedAt = row["server_updated_at"] as? String,
+              let deviceID = row["last_writer_device_id"] as? String else {
+            return nil
+        }
+        let summary = (row["summary"] as? String) ?? ""
+        let remoteVersion = (row["remote_version"] as? Int64) ?? Int64((row["remote_version"] as? Int) ?? 1)
+        let deletedAt = row["deleted_at"] as? String
+        return RemoteMeetingChatThreadPayload(
+            remoteID: id,
+            scopeKind: scopeKind,
+            scopeRemoteID: scopeRemoteID,
+            title: title,
+            summary: summary,
+            clientUpdatedAt: clientUpdatedAt,
+            serverUpdatedAt: serverUpdatedAt,
+            remoteVersion: remoteVersion,
+            lastWriterDeviceID: deviceID,
+            deletedAt: deletedAt
+        )
+    }
+
+    private static func parseMeetingChatMessage(_ row: [String: Any]) -> RemoteMeetingChatMessagePayload? {
+        guard let id = row["id"] as? String,
+              let threadRemoteID = row["thread_id"] as? String,
+              let rawRole = row["role"] as? String,
+              let role = MeetingChatRole(rawValue: rawRole),
+              let content = row["content"] as? String,
+              let createdAt = row["created_at"] as? String,
+              let clientUpdatedAt = row["client_updated_at"] as? String,
+              let serverUpdatedAt = row["server_updated_at"] as? String,
+              let deviceID = row["last_writer_device_id"] as? String else {
+            return nil
+        }
+        let sources = parseMeetingChatSources(row["sources_json"])
+        let remoteVersion = (row["remote_version"] as? Int64) ?? Int64((row["remote_version"] as? Int) ?? 1)
+        let deletedAt = row["deleted_at"] as? String
+        return RemoteMeetingChatMessagePayload(
+            remoteID: id,
+            threadRemoteID: threadRemoteID,
+            role: role,
+            content: content,
+            sources: sources,
+            createdAt: createdAt,
+            clientUpdatedAt: clientUpdatedAt,
+            serverUpdatedAt: serverUpdatedAt,
+            remoteVersion: remoteVersion,
+            lastWriterDeviceID: deviceID,
+            deletedAt: deletedAt
+        )
+    }
+
+    private static func meetingChatSourcesJSON(_ sources: [MeetingChatSource]) -> [[String: Any]] {
+        sources.map { source in
+            [
+                "meetingID": NSNumber(value: source.meetingID),
+                "title": source.title,
+                "startTime": source.startTime,
+            ]
+        }
+    }
+
+    private static func parseMeetingChatSources(_ object: Any?) -> [MeetingChatSource] {
+        guard let object, !(object is NSNull),
+              let data = try? JSONSerialization.data(withJSONObject: object),
+              let sources = try? JSONDecoder().decode([MeetingChatSource].self, from: data) else {
+            return []
+        }
+        return sources
     }
 
     private static func parsePreferences(_ row: [String: Any]) -> RemotePreferencesPayload? {
