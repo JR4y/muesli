@@ -117,6 +117,38 @@ struct MeetingChatSyncRepositoryTests {
         #expect(tombstones[0].lastKnownRemoteVersion == 4)
     }
 
+    @Test("dirty thread exposes nil scope remote id until meeting is synced")
+    func dirtyThreadWaitsForScopeRemoteID() throws {
+        let fixture = try makeFixtureWithDictationStore()
+        let meetingID = try fixture.store.insertMeeting(
+            title: "Unsynced Meeting",
+            calendarEventID: nil,
+            startTime: Date(timeIntervalSince1970: 1_780_000_000),
+            endTime: Date(timeIntervalSince1970: 1_780_000_060),
+            rawTranscript: "",
+            formattedNotes: "",
+            micAudioPath: nil,
+            systemAudioPath: nil
+        )
+        _ = try fixture.chatStore.loadThread(scope: .meeting(meetingID), title: "Unsynced Meeting")
+
+        let before = try fixture.chatSyncRepo.dirtyThreads(limit: 10)
+        #expect(before.first?.scopeRemoteID == nil)
+
+        try fixture.localSyncRepo.markMeetingSynced(
+            localID: meetingID,
+            remoteID: "meeting-remote",
+            remoteVersion: 1,
+            clientUpdatedAt: "2026-06-05T10:00:00.000Z",
+            serverUpdatedAt: "2026-06-05T10:00:00.000Z",
+            payloadHash: "meeting-hash",
+            lastWriterDeviceID: "device-a"
+        )
+
+        let after = try fixture.chatSyncRepo.dirtyThreads(limit: 10)
+        #expect(after.first?.scopeRemoteID == "meeting-remote")
+    }
+
     private func makeFixture() throws -> (chatStore: SQLiteMeetingChatStore, syncRepo: MeetingChatSyncRepository, url: URL) {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("muesli-chat-sync-\(UUID().uuidString).db")
@@ -133,5 +165,25 @@ struct MeetingChatSyncRepositoryTests {
         try chatStore.migrateIfNeeded()
         let syncRepo = MeetingChatSyncRepository(databaseURL: url)
         return (chatStore, syncRepo, url)
+    }
+
+    private func makeFixtureWithDictationStore() throws -> (
+        store: DictationStore,
+        localSyncRepo: LocalSyncRepository,
+        chatStore: SQLiteMeetingChatStore,
+        chatSyncRepo: MeetingChatSyncRepository,
+        url: URL
+    ) {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("muesli-chat-scope-sync-\(UUID().uuidString).db")
+        let store = DictationStore(databaseURL: url)
+        try store.migrateIfNeeded()
+        let localSyncRepo = LocalSyncRepository(databaseURL: url)
+        try localSyncRepo.migrateIfNeeded()
+        let chatSyncRepo = MeetingChatSyncRepository(databaseURL: url, localSyncRepository: localSyncRepo)
+        let chatStore = SQLiteMeetingChatStore(databaseURL: url, syncRepository: chatSyncRepo)
+        try chatStore.migrateIfNeeded()
+        try chatSyncRepo.migrateIfNeeded()
+        return (store, localSyncRepo, chatStore, chatSyncRepo, url)
     }
 }

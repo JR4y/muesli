@@ -5,6 +5,7 @@ import SQLite3
 
 final class MeetingChatSyncRepository {
     private let databaseURL: URL
+    private let localSyncRepository: LocalSyncRepository?
     private let decoder = JSONDecoder()
     private let dateFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
@@ -12,8 +13,9 @@ final class MeetingChatSyncRepository {
         return formatter
     }()
 
-    init(databaseURL: URL) {
+    init(databaseURL: URL, localSyncRepository: LocalSyncRepository? = nil) {
         self.databaseURL = databaseURL
+        self.localSyncRepository = localSyncRepository
     }
 
     func migrateIfNeeded() throws {
@@ -88,7 +90,7 @@ final class MeetingChatSyncRepository {
                         metadata: metadata,
                         thread: thread,
                         scopeKind: stringColumn(statement, index: 1),
-                        scopeRemoteID: nil
+                        scopeRemoteID: try remoteID(for: thread.scope)
                     )
                 )
             }
@@ -385,6 +387,16 @@ final class MeetingChatSyncRepository {
             dirty: sqlite3_column_int(statement, baseColumn + 5) != 0,
             lastWriterDeviceID: optionalStringColumn(statement, index: baseColumn + 6)
         )
+    }
+
+    private func remoteID(for scope: MeetingChatScope) throws -> String? {
+        guard let localSyncRepository else { return nil }
+        switch scope {
+        case let .meeting(id):
+            return try localSyncRepository.remoteID(forLocalID: id, entityType: .meeting)
+        case let .folder(id):
+            return try localSyncRepository.remoteID(forLocalID: id, entityType: .folder)
+        }
     }
 
     private func withDB<T>(_ body: (OpaquePointer?) throws -> T) throws -> T {
