@@ -1,5 +1,6 @@
 import SwiftUI
 import MuesliCore
+import MuesliMeetingChat
 
 private enum MeetingDocumentMode: Hashable {
     case notes
@@ -460,7 +461,7 @@ struct MeetingDetailView: View {
             .padding(.bottom, 24)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         } else {
-            VStack(alignment: .leading, spacing: MuesliTheme.spacing12) {
+            VStack(alignment: .center, spacing: MuesliTheme.spacing12) {
                 eventSnapshotSection(for: meeting)
                 mergedSourceSection(for: meeting)
                 contentToolbar(for: meeting)
@@ -481,6 +482,19 @@ struct MeetingDetailView: View {
                         .accessibilityHidden(documentMode != .transcript)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+                if MeetingChatMountPolicy.showsMeetingChat(for: meeting) {
+                    MeetingChatPanel(
+                        scope: .meeting(meeting.id),
+                        meetings: [meeting],
+                        folders: appState.folders,
+                        config: appState.config,
+                        isChatGPTAuthenticated: appState.isChatGPTAuthenticated,
+                        chatStore: appState.meetingChatStore,
+                        placeholder: L10n.text(.meetingChatPlaceholderMeeting, config: appState.config),
+                        onOpenMeeting: { id in controller.showMeetingDocument(id: id) }
+                    )
+                }
             }
             .frame(maxWidth: 1080, maxHeight: .infinity, alignment: .topLeading)
             .padding(.horizontal, 40)

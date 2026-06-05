@@ -8,7 +8,7 @@ It is intended to serve three purposes at once:
 - make it easy to resume work without losing context
 - prepare a clean base for future beta release notes and README feature updates
 
-Last updated: `2026-06-02`
+Last updated: `2026-06-05`
 Working branch: `beta`
 Dev app: `muesli-beta.app`
 
@@ -27,6 +27,104 @@ Git workflow currently documented and aligned:
 - `main` is reserved as the stable product branch
 
 ## Incremental history
+
+### 2026-06-05
+
+This pass tightened the Meeting Chat visual integration in meeting detail after
+real beta review showed that the associated event card felt offset from the
+rest of the detail content.
+
+#### Meeting detail alignment
+
+- the normal completed-meeting detail stack now centers its classic detail
+  column inside the wider chat-aware container
+- the associated event block, merged-source block, and document toolbar keep
+  their established detail width while no longer appearing visually loaded to
+  the left
+- the wider container remains available for the bottom Meeting Chat overlay, so
+  the chat can still expand without forcing the event/notes column to stretch
+  unnaturally
+
+#### Verification and local beta install
+
+- focused `MeetingDetailViewTests` passed with `7 tests in 1 suite`
+- debug SwiftPM build passed
+- the validated build was reinstalled through `./scripts/beta-test.sh` as
+  `/Applications/muesli-beta.app`
+
+### 2026-06-04
+
+This pass introduced the first modular Meeting Chat MVP and then hardened it
+with local persistence and bounded context behavior so it can be tested as a
+real project/workspace assistant without becoming tightly coupled to upstream
+screens.
+
+#### Modular Meeting Chat MVP
+
+- a new `MuesliMeetingChat` SwiftPM target now owns the feature's core chat
+  types, context building, provider protocol, source references, memory policy,
+  and storage-facing abstractions
+- `MuesliNativeApp` only mounts the chat through thin integration points under
+  `MeetingChatIntegration`
+- meeting detail now exposes a compact bottom chat panel for completed meetings
+- selected-folder meeting home now exposes a compact bottom chat panel for that
+  folder/workspace
+- assistant responses can include source chips that navigate back to referenced
+  meetings
+- the first version remains read-only: it does not edit notes, create tasks,
+  move meetings, or mutate meeting/folder data
+
+#### Local chat persistence
+
+- meeting and folder chats now persist locally in SQLite through
+  `SQLiteMeetingChatStore`
+- persistence is scoped by `meeting(id)` or `folder(id)`, so meeting and folder
+  chats do not mix even when they share the same numeric id
+- user messages, assistant messages, error messages, timestamps, and source
+  references are stored locally
+- the chat panel restores its messages when returning to the same meeting or
+  folder
+- a compact clear-chat action removes only the visible scope's local thread
+- no Supabase sync or remote chat history was added in this iteration
+
+#### Context and provider behavior
+
+- provider calls remain stateless: each request sends selected meeting/folder
+  context, bounded chat memory, and the current question
+- the app does not rely on ChatGPT remembering a remote conversation
+- ChatGPT OAuth remains the preferred provider when authenticated, using the
+  same internal ChatGPT/WHAM path already used by the fork for summaries
+- configured OpenAI/OpenRouter/Ollama/LM Studio/custom providers remain
+  fallbacks where available
+- ChatGPT WHAM calls use `store: false`; official OpenAI Responses chat calls
+  now also set `store: false`
+- chat memory is bounded by recent messages plus a compact local summary of
+  older messages when needed
+- meeting context includes notes and manual notes by default, and includes
+  transcript only when notes are missing or the user asks for detail, quotes,
+  who said something, objections, exact wording, or transcript lookup
+- folder context prioritizes recent non-merged meetings in the selected folder
+  tree and does not send every transcript by default
+
+#### Roadmap implications
+
+- folders are now starting to act like project workspaces: they contain
+  meetings and have their own local chat surface
+- the current context strategy is intentionally deterministic and conservative,
+  which makes the MVP testable but not yet a full project-memory system
+- the next important product step is better project intelligence over folders:
+  persistent folder memory, relevance-based retrieval, and bias/risk analysis
+  across multiple meetings
+- the next important technical step is improving context selection before
+  adding write actions or broader agentic behavior
+
+#### Verification and local beta install
+
+- focused chat tests passed with `15 tests in 4 suites`
+- the full native test suite passed with `1019 tests in 122 suites`
+- debug SwiftPM build passed
+- the validated build was installed through `./scripts/beta-test.sh` as
+  `/Applications/muesli-beta.app`
 
 ### 2026-06-02
 

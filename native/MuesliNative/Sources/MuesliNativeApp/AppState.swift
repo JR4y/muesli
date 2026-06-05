@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import MuesliCore
+import MuesliMeetingChat
 
 enum DashboardTab: String, CaseIterable {
     case dictations
@@ -72,6 +73,8 @@ enum GoogleCalendarListLoadState: Equatable {
 @MainActor
 @Observable
 final class AppState {
+    @ObservationIgnored var meetingChatStore: (any MeetingChatStoring)?
+
     // Dashboard data
     var dictationRows: [DictationRecord] = []
     var meetingRows: [MeetingRecord] = []

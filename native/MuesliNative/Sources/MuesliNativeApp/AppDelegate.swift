@@ -84,7 +84,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             self.supabaseSyncManager = syncManager
             controller.syncManager = syncManager
-            Task { await syncManager.start() }
+            controller.syncAppState()
+            Task {
+                await syncManager.start()
+                await MainActor.run { controller.syncAppState() }
+            }
         } catch {
             let alert = NSAlert()
             alert.messageText = "\(AppIdentity.displayName) failed to start"

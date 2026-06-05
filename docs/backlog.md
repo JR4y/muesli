@@ -15,6 +15,7 @@ Branch model reference:
 - Add bilingual support (`es` and `en`)
 - Reduce English-only hardcoded copy in the UI
 - Improve the summary experience and output quality
+- Evolve Meeting Chat into a reliable project/workspace assistant
 - Keep changes as upstream-friendly as possible
 
 ## Progress snapshot
@@ -40,6 +41,7 @@ Completed or largely completed:
 - Future meetings now persist associated calendar event snapshots
 - Event snapshots now include attendee data and are shown in meeting detail
 - The associated event block in meeting detail now supports collapse/expand for dense attendee lists
+- The associated event block now stays visually aligned with the completed meeting detail column even though the chat-aware detail surface is wider
 - `Coming Up` join-and-record now associates the selected calendar event immediately
 - Manual written notes now render as a localized top-level `Notes` / `Notas` section
 - Calendar popup flows now normalize malformed event ids and repair reuse paths instead of duplicating meetings
@@ -60,7 +62,16 @@ Completed or largely completed:
 - Live meeting transcript is now isolated behind a real `Settings → Meetings → Live transcript` toggle instead of being an always-on behavior
 - Meeting detail now renders the final transcript as a chat-style conversation while keeping `rawTranscript` as the storage/export source of truth
 - Meeting detail now keeps notes/transcript visibility consistent, uses a cleaner action hierarchy in completed meetings, and defaults the associated event block to a denser collapsed presentation
+- Meeting detail now centers the classic notes/event column within the wider chat-aware detail container, avoiding a left-heavy associated-event card
 - Supabase beta builds now fail fast if local config is missing, and the sync UI keeps the last-used email available locally without storing the password
+- First modular Meeting Chat MVP exists behind a new `MuesliMeetingChat` target,
+  with thin app adapters under `MeetingChatIntegration`
+- Meeting and selected-folder chats now persist locally in SQLite, restore when
+  navigating back to the same scope, and can be cleared per scope
+- Meeting Chat provider calls remain stateless and bounded: current context,
+  recent messages, compact local memory, and no remote chat persistence
+- Meeting Chat context now prefers notes/manual notes and uses transcript only
+  when missing notes or explicit detail/transcript questions require it
 
 Known limitation:
 
@@ -69,6 +80,12 @@ Known limitation:
 - AppKit titlebar accessories remain vertically constrained by the native
   titlebar lane, so expressive primary actions are a better fit in content than
   in the titlebar
+- Meeting Chat currently uses deterministic recent-context selection rather
+  than semantic retrieval, so folder/project chats are useful for recent
+  meeting context but not yet comprehensive project intelligence
+- Meeting Chat history is local-only and not synced through Supabase
+- ChatGPT subscription usage relies on the internal ChatGPT/WHAM endpoint used
+  by the fork for summaries, not on a public API stability contract
 
 ## Principles
 
@@ -76,6 +93,8 @@ Known limitation:
 - Isolate fork-specific behavior where possible
 - Resolve integration issues in `beta`
 - Avoid large structural divergence unless the existing UX proves too rigid
+- Keep Meeting Chat read-only until retrieval, source grounding, and local
+  persistence prove reliable in daily beta use
 
 ## Now
 
@@ -184,6 +203,94 @@ Notes:
 - the meeting detail action area is cleaner than before, but it should still be watched in real usage to confirm the final control grouping feels stable
 - the new titlebar shell solved duplication and position drift for the sidebar toggle; the next UX validation should focus on whether `Nota rápida` and `Import Audio` now feel balanced inside the meetings surface
 - transcript viewing is now visually stronger thanks to the shared chat-style transcript UI, so the next UX work should focus more on live quality and interaction behavior than on transcript styling basics
+
+### 5a. Meeting Chat and project intelligence
+
+Goal:
+turn folders into useful project/workspace surfaces where Muesli can answer
+questions across meetings, identify risks, and help spot recurring bias without
+sending excessive transcript context on every request.
+
+Current MVP:
+
+- chat is mounted on completed meeting detail and selected-folder meeting home
+- chat history persists locally per meeting or folder
+- provider calls are stateless and use bounded context
+- source chips link assistant answers back to referenced meetings
+- meeting-detail chat uses a wider host container while the notes/event column
+  remains centered at the established detail width
+- no write actions, task creation, note editing, or folder mutations are
+  available from chat
+
+Priority roadmap:
+
+1. Project/folder memory
+   - maintain a local folder-level memory summary that accumulates stable
+     decisions, risks, open questions, recurring assumptions, and stakeholder
+     positions across meetings
+   - keep this separate from meeting summaries so it can evolve without
+     rewriting meeting records
+   - refresh memory incrementally when relevant meetings change
+
+2. Relevance-based context retrieval
+   - stop relying only on "recent meetings" for folder chat
+   - choose candidate meetings based on title, notes, manual notes, dates, and
+     eventually transcript snippets
+   - keep hard caps on selected meetings and characters so cost and latency are
+     predictable
+
+3. Bias/risk analysis mode
+   - add a prompt mode for project review questions such as bias, blind spots,
+     repeated assumptions, unchallenged decisions, and stakeholder imbalance
+   - require answers to cite meetings as sources instead of producing generic
+     coaching text
+   - prefer summaries/manual notes first, then retrieve transcript excerpts only
+     when evidence is needed
+
+4. Transcript evidence retrieval
+   - for folder chat, never send every transcript by default
+   - identify candidate meetings first, then include bounded transcript excerpts
+     for explicit quote/detail questions
+   - consider a two-step answer flow later: answer from notes first, then ask
+     for transcript evidence only if needed
+
+5. Real local thread summaries
+   - replace the current compact transcript-style fallback memory with a real
+     summarization pass for older chat turns
+   - store that summary in the local chat thread row
+   - keep the provider request bounded to local summary plus recent turns
+
+6. Chat management UX
+   - add clearer affordances for thread state: last updated, clear/reset, and
+     possibly "new chat for this scope"
+   - keep the default panel compact so it does not compete with the meeting
+     notes/transcript surface
+   - review Spanish/English copy for the chat panel once the interaction model
+     stabilizes
+
+7. Sync and portability
+   - decide whether chat history should stay device-local or sync through
+     Supabase
+   - if synced, treat chat as a separate optional entity so meeting sync remains
+     stable and upstream-friendly
+   - do not sync raw provider prompts unless there is a clear privacy/product
+     reason
+
+8. Agentic actions
+   - only after retrieval and grounding are stable, consider controlled actions
+     such as draft tasks, suggested follow-ups, or proposed note edits
+   - keep all actions confirm-before-write
+   - preserve a read-only default mode for project analysis
+
+Notes:
+
+- the highest-value near-term use case is project review, not generic chat
+- folders should become workspace/project containers, but this should happen
+  through modular chat/context services rather than by overloading folder models
+- ChatGPT subscription support remains useful for local beta testing, but the
+  internal endpoint should be treated as experimental
+- official OpenAI API support should remain available as the stable provider
+  path, even though it is billed separately from ChatGPT subscriptions
 
 ### 5b. Shortcut system consolidation
 

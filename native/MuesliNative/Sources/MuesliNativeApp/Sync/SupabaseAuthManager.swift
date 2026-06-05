@@ -9,6 +9,7 @@ enum SupabaseAuthError: Error, LocalizedError {
     case decodingFailure(message: String)
     case serverError(status: Int, message: String)
     case noActiveSession
+    case persistenceFailure(message: String)
 
     var errorDescription: String? {
         switch self {
@@ -26,6 +27,8 @@ enum SupabaseAuthError: Error, LocalizedError {
             return "Supabase returned \(status): \(message)"
         case .noActiveSession:
             return "Not signed in to Supabase."
+        case .persistenceFailure(let message):
+            return "Could not save Supabase session: \(message)"
         }
     }
 }
@@ -38,8 +41,69 @@ struct SupabaseSession: Sendable, Equatable {
     var email: String?
 }
 
+struct SupabaseAuthSessionStore {
+    let fileURL: URL
+
+    init(fileURL: URL = AppIdentity.supportDirectoryURL.appendingPathComponent("supabase-auth.json")) {
+        self.fileURL = fileURL
+    }
+
+    func load() throws -> SupabaseSession? {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return nil }
+        let data = try Data(contentsOf: fileURL)
+        let payload = try JSONDecoder().decode(Payload.self, from: data)
+        return payload.session
+    }
+
+    func save(_ session: SupabaseSession) throws {
+        let directory = fileURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let data = try JSONEncoder().encode(Payload(session: session))
+        try data.write(to: fileURL, options: [.atomic])
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
+    }
+
+    func delete() {
+        try? FileManager.default.removeItem(at: fileURL)
+    }
+
+    private struct Payload: Codable {
+        var accessToken: String
+        var refreshToken: String
+        var expiresAt: String
+        var userID: String
+        var email: String?
+
+        init(session: SupabaseSession) {
+            accessToken = session.accessToken
+            refreshToken = session.refreshToken
+            expiresAt = SupabaseAuthDateFormatter.format(session.expiresAt)
+            userID = session.userID
+            email = session.email
+        }
+
+        var session: SupabaseSession? {
+            guard
+                !refreshToken.isEmpty,
+                !userID.isEmpty,
+                let parsedExpiresAt = SupabaseAuthDateFormatter.parse(expiresAt)
+            else {
+                return nil
+            }
+            return SupabaseSession(
+                accessToken: accessToken,
+                refreshToken: refreshToken,
+                expiresAt: parsedExpiresAt,
+                userID: userID,
+                email: email
+            )
+        }
+    }
+}
+
 /// Owns the Supabase user session: signup, signin, refresh, signout. Persists
-/// the session in the Keychain. Pure REST against Supabase Auth — no SDK.
+/// the session in app support and mirrors it to Keychain. Pure REST against
+/// Supabase Auth — no SDK.
 @MainActor
 @Observable
 final class SupabaseAuthManager {
@@ -52,6 +116,7 @@ final class SupabaseAuthManager {
 
     private let config: SupabaseConfig?
     private let keychain: SupabaseKeychainStore
+    private let sessionStore: SupabaseAuthSessionStore
     private let session: URLSession
     private var currentSession: SupabaseSession?
     private var inFlightRefresh: Task<String, Error>?
@@ -59,12 +124,14 @@ final class SupabaseAuthManager {
     init(
         config: SupabaseConfig? = SupabaseConfig.resolve(),
         keychain: SupabaseKeychainStore = SupabaseKeychainStore(),
+        sessionStore: SupabaseAuthSessionStore = SupabaseAuthSessionStore(),
         urlSession: URLSession = .shared
     ) {
         self.config = config
         self.keychain = keychain
+        self.sessionStore = sessionStore
         self.session = urlSession
-        restoreSessionFromKeychain()
+        restoreSessionFromPersistentStorage()
     }
 
     var isConfigured: Bool { config != nil }
@@ -79,7 +146,7 @@ final class SupabaseAuthManager {
             body: payload
         )
         if let session = response.intoSession() {
-            persist(session: session)
+            try persist(session: session)
         } else {
             // Email confirmation required — no session yet.
             awaitingEmailConfirmation = true
@@ -98,13 +165,14 @@ final class SupabaseAuthManager {
             throw SupabaseAuthError.invalidCredentials(message: "Sign in did not return a session.")
         }
         awaitingEmailConfirmation = false
-        persist(session: session)
+        try persist(session: session)
     }
 
     func signOut() {
         currentSession = nil
         inFlightRefresh?.cancel()
         inFlightRefresh = nil
+        sessionStore.delete()
         keychain.wipeAll()
         isAuthenticated = false
         userID = nil
@@ -161,7 +229,7 @@ final class SupabaseAuthManager {
             guard let session = response.intoSession() else {
                 throw SupabaseAuthError.noActiveSession
             }
-            persist(session: session)
+            try persist(session: session)
             return session.accessToken
         } catch SupabaseAuthError.serverError(let status, _) where status == 400 || status == 401 {
             // Refresh token is no longer valid — local session is dead.
@@ -172,7 +240,13 @@ final class SupabaseAuthManager {
 
     // MARK: - Persistence
 
-    private func persist(session: SupabaseSession) {
+    private func persist(session: SupabaseSession) throws {
+        do {
+            try sessionStore.save(session)
+        } catch {
+            lastError = .persistenceFailure(message: error.localizedDescription)
+            throw SupabaseAuthError.persistenceFailure(message: error.localizedDescription)
+        }
         currentSession = session
         keychain.write(session.refreshToken, for: .refreshToken)
         keychain.write(session.accessToken, for: .accessToken)
@@ -190,6 +264,18 @@ final class SupabaseAuthManager {
         lastError = nil
     }
 
+    private func restoreSessionFromPersistentStorage() {
+        do {
+            if let session = try sessionStore.load() {
+                applyRestored(session: session)
+                return
+            }
+        } catch {
+            fputs("[muesli-sync] failed to restore Supabase session file: \(error)\n", stderr)
+        }
+        restoreSessionFromKeychain()
+    }
+
     private func restoreSessionFromKeychain() {
         guard
             let refresh = keychain.read(.refreshToken), !refresh.isEmpty,
@@ -201,15 +287,21 @@ final class SupabaseAuthManager {
         let expiresAtString = keychain.read(.expiresAt) ?? ""
         let expiresAt = SupabaseAuthDateFormatter.parse(expiresAtString) ?? Date(timeIntervalSince1970: 0)
         let storedEmail = keychain.read(.email)
-        currentSession = SupabaseSession(
+        let session = SupabaseSession(
             accessToken: access,
             refreshToken: refresh,
             expiresAt: expiresAt,
             userID: userID,
             email: storedEmail
         )
-        self.userID = userID
-        self.email = storedEmail
+        applyRestored(session: session)
+        try? sessionStore.save(session)
+    }
+
+    private func applyRestored(session: SupabaseSession) {
+        currentSession = session
+        userID = session.userID
+        email = session.email
         isAuthenticated = true
     }
 

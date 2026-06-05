@@ -202,6 +202,7 @@ final class MuesliController: NSObject {
     private let runtime: RuntimePaths
     private let configStore = ConfigStore()
     private let dictationStore: DictationStore
+    private let meetingChatStore: SQLiteMeetingChatStore
     private let meetingHookDispatcher: MeetingHookDispatching
     private let launchAtLoginCoordinator: LaunchAtLoginCoordinator
     let transcriptionCoordinator = TranscriptionCoordinator()
@@ -330,6 +331,7 @@ final class MuesliController: NSObject {
         self.dictationStore = dictationStore ?? DictationStore(
             databaseURL: MuesliPaths.defaultDatabaseURL(appName: AppIdentity.supportDirectoryName)
         )
+        self.meetingChatStore = SQLiteMeetingChatStore(databaseURL: self.dictationStore.resolvedDatabaseURL)
         self.meetingHookDispatcher = meetingHookDispatcher
         self.launchAtLoginCoordinator = LaunchAtLoginCoordinator(manager: launchAtLoginManager)
         self.audioDuckingController = audioDuckingController
@@ -357,6 +359,7 @@ final class MuesliController: NSObject {
         self.indicator = FloatingIndicatorController(configStore: configStore)
         ComputerUseCursorOverlay.shared.attachIndicator(self.indicator)
         super.init()
+        appState.meetingChatStore = meetingChatStore
         dictationAudioSessionManager.onEvent = { [weak self] event in
             Task { @MainActor [weak self] in
                 self?.handleDictationAudioSessionEvent(event)
@@ -377,9 +380,11 @@ final class MuesliController: NSObject {
         hasStarted = true
         do {
             try dictationStore.migrateIfNeeded()
+            try meetingChatStore.migrateIfNeeded()
         } catch {
             fputs("[muesli-native] startup error: \(error)\n", stderr)
         }
+        appState.meetingChatStore = meetingChatStore
         recoverStaleLiveMeetings()
         normalizeMeetingTranscriptionSelectionForAvailability()
         SoundController.prewarmLifecycleSounds()

@@ -8,6 +8,7 @@ let package = Package(
     ],
     products: [
         .library(name: "MuesliCore", targets: ["MuesliCore"]),
+        .library(name: "MuesliMeetingChat", targets: ["MuesliMeetingChat"]),
         .executable(name: "MuesliNativeApp", targets: ["MuesliNativeApp"]),
         .executable(name: "muesli-cli", targets: ["MuesliCLI"]),
     ],
@@ -32,10 +33,16 @@ let package = Package(
                 .linkedLibrary("sqlite3"),
             ]
         ),
+        .target(
+            name: "MuesliMeetingChat",
+            dependencies: ["MuesliCore"],
+            path: "Sources/MuesliMeetingChat"
+        ),
         .executableTarget(
             name: "MuesliNativeApp",
             dependencies: [
                 "MuesliCore",
+                "MuesliMeetingChat",
                 .product(name: "FluidAudio", package: "FluidAudio"),
                 .product(name: "LLM", package: "LLM.swift"),
                 .product(name: "WhisperKit", package: "WhisperKit"),
@@ -70,7 +77,7 @@ let package = Package(
         ),
         .testTarget(
             name: "MuesliTests",
-            dependencies: ["MuesliNativeApp", "MuesliCore", "MuesliCLI", "LocalVQEBridge"],
+            dependencies: ["MuesliNativeApp", "MuesliCore", "MuesliMeetingChat", "MuesliCLI", "LocalVQEBridge"],
             path: "Tests/MuesliTests",
             linkerSettings: [
                 .linkedLibrary("sqlite3"),

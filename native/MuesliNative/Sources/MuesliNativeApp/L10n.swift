@@ -213,6 +213,14 @@ enum L10nKey {
     case meetingLiveTranscriptToggleCollapse
     case meetingLiveTranscriptPlaceholder
     case meetingLiveChatPlaceholder
+    case meetingChatPlaceholderMeeting
+    case meetingChatPlaceholderFolder
+    case meetingChatClear
+    case meetingChatSend
+    case meetingChatMoreContext
+    case meetingChatIncludeTranscript
+    case meetingChatTranscriptNeedsMention
+    case meetingChatMentionMeeting
     case meetingMergedNotesSection
     case templateManagerTitle
     case templateManagerSubtitle
@@ -782,6 +790,22 @@ enum L10n {
             return "Live transcript will appear here as the meeting is transcribed."
         case .meetingLiveChatPlaceholder:
             return "Ask anything (coming soon)"
+        case .meetingChatPlaceholderMeeting:
+            return "Ask about Meeting"
+        case .meetingChatPlaceholderFolder:
+            return "Ask about Folder"
+        case .meetingChatClear:
+            return "Clear chat"
+        case .meetingChatSend:
+            return "Send"
+        case .meetingChatMoreContext:
+            return "Context"
+        case .meetingChatIncludeTranscript:
+            return "Include transcript"
+        case .meetingChatTranscriptNeedsMention:
+            return "Mention a meeting with @ first"
+        case .meetingChatMentionMeeting:
+            return "Mention meeting"
         case .meetingMergedNotesSection:
             return "Merged notes"
         case .templateManagerTitle:
@@ -1554,6 +1578,22 @@ enum L10n {
             return "La transcripcion en vivo aparecera aqui mientras se procesa la reunion."
         case .meetingLiveChatPlaceholder:
             return "Pregunta lo que quieras (proximamente)"
+        case .meetingChatPlaceholderMeeting:
+            return "Pregunta sobre la reunion"
+        case .meetingChatPlaceholderFolder:
+            return "Pregunta sobre la carpeta"
+        case .meetingChatClear:
+            return "Limpiar chat"
+        case .meetingChatSend:
+            return "Enviar"
+        case .meetingChatMoreContext:
+            return "Contexto"
+        case .meetingChatIncludeTranscript:
+            return "Incluir transcripcion"
+        case .meetingChatTranscriptNeedsMention:
+            return "Menciona una reunion con @ primero"
+        case .meetingChatMentionMeeting:
+            return "Mencionar reunion"
         case .meetingMergedNotesSection:
             return "Notas fusionadas"
         case .templateManagerTitle:

@@ -1,5 +1,6 @@
 import SwiftUI
 import MuesliCore
+import MuesliMeetingChat
 
 enum MeetingBrowserFilter: Hashable {
     case all, last2Days, lastWeek, last2Weeks, lastMonth, last3Months
@@ -480,6 +481,27 @@ struct MeetingsView: View {
                     )
                 )
                 .padding(.bottom, 32)
+                .frame(maxWidth: .infinity, alignment: .center)
+            }
+
+            if MeetingChatMountPolicy.showsFolderChat(
+                selectedFolderID: appState.selectedFolderID,
+                isSearchActive: appState.isSearchActive,
+                navigationState: appState.meetingsNavigationState
+            ), let folderID = appState.selectedFolderID {
+                MeetingChatPanel(
+                    scope: .folder(folderID),
+                    meetings: appState.meetingRows,
+                    folders: appState.folders,
+                    config: appState.config,
+                    isChatGPTAuthenticated: appState.isChatGPTAuthenticated,
+                    chatStore: appState.meetingChatStore,
+                    placeholder: L10n.text(.meetingChatPlaceholderFolder, config: appState.config),
+                    onOpenMeeting: { id in controller.showMeetingDocument(id: id) }
+                )
+                .frame(maxWidth: 960, alignment: .leading)
+                .padding(.horizontal, 40)
+                .padding(.bottom, 24)
                 .frame(maxWidth: .infinity, alignment: .center)
             }
         }
