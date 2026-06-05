@@ -14,16 +14,35 @@ enum DashboardTab: String, CaseIterable {
 
 enum SettingsPane: String, CaseIterable, Identifiable {
     case general
-    case dictation
-    case computerUse
+    case voiceAndDictation
     case meetings
-    case appearance
-    case dictionary
     case models
-    case shortcuts
-    case sync
+    case appearance
+
+    static let allCases: [SettingsPane] = [
+        .general,
+        .voiceAndDictation,
+        .meetings,
+        .models,
+        .appearance,
+    ]
 
     var id: String { rawValue }
+
+    func localizedTitle(config: AppConfig) -> String {
+        switch self {
+        case .general:
+            return L10n.text(.settingsPaneGeneral, config: config)
+        case .voiceAndDictation:
+            return L10n.text(.settingsPaneVoiceAndDictation, config: config)
+        case .meetings:
+            return L10n.text(.settingsPaneMeetings, config: config)
+        case .models:
+            return L10n.text(.sidebarModels, config: config)
+        case .appearance:
+            return L10n.text(.settingsPaneAppearance, config: config)
+        }
+    }
 }
 
 enum MeetingsNavigationState: Equatable {

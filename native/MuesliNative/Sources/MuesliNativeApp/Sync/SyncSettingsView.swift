@@ -4,21 +4,25 @@ import SwiftUI
 struct SyncSettingsView: View {
     let appState: AppState
     let controller: MuesliController
+    let embedded: Bool
 
     @State private var email: String = ""
     @State private var password: String = ""
     @State private var inFlight: Bool = false
     @State private var localError: String?
 
-    init(appState: AppState, controller: MuesliController) {
+    init(appState: AppState, controller: MuesliController, embedded: Bool = false) {
         self.appState = appState
         self.controller = controller
+        self.embedded = embedded
         _email = State(initialValue: Self.suggestedEmail(appState: appState))
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: MuesliTheme.spacing24) {
-            header
+            if !embedded {
+                header
+            }
 
             if !appState.supabaseSyncConfigured {
                 notConfiguredCard

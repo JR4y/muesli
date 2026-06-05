@@ -272,26 +272,7 @@ struct SettingsView: View {
     }
 
     private func paneTitle(_ pane: SettingsPane) -> String {
-        switch pane {
-        case .general:
-            return L10n.text(.settingsPaneGeneral, config: appState.config)
-        case .dictation:
-            return L10n.text(.settingsPaneDictation, config: appState.config)
-        case .computerUse:
-            return "Computer Use"
-        case .meetings:
-            return L10n.text(.settingsPaneMeetings, config: appState.config)
-        case .appearance:
-            return L10n.text(.settingsPaneAppearance, config: appState.config)
-        case .dictionary:
-            return L10n.text(.dictionaryTitle, config: appState.config)
-        case .models:
-            return L10n.text(.sidebarModels, config: appState.config)
-        case .shortcuts:
-            return L10n.text(.shortcutsTitle, config: appState.config)
-        case .sync:
-            return L10n.text(.syncTitle, config: appState.config)
-        }
+        pane.localizedTitle(config: appState.config)
     }
 
     @ViewBuilder
@@ -299,22 +280,14 @@ struct SettingsView: View {
         switch appState.selectedSettingsPane {
         case .general:
             settingsScrollPane { generalSettingsPane }
-        case .dictation:
-            settingsScrollPane { dictationSettingsPane }
-        case .computerUse:
-            settingsScrollPane { computerUseSettingsPane }
+        case .voiceAndDictation:
+            settingsScrollPane { voiceAndDictationSettingsPane }
         case .meetings:
             settingsScrollPane { meetingsSettingsPane }
-        case .appearance:
-            settingsScrollPane { appearanceSettingsPane }
-        case .dictionary:
-            DictionaryView(appState: appState, controller: controller)
         case .models:
             ModelsView(appState: appState, controller: controller)
-        case .shortcuts:
-            ShortcutsView(appState: appState, controller: controller)
-        case .sync:
-            settingsScrollPane { SyncSettingsView(appState: appState, controller: controller) }
+        case .appearance:
+            settingsScrollPane { appearanceSettingsPane }
         }
     }
 
@@ -331,7 +304,7 @@ struct SettingsView: View {
 
     private var generalSettingsPane: some View {
         VStack(alignment: .leading, spacing: MuesliTheme.spacing24) {
-            settingsSection(L10n.text(.settingsGeneralSection, config: appState.config)) {
+            settingsSection(L10n.text(.settingsSectionApplication, config: appState.config)) {
                 settingsRow(L10n.text(.settingsLanguage, config: appState.config)) {
                     settingsMenu(
                         selection: appState.config.resolvedAppLanguage.settingsLabel,
@@ -356,6 +329,18 @@ struct SettingsView: View {
                         controller.updateConfig { $0.openDashboardOnLaunch = newValue }
                     }
                 }
+            }
+
+            settingsLooseSection(L10n.text(.settingsSectionShortcuts, config: appState.config)) {
+                ShortcutsView(appState: appState, controller: controller, embedded: true)
+            }
+
+            settingsLooseSection(L10n.text(.settingsSectionSync, config: appState.config)) {
+                SyncSettingsView(appState: appState, controller: controller, embedded: true)
+            }
+
+            settingsSection("Computer Use") {
+                computerUseSettingsContent
             }
 
             permissionsSection
@@ -407,7 +392,7 @@ struct SettingsView: View {
         .padding(.bottom, MuesliTheme.spacing8)
     }
 
-    private var dictationSettingsPane: some View {
+    private var voiceAndDictationSettingsPane: some View {
         VStack(alignment: .leading, spacing: MuesliTheme.spacing24) {
             settingsSection(L10n.text(.settingsTranscriptionSection, config: appState.config)) {
                 settingsRow(L10n.text(.settingsDictationModel, config: appState.config)) {
@@ -432,7 +417,9 @@ struct SettingsView: View {
                         }
                     }
                 }
-                Divider().background(MuesliTheme.surfaceBorder)
+            }
+
+            settingsSection(L10n.text(.settingsSectionAiCleanup, config: appState.config)) {
                 settingsRow(L10n.text(.settingsAiTranscriptCleanup, config: appState.config)) {
                     settingsSwitch(isOn: appState.config.enablePostProcessor) { newValue in
                         controller.setPostProcessorEnabled(newValue)
@@ -465,6 +452,10 @@ struct SettingsView: View {
                 }
             }
 
+            settingsLooseSection(L10n.text(.dictionaryTitle, config: appState.config)) {
+                DictionaryView(appState: appState, controller: controller, embedded: true)
+            }
+
             settingsSection("Advanced") {
                 settingsRow("Pause media during dictation") {
                     settingsSwitch(isOn: appState.config.pauseMediaDuringDictation) { newValue in
@@ -472,7 +463,6 @@ struct SettingsView: View {
                     }
                 }
                 Divider().background(MuesliTheme.surfaceBorder)
-                screenContextRow(L10n.text(.settingsAppContext, config: appState.config))
                 settingsRow("Mute system audio during dictation") {
                     settingsSwitch(isOn: appState.config.muteSystemAudioDuringDictation) { newValue in
                         controller.updateConfig { $0.muteSystemAudioDuringDictation = newValue }
@@ -484,42 +474,39 @@ struct SettingsView: View {
         }
     }
 
-    private var computerUseSettingsPane: some View {
-        VStack(alignment: .leading, spacing: MuesliTheme.spacing24) {
-            settingsSection("Computer Use") {
-                settingsRow("Enable planner", controlWidth: meetingControlWidth) {
-                    settingsSwitch(isOn: appState.config.enableComputerUsePlanner) { newValue in
-                        controller.updateConfig { $0.enableComputerUsePlanner = newValue }
+    @ViewBuilder
+    private var computerUseSettingsContent: some View {
+        settingsRow("Enable planner", controlWidth: meetingControlWidth) {
+            settingsSwitch(isOn: appState.config.enableComputerUsePlanner) { newValue in
+                controller.updateConfig { $0.enableComputerUsePlanner = newValue }
+            }
+        }
+        Divider().background(MuesliTheme.surfaceBorder)
+        settingsRow("Account", controlWidth: meetingControlWidth) {
+            chatGPTAccountControl
+        }
+        Divider().background(MuesliTheme.surfaceBorder)
+        settingsRow("Planner model", controlWidth: meetingControlWidth) {
+            settingsModelMenu(
+                currentModel: appState.config.computerUsePlannerModel,
+                presets: SummaryModelPreset.computerUsePlannerModels
+            ) { val in controller.updateConfig { $0.computerUsePlannerModel = val } }
+        }
+        Divider().background(MuesliTheme.surfaceBorder)
+        settingsRow("Timeout", controlWidth: meetingControlWidth) {
+            Stepper(
+                value: Binding(
+                    get: { max(appState.config.computerUseTimeoutSeconds, 1) },
+                    set: { newValue in
+                        controller.updateConfig { $0.computerUseTimeoutSeconds = max(newValue, 1) }
                     }
-                }
-                Divider().background(MuesliTheme.surfaceBorder)
-                settingsRow("Account", controlWidth: meetingControlWidth) {
-                    chatGPTAccountControl
-                }
-                Divider().background(MuesliTheme.surfaceBorder)
-                settingsRow("Planner model", controlWidth: meetingControlWidth) {
-                    settingsModelMenu(
-                        currentModel: appState.config.computerUsePlannerModel,
-                        presets: SummaryModelPreset.computerUsePlannerModels
-                    ) { val in controller.updateConfig { $0.computerUsePlannerModel = val } }
-                }
-                Divider().background(MuesliTheme.surfaceBorder)
-                settingsRow("Timeout", controlWidth: meetingControlWidth) {
-                    Stepper(
-                        value: Binding(
-                            get: { max(appState.config.computerUseTimeoutSeconds, 1) },
-                            set: { newValue in
-                                controller.updateConfig { $0.computerUseTimeoutSeconds = max(newValue, 1) }
-                            }
-                        ),
-                        in: 1...600,
-                        step: 15
-                    ) {
-                        Text("\(max(appState.config.computerUseTimeoutSeconds, 1)) seconds")
-                            .font(MuesliTheme.body())
-                            .foregroundStyle(MuesliTheme.textPrimary)
-                    }
-                }
+                ),
+                in: 1...600,
+                step: 15
+            ) {
+                Text("\(max(appState.config.computerUseTimeoutSeconds, 1)) seconds")
+                    .font(MuesliTheme.body())
+                    .foregroundStyle(MuesliTheme.textPrimary)
             }
         }
     }
@@ -1380,7 +1367,7 @@ struct SettingsView: View {
     // MARK: - Permissions
 
     private var permissionsSection: some View {
-        settingsSection(L10n.text(.settingsPermissionsSection, config: appState.config)) {
+        settingsSection(L10n.text(.settingsSectionPrivacyPermissions, config: appState.config)) {
             permissionStatusRow(
                 L10n.text(.settingsPermissionMicrophone, config: appState.config),
                 granted: micGranted,
@@ -1611,6 +1598,19 @@ struct SettingsView: View {
                 RoundedRectangle(cornerRadius: MuesliTheme.cornerMedium)
                     .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
             )
+        }
+    }
+
+    @ViewBuilder
+    private func settingsLooseSection(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: MuesliTheme.spacing8) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(MuesliTheme.textTertiary)
+                .textCase(.uppercase)
+                .padding(.leading, 2)
+
+            content()
         }
     }
 

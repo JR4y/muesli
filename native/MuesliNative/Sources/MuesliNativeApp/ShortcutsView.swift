@@ -5,6 +5,7 @@ import MuesliCore
 struct ShortcutsView: View {
     let appState: AppState
     let controller: MuesliController
+    let embedded: Bool
     @State private var recordingTarget: ShortcutTarget?
     @State private var eventMonitor: Any?
     @State private var pendingModifierKeyCode: UInt16?
@@ -12,9 +13,32 @@ struct ShortcutsView: View {
     @State private var computerUseShortcutMessage: String?
     @State private var meetingRecordingShortcutMessage: String?
 
+    init(appState: AppState, controller: MuesliController, embedded: Bool = false) {
+        self.appState = appState
+        self.controller = controller
+        self.embedded = embedded
+    }
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: MuesliTheme.spacing24) {
+        Group {
+            if embedded {
+                content(includeHeader: false)
+            } else {
+                ScrollView {
+                    content(includeHeader: true)
+                        .padding(MuesliTheme.spacing32)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .onDisappear {
+            stopRecording()
+        }
+    }
+
+    private func content(includeHeader: Bool) -> some View {
+        VStack(alignment: .leading, spacing: MuesliTheme.spacing24) {
+            if includeHeader {
                 Text(L10n.text(.shortcutsTitle, config: appState.config))
                     .font(MuesliTheme.title1())
                     .foregroundStyle(MuesliTheme.textPrimary)
@@ -22,22 +46,22 @@ struct ShortcutsView: View {
                 Text("Choose your preferred shortcuts for dictation and computer use commands.")
                     .font(MuesliTheme.body())
                     .foregroundStyle(MuesliTheme.textSecondary)
-
-                dictationShortcutSection
-
-                computerUseShortcutSection
-
-                meetingRecordingShortcutSection
-
-                doubleTapSection
-
-                resetButton
+            } else {
+                Text("Choose your preferred shortcuts for dictation, computer use commands, and meeting recording.")
+                    .font(MuesliTheme.caption())
+                    .foregroundStyle(MuesliTheme.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(MuesliTheme.spacing32)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .onDisappear {
-            stopRecording()
+
+            dictationShortcutSection
+
+            computerUseShortcutSection
+
+            meetingRecordingShortcutSection
+
+            doubleTapSection
+
+            resetButton
         }
     }
 

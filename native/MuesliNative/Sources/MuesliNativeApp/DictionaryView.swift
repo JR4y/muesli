@@ -11,22 +11,37 @@ private enum DictionaryRowMetrics {
 struct DictionaryView: View {
     let appState: AppState
     let controller: MuesliController
+    let embedded: Bool
 
     @State private var isAdding = false
     @State private var newWord = ""
     @State private var newReplacement = ""
     @State private var newThreshold = 0.85
 
+    init(appState: AppState, controller: MuesliController, embedded: Bool = false) {
+        self.appState = appState
+        self.controller = controller
+        self.embedded = embedded
+    }
+
+    @ViewBuilder
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: MuesliTheme.spacing24) {
-                header
+        if embedded {
+            VStack(alignment: .leading, spacing: MuesliTheme.spacing16) {
+                embeddedHeader
                 wordList
             }
-            .padding(MuesliTheme.spacing32)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            ScrollView {
+                VStack(alignment: .leading, spacing: MuesliTheme.spacing24) {
+                    header
+                    wordList
+                }
+                .padding(MuesliTheme.spacing32)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .background(MuesliTheme.backgroundBase)
         }
-        .background(MuesliTheme.backgroundBase)
     }
 
     private var header: some View {
@@ -63,6 +78,39 @@ struct DictionaryView: View {
             Text("Add custom words for names, brands, and domain terms, and tune how aggressively each entry should fuzzy-match transcription errors.")
                 .font(MuesliTheme.body())
                 .foregroundStyle(MuesliTheme.textSecondary)
+        }
+    }
+
+    private var embeddedHeader: some View {
+        HStack(alignment: .top, spacing: MuesliTheme.spacing16) {
+            Text("Add custom words for names, brands, and domain terms, and tune how aggressively each entry should fuzzy-match transcription errors.")
+                .font(MuesliTheme.caption())
+                .foregroundStyle(MuesliTheme.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: MuesliTheme.spacing12)
+            Button {
+                isAdding = true
+                newWord = ""
+                newReplacement = ""
+                newThreshold = 0.85
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .bold))
+                    Text("Add new")
+                        .font(.system(size: 13, weight: .medium))
+                }
+                .foregroundStyle(MuesliTheme.textPrimary)
+                .padding(.horizontal, MuesliTheme.spacing12)
+                .padding(.vertical, MuesliTheme.spacing8)
+                .background(MuesliTheme.surfacePrimary)
+                .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
+                .overlay(
+                    RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
+                        .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
         }
     }
 

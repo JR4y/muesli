@@ -244,9 +244,15 @@ enum L10nKey {
     case templateManagerRestoreDefaultHelp
     case settingsTitle
     case settingsPaneGeneral
+    case settingsPaneVoiceAndDictation
     case settingsPaneDictation
     case settingsPaneMeetings
     case settingsPaneAppearance
+    case settingsSectionApplication
+    case settingsSectionShortcuts
+    case settingsSectionSync
+    case settingsSectionPrivacyPermissions
+    case settingsSectionAiCleanup
     case settingsGeneralSection
     case settingsLaunchAtLogin
     case settingsOpenDashboardOnLaunch
@@ -838,12 +844,24 @@ enum L10n {
             return "Settings"
         case .settingsPaneGeneral:
             return "General"
+        case .settingsPaneVoiceAndDictation:
+            return "Voice & Dictation"
         case .settingsPaneDictation:
             return "Dictation"
         case .settingsPaneMeetings:
             return "Meetings"
         case .settingsPaneAppearance:
             return "Appearance"
+        case .settingsSectionApplication:
+            return "Application"
+        case .settingsSectionShortcuts:
+            return "Shortcuts"
+        case .settingsSectionSync:
+            return "Sync"
+        case .settingsSectionPrivacyPermissions:
+            return "Privacy & Permissions"
+        case .settingsSectionAiCleanup:
+            return "AI Cleanup"
         case .settingsGeneralSection:
             return "General"
         case .settingsLaunchAtLogin:
@@ -1598,12 +1616,24 @@ enum L10n {
             return "Ajustes"
         case .settingsPaneGeneral:
             return "General"
+        case .settingsPaneVoiceAndDictation:
+            return "Voz y dictado"
         case .settingsPaneDictation:
             return "Dictado"
         case .settingsPaneMeetings:
             return "Reuniones"
         case .settingsPaneAppearance:
             return "Apariencia"
+        case .settingsSectionApplication:
+            return "Aplicacion"
+        case .settingsSectionShortcuts:
+            return "Atajos"
+        case .settingsSectionSync:
+            return "Sincronizacion"
+        case .settingsSectionPrivacyPermissions:
+            return "Privacidad y permisos"
+        case .settingsSectionAiCleanup:
+            return "Limpieza con IA"
         case .settingsGeneralSection:
             return "General"
         case .settingsLaunchAtLogin:
