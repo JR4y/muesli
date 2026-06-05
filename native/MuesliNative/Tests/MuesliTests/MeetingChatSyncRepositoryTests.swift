@@ -48,7 +48,7 @@ struct MeetingChatSyncRepositoryTests {
 
     @Test("migration backfills existing chat threads and messages as dirty")
     func migrationBackfillsExistingChat() throws {
-        let fixture = try makeFixture()
+        let fixture = try makeUnwiredFixture()
         let snapshot = try fixture.chatStore.loadThread(scope: .meeting(42), title: "Backfill Meeting")
         try fixture.chatStore.appendMessage(
             MeetingChatMessage(
@@ -70,7 +70,63 @@ struct MeetingChatSyncRepositoryTests {
         #expect(dirtyMessages[0].message.text == "Will this sync?")
     }
 
+    @Test("append message marks message and thread dirty")
+    func appendMessageMarksChatDirty() throws {
+        let fixture = try makeFixture()
+        try fixture.syncRepo.migrateIfNeeded()
+        let snapshot = try fixture.chatStore.loadThread(scope: .meeting(7), title: "Dirty Meeting")
+        try fixture.syncRepo.markThreadSynced(
+            localID: snapshot.thread.id,
+            remoteID: "thread-remote",
+            remoteVersion: 1,
+            clientUpdatedAt: "2026-06-05T10:00:00.000Z",
+            serverUpdatedAt: "2026-06-05T10:00:00.000Z",
+            payloadHash: "thread-hash",
+            lastWriterDeviceID: "device-a"
+        )
+
+        try fixture.chatStore.appendMessage(
+            MeetingChatMessage(role: .user, text: "new local message"),
+            to: snapshot.thread
+        )
+
+        #expect(try fixture.syncRepo.dirtyThreads(limit: 10).count == 1)
+        #expect(try fixture.syncRepo.dirtyMessages(limit: 10).count == 1)
+    }
+
+    @Test("clear thread writes global synced tombstone")
+    func clearThreadWritesTombstone() throws {
+        let fixture = try makeFixture()
+        try fixture.syncRepo.migrateIfNeeded()
+        let snapshot = try fixture.chatStore.loadThread(scope: .meeting(8), title: "Clear Meeting")
+        try fixture.syncRepo.markThreadSynced(
+            localID: snapshot.thread.id,
+            remoteID: "thread-clear-remote",
+            remoteVersion: 4,
+            clientUpdatedAt: "2026-06-05T10:00:00.000Z",
+            serverUpdatedAt: "2026-06-05T10:00:00.000Z",
+            payloadHash: "thread-hash",
+            lastWriterDeviceID: "device-a"
+        )
+
+        try fixture.chatStore.clearThread(scope: .meeting(8))
+
+        let tombstones = try fixture.syncRepo.dirtyTombstones(entityKind: .thread, limit: 10)
+        #expect(tombstones.count == 1)
+        #expect(tombstones[0].remoteID == "thread-clear-remote")
+        #expect(tombstones[0].lastKnownRemoteVersion == 4)
+    }
+
     private func makeFixture() throws -> (chatStore: SQLiteMeetingChatStore, syncRepo: MeetingChatSyncRepository, url: URL) {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("muesli-chat-sync-\(UUID().uuidString).db")
+        let syncRepo = MeetingChatSyncRepository(databaseURL: url)
+        let chatStore = SQLiteMeetingChatStore(databaseURL: url, syncRepository: syncRepo)
+        try chatStore.migrateIfNeeded()
+        return (chatStore, syncRepo, url)
+    }
+
+    private func makeUnwiredFixture() throws -> (chatStore: SQLiteMeetingChatStore, syncRepo: MeetingChatSyncRepository, url: URL) {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("muesli-chat-sync-\(UUID().uuidString).db")
         let chatStore = SQLiteMeetingChatStore(databaseURL: url)

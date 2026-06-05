@@ -1,4 +1,5 @@
 import Foundation
+import MuesliCore
 import MuesliMeetingChat
 import SQLite3
 
@@ -135,6 +136,81 @@ final class MeetingChatSyncRepository {
         }
     }
 
+    func markThreadDirty(localID: UUID) throws {
+        try markDirty(entityKind: .thread, localID: localID.uuidString)
+    }
+
+    func markMessageDirty(localID: UUID) throws {
+        try markDirty(entityKind: .message, localID: localID.uuidString)
+    }
+
+    func markThreadSynced(
+        localID: UUID,
+        remoteID: String,
+        remoteVersion: Int64,
+        clientUpdatedAt: String,
+        serverUpdatedAt: String,
+        payloadHash: String,
+        lastWriterDeviceID: String
+    ) throws {
+        try writeMetadata(
+            entityKind: .thread,
+            localID: localID.uuidString,
+            remoteID: remoteID,
+            remoteVersion: remoteVersion,
+            clientUpdatedAt: clientUpdatedAt,
+            serverUpdatedAt: serverUpdatedAt,
+            payloadHash: payloadHash,
+            lastWriterDeviceID: lastWriterDeviceID,
+            dirty: false
+        )
+    }
+
+    func dirtyTombstones(
+        entityKind: MeetingChatSyncEntityKind,
+        limit: Int = 100
+    ) throws -> [MeetingChatSyncTombstoneRecord] {
+        try migrateIfNeeded()
+        return try withDB { db in
+            let sql = """
+            SELECT entity_kind, local_id, remote_id, client_deleted_at, last_known_remote_version, dirty
+            FROM meeting_chat_sync_tombstones
+            WHERE entity_kind = ? AND dirty = 1
+            ORDER BY client_deleted_at ASC, local_id ASC
+            LIMIT ?
+            """
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+                throw lastError(db)
+            }
+            defer { sqlite3_finalize(statement) }
+            bindText(entityKind.rawValue, at: 1, statement: statement)
+            sqlite3_bind_int(statement, 2, Int32(limit))
+
+            var rows: [MeetingChatSyncTombstoneRecord] = []
+            while sqlite3_step(statement) == SQLITE_ROW {
+                guard let parsedKind = MeetingChatSyncEntityKind(rawValue: stringColumn(statement, index: 0)) else {
+                    continue
+                }
+                rows.append(
+                    MeetingChatSyncTombstoneRecord(
+                        entityKind: parsedKind,
+                        localID: stringColumn(statement, index: 1),
+                        remoteID: optionalStringColumn(statement, index: 2),
+                        clientDeletedAt: stringColumn(statement, index: 3),
+                        lastKnownRemoteVersion: sqlite3_column_int64(statement, 4),
+                        dirty: sqlite3_column_int(statement, 5) != 0
+                    )
+                )
+            }
+            return rows
+        }
+    }
+
+    func recordThreadDelete(localID: UUID) throws {
+        try recordDelete(entityKind: .thread, localID: localID.uuidString)
+    }
+
     private func backfillExistingRowsAsDirty(db: OpaquePointer?) throws {
         let nowExpr = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
         try exec(
@@ -159,6 +235,93 @@ final class MeetingChatSyncRepository {
             """,
             db: db
         )
+    }
+
+    private func markDirty(entityKind: MeetingChatSyncEntityKind, localID: String) throws {
+        try migrateIfNeeded()
+        try withDB { db in
+            try exec(
+                """
+                INSERT INTO meeting_chat_sync_metadata (entity_kind, local_id, client_updated_at, dirty, updated_at)
+                VALUES (?, ?, ?, 1, datetime('now'))
+                ON CONFLICT(entity_kind, local_id) DO UPDATE SET
+                    client_updated_at = excluded.client_updated_at,
+                    dirty = 1,
+                    updated_at = datetime('now')
+                """,
+                params: [entityKind.rawValue, localID, SyncTimestamp.now()],
+                db: db
+            )
+        }
+    }
+
+    private func writeMetadata(
+        entityKind: MeetingChatSyncEntityKind,
+        localID: String,
+        remoteID: String,
+        remoteVersion: Int64,
+        clientUpdatedAt: String,
+        serverUpdatedAt: String,
+        payloadHash: String,
+        lastWriterDeviceID: String,
+        dirty: Bool
+    ) throws {
+        try migrateIfNeeded()
+        try withDB { db in
+            try exec(
+                """
+                INSERT INTO meeting_chat_sync_metadata (
+                    entity_kind, local_id, remote_id, client_updated_at, remote_version,
+                    last_seen_server_updated_at, last_payload_hash, dirty, last_writer_device_id, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                ON CONFLICT(entity_kind, local_id) DO UPDATE SET
+                    remote_id = excluded.remote_id,
+                    client_updated_at = excluded.client_updated_at,
+                    remote_version = excluded.remote_version,
+                    last_seen_server_updated_at = excluded.last_seen_server_updated_at,
+                    last_payload_hash = excluded.last_payload_hash,
+                    dirty = excluded.dirty,
+                    last_writer_device_id = excluded.last_writer_device_id,
+                    updated_at = datetime('now')
+                """,
+                params: [
+                    entityKind.rawValue,
+                    localID,
+                    remoteID,
+                    clientUpdatedAt,
+                    String(remoteVersion),
+                    serverUpdatedAt,
+                    payloadHash,
+                    dirty ? "1" : "0",
+                    lastWriterDeviceID,
+                ],
+                db: db
+            )
+        }
+    }
+
+    private func recordDelete(entityKind: MeetingChatSyncEntityKind, localID: String) throws {
+        try migrateIfNeeded()
+        try withDB { db in
+            try exec(
+                """
+                INSERT OR REPLACE INTO meeting_chat_sync_tombstones (
+                    entity_kind, local_id, remote_id, client_deleted_at,
+                    last_known_remote_version, dirty, updated_at
+                )
+                SELECT ?, ?, remote_id, ?, remote_version, 1, datetime('now')
+                FROM meeting_chat_sync_metadata
+                WHERE entity_kind = ? AND local_id = ?
+                """,
+                params: [entityKind.rawValue, localID, SyncTimestamp.now(), entityKind.rawValue, localID],
+                db: db
+            )
+            try exec(
+                "DELETE FROM meeting_chat_sync_metadata WHERE entity_kind = ? AND local_id = ?",
+                params: [entityKind.rawValue, localID],
+                db: db
+            )
+        }
     }
 
     private func thread(_ statement: OpaquePointer?) throws -> MeetingChatThread {
@@ -249,6 +412,20 @@ final class MeetingChatSyncRepository {
         }
     }
 
+    private func exec(_ sql: String, params: [String], db: OpaquePointer?) throws {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw lastError(db)
+        }
+        defer { sqlite3_finalize(statement) }
+        for (index, value) in params.enumerated() {
+            bindText(value, at: Int32(index + 1), statement: statement)
+        }
+        guard sqlite3_step(statement) == SQLITE_DONE else {
+            throw lastError(db)
+        }
+    }
+
     private func lastError(_ db: OpaquePointer?) -> NSError {
         NSError(
             domain: "MuesliMeetingChatSyncDB",
@@ -265,4 +442,10 @@ final class MeetingChatSyncRepository {
     private func optionalStringColumn(_ statement: OpaquePointer?, index: Int32) -> String? {
         sqlite3_column_type(statement, index) == SQLITE_NULL ? nil : stringColumn(statement, index: index)
     }
+
+    private func bindText(_ value: String, at index: Int32, statement: OpaquePointer?) {
+        sqlite3_bind_text(statement, index, (value as NSString).utf8String, -1, Self.transientDestructor)
+    }
+
+    private static let transientDestructor = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 }

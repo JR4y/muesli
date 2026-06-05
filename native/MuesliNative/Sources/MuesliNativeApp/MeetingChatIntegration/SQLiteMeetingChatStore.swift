@@ -4,6 +4,7 @@ import MuesliMeetingChat
 
 final class SQLiteMeetingChatStore: MeetingChatStoring {
     private let databaseURL: URL
+    private let syncRepository: MeetingChatSyncRepository?
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private let dateFormatter: ISO8601DateFormatter = {
@@ -12,8 +13,9 @@ final class SQLiteMeetingChatStore: MeetingChatStoring {
         return formatter
     }()
 
-    init(databaseURL: URL) {
+    init(databaseURL: URL, syncRepository: MeetingChatSyncRepository? = nil) {
         self.databaseURL = databaseURL
+        self.syncRepository = syncRepository
     }
 
     func migrateIfNeeded() throws {
@@ -77,6 +79,7 @@ final class SQLiteMeetingChatStore: MeetingChatStoring {
                 updatedAt: now
             )
             try insertThread(thread, db: db)
+            try syncRepository?.markThreadDirty(localID: thread.id)
             return MeetingChatThreadSnapshot(thread: thread, messages: [])
         }
     }
@@ -86,12 +89,17 @@ final class SQLiteMeetingChatStore: MeetingChatStoring {
         try withDB { db in
             try insertMessage(message, threadID: thread.id, db: db)
             try touchThread(thread.id, db: db)
+            try syncRepository?.markMessageDirty(localID: message.id)
+            try syncRepository?.markThreadDirty(localID: thread.id)
         }
     }
 
     func clearThread(scope: MeetingChatScope) throws {
         try migrateIfNeeded()
         try withDB { db in
+            if let thread = try selectThread(scope: scope, db: db) {
+                try syncRepository?.recordThreadDelete(localID: thread.id)
+            }
             let (kind, id) = Self.scopeColumns(scope)
             let sql = "DELETE FROM meeting_chat_threads WHERE scope_kind = ? AND scope_id = ?"
             var statement: OpaquePointer?
