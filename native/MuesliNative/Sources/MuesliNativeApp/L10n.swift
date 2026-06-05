@@ -267,6 +267,8 @@ enum L10nKey {
     case settingsDataSection
     case settingsClearDictationHistory
     case settingsClearMeetingHistory
+    case settingsPurgeDeletedSupabaseData
+    case settingsPurgeDeletedSupabaseDataMessage
     case settingsStopRecordingBeforeClearing
     case settingsPermissionsSection
     case settingsPermissionMicrophone
@@ -898,6 +900,10 @@ enum L10n {
             return "Clear dictation history"
         case .settingsClearMeetingHistory:
             return "Clear meeting history"
+        case .settingsPurgeDeletedSupabaseData:
+            return "Purge deleted Supabase data"
+        case .settingsPurgeDeletedSupabaseDataMessage:
+            return "This will permanently remove all already-deleted meetings, folders, and dictations from Supabase. Local data that is still active will not be deleted. This cannot be undone."
         case .settingsStopRecordingBeforeClearing:
             return "Stop the current meeting recording before clearing meeting history."
         case .settingsPermissionsSection:
@@ -1686,6 +1692,10 @@ enum L10n {
             return "Borrar historial de dictados"
         case .settingsClearMeetingHistory:
             return "Borrar historial de reuniones"
+        case .settingsPurgeDeletedSupabaseData:
+            return "Purgar borrados de Supabase"
+        case .settingsPurgeDeletedSupabaseDataMessage:
+            return "Esto eliminara definitivamente de Supabase las reuniones, carpetas y dictados que ya estan marcados como borrados. Los datos locales activos no se borraran. Esta accion no se puede deshacer."
         case .settingsStopRecordingBeforeClearing:
             return "Deten la grabacion actual antes de borrar el historial de reuniones."
         case .settingsPermissionsSection:

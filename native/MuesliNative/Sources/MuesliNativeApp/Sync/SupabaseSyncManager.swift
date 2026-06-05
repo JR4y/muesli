@@ -152,6 +152,31 @@ actor SupabaseSyncManager {
         inflightSync = nil
     }
 
+    func purgeDeletedSyncRowsNow() async throws {
+        guard let rest, await auth.isAuthenticated else {
+            await observer.update(status: .waitingForAuth)
+            throw SupabaseRESTError.unauthorized
+        }
+        if let inflight = inflightSync {
+            await inflight.value
+        }
+        await observer.update(status: .syncing(reason: "purge-deleted"))
+        do {
+            try await rest.purgeDeletedSyncRows()
+            await observer.update(
+                status: .idle,
+                lastSyncAt: Date(),
+                lastErrorMessage: .some(nil)
+            )
+        } catch SupabaseRESTError.unauthorized {
+            await observer.update(status: .waitingForAuth)
+            throw SupabaseRESTError.unauthorized
+        } catch {
+            await reportError(error.localizedDescription)
+            throw error
+        }
+    }
+
     private func runCycle(reason: String, rest: SupabaseRESTClient, userID: String) async {
         await observer.update(status: .syncing(reason: reason))
         do {

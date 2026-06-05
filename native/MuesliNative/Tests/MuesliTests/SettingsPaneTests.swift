@@ -37,4 +37,15 @@ struct SettingsPaneTests {
         #expect(SettingsPane.models.localizedTitle(config: config) == "Modelos")
         #expect(SettingsPane.appearance.localizedTitle(config: config) == "Apariencia")
     }
+
+    @Test("remote purge data action is localized")
+    func remotePurgeDataActionLocalized() {
+        var english = AppConfig()
+        english.appLanguage = AppLanguage.english.rawValue
+        var spanish = AppConfig()
+        spanish.appLanguage = AppLanguage.spanish.rawValue
+
+        #expect(L10n.text(.settingsPurgeDeletedSupabaseData, config: english) == "Purge deleted Supabase data")
+        #expect(L10n.text(.settingsPurgeDeletedSupabaseData, config: spanish) == "Purgar borrados de Supabase")
+    }
 }

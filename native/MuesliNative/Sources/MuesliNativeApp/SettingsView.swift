@@ -14,6 +14,7 @@ struct SettingsView: View {
     private enum PendingDataDestruction {
         case dictations
         case meetings
+        case supabaseDeletedData
 
         func title(config: AppConfig) -> String {
             switch self {
@@ -21,6 +22,8 @@ struct SettingsView: View {
                 return "\(L10n.text(.settingsClearDictationHistory, config: config))?"
             case .meetings:
                 return "\(L10n.text(.settingsClearMeetingHistory, config: config))?"
+            case .supabaseDeletedData:
+                return "\(L10n.text(.settingsPurgeDeletedSupabaseData, config: config))?"
             }
         }
 
@@ -30,6 +33,8 @@ struct SettingsView: View {
                 return L10n.text(.dictationsDeleteMessage, config: config)
             case .meetings:
                 return L10n.text(.settingsClearMeetingHistoryMessage, config: config)
+            case .supabaseDeletedData:
+                return L10n.text(.settingsPurgeDeletedSupabaseDataMessage, config: config)
             }
         }
 
@@ -39,6 +44,8 @@ struct SettingsView: View {
                 return L10n.text(.settingsClearDictationHistory, config: config)
             case .meetings:
                 return L10n.text(.settingsClearMeetingHistory, config: config)
+            case .supabaseDeletedData:
+                return L10n.text(.settingsPurgeDeletedSupabaseData, config: config)
             }
         }
     }
@@ -159,6 +166,8 @@ struct SettingsView: View {
                     controller.clearDictationHistory()
                 case .meetings:
                     controller.clearMeetingHistory()
+                case .supabaseDeletedData:
+                    controller.purgeDeletedSupabaseData()
                 case nil:
                     break
                 }
@@ -355,6 +364,10 @@ struct SettingsView: View {
                     }
                     .disabled(controller.isMeetingRecording())
                     .help(L10n.text(.settingsStopRecordingBeforeClearing, config: appState.config))
+                    actionButton(L10n.text(.settingsPurgeDeletedSupabaseData, config: appState.config), role: .destructive) {
+                        pendingDataDestruction = .supabaseDeletedData
+                    }
+                    .disabled(!appState.supabaseSyncConfigured || !appState.isSupabaseAuthenticated)
                 }
             }
         }

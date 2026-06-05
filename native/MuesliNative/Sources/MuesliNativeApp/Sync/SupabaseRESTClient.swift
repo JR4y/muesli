@@ -241,6 +241,15 @@ final class SupabaseRESTClient {
         return Self.parseMeeting(row)
     }
 
+    func purgeDeletedSyncRows() async throws {
+        for table in ["meetings", "dictations", "meeting_folders"] {
+            try await sendDelete(
+                path: table,
+                query: [URLQueryItem(name: "deleted_at", value: "not.is.null")]
+            )
+        }
+    }
+
     // MARK: - Meetings
 
     func selectMeetings(after cursor: SyncCursor?, limit: Int) async throws -> [RemoteMeetingPayload] {
@@ -453,6 +462,13 @@ final class SupabaseRESTClient {
         request.setValue("return=representation", forHTTPHeaderField: "Prefer")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         return try await perform(&request)
+    }
+
+    private func sendDelete(path: String, query: [URLQueryItem]) async throws {
+        var request = URLRequest(url: config.restURL(path, query: query))
+        request.httpMethod = "DELETE"
+        request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
+        _ = try await perform(&request)
     }
 
     private func perform(_ request: inout URLRequest) async throws -> Data {

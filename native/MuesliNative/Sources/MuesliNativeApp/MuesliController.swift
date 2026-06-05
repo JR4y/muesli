@@ -982,6 +982,28 @@ final class MuesliController: NSObject {
         syncAppState()
     }
 
+    func purgeDeletedSupabaseData() {
+        guard let syncManager else {
+            presentErrorAlert(
+                title: "Couldn't Purge Supabase Data",
+                message: "Supabase sync is not configured for this build."
+            )
+            return
+        }
+        Task { @MainActor [weak self] in
+            do {
+                try await syncManager.purgeDeletedSyncRowsNow()
+                self?.syncAppState()
+            } catch {
+                self?.presentErrorAlert(
+                    title: "Couldn't Purge Supabase Data",
+                    message: error.localizedDescription
+                )
+                self?.syncAppState()
+            }
+        }
+    }
+
     private func persistLastSupabaseEmail(_ candidate: String?) {
         let trimmed = candidate?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !trimmed.isEmpty, config.lastSupabaseEmail != trimmed else { return }
