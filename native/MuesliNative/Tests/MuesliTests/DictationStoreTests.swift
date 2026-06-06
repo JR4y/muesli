@@ -77,6 +77,45 @@ struct DictationStoreTests {
         )
     }
 
+    private func openSQLiteDatabase(at url: URL) throws -> OpaquePointer? {
+        var db: OpaquePointer?
+        #expect(sqlite3_open(url.path, &db) == SQLITE_OK)
+        return db
+    }
+
+    private func tableColumns(_ table: String, db: OpaquePointer?) throws -> Set<String> {
+        var stmt: OpaquePointer?
+        #expect(sqlite3_prepare_v2(db, "PRAGMA table_info(\(table))", -1, &stmt, nil) == SQLITE_OK)
+        defer { sqlite3_finalize(stmt) }
+        var columns = Set<String>()
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            if let raw = sqlite3_column_text(stmt, 1) {
+                columns.insert(String(cString: raw))
+            }
+        }
+        return columns
+    }
+
+    private func insertMeeting(
+        in store: DictationStore,
+        title: String,
+        folderID: Int64,
+        start: Date
+    ) throws -> Int64 {
+        let id = try store.insertMeeting(
+            title: title,
+            calendarEventID: nil,
+            startTime: start,
+            endTime: start.addingTimeInterval(30),
+            rawTranscript: "Transcript",
+            formattedNotes: "Notes",
+            micAudioPath: nil,
+            systemAudioPath: nil
+        )
+        try store.moveMeeting(id: id, toFolder: folderID)
+        return id
+    }
+
     @Test("migration creates tables without error")
     func migration() throws {
         let store = try makeStore()
@@ -992,6 +1031,110 @@ struct DictationStoreTests {
         try store.deleteFolder(id: id)
         let remaining = try store.listFolders()
         #expect(!remaining.contains(where: { $0.id == id }))
+    }
+
+    @Test("migration adds archive columns to meetings and folders")
+    func migrationAddsArchiveColumns() throws {
+        let store = try makeStore()
+        let db = try openSQLiteDatabase(at: store.databasePath())
+        defer { sqlite3_close(db) }
+
+        #expect(try tableColumns("meetings", db: db).contains("archived_at"))
+        #expect(try tableColumns("meeting_folders", db: db).contains("archived_at"))
+    }
+
+    @Test("archive meeting hides it from active meetings and restore returns it")
+    func archiveMeetingFiltersActiveRows() throws {
+        let store = try makeStore()
+        let start = Date()
+        let id = try store.insertMeeting(
+            title: "Archive Me",
+            calendarEventID: nil,
+            startTime: start,
+            endTime: start.addingTimeInterval(60),
+            rawTranscript: "Transcript",
+            formattedNotes: "Notes",
+            micAudioPath: nil,
+            systemAudioPath: nil
+        )
+
+        try store.archiveMeeting(id: id, archivedAt: "2026-06-06T10:00:00.000Z")
+
+        #expect(try store.recentMeetings(limit: 10).isEmpty)
+        let archived = try store.recentMeetings(limit: 10, archiveFilter: .archived)
+        #expect(archived.map(\.id) == [id])
+        #expect(archived.first?.archivedAt == "2026-06-06T10:00:00.000Z")
+
+        try store.restoreMeeting(id: id)
+
+        #expect(try store.recentMeetings(limit: 10).map(\.id) == [id])
+        #expect(try store.recentMeetings(limit: 10, archiveFilter: .archived).isEmpty)
+    }
+
+    @Test("archived meetings are excluded from stats and search")
+    func archivedMeetingsExcludedFromStatsAndSearch() throws {
+        let store = try makeStore()
+        let start = Date()
+        let activeID = try store.insertMeeting(
+            title: "Active Planning",
+            calendarEventID: nil,
+            startTime: start,
+            endTime: start.addingTimeInterval(60),
+            rawTranscript: "active transcript",
+            formattedNotes: "visible notes",
+            micAudioPath: nil,
+            systemAudioPath: nil
+        )
+        let archivedID = try store.insertMeeting(
+            title: "Archived Planning",
+            calendarEventID: nil,
+            startTime: start.addingTimeInterval(120),
+            endTime: start.addingTimeInterval(180),
+            rawTranscript: "hidden transcript",
+            formattedNotes: "hidden notes",
+            micAudioPath: nil,
+            systemAudioPath: nil
+        )
+
+        try store.archiveMeeting(id: archivedID, archivedAt: "2026-06-06T10:00:00.000Z")
+
+        #expect(try store.meetingStats().totalMeetings == 1)
+        #expect(try store.searchMeetings(query: "Planning").map(\.id) == [activeID])
+    }
+
+    @Test("archive folder archives descendants and subtree meetings")
+    func archiveFolderTreeArchivesDescendants() throws {
+        let store = try makeStore()
+        let root = try store.createFolder(name: "Root")
+        let child = try store.createFolder(name: "Child", parentFolderID: root)
+        let outsider = try store.createFolder(name: "Other")
+        let start = Date()
+        let rootMeeting = try insertMeeting(in: store, title: "Root Meeting", folderID: root, start: start)
+        let childMeeting = try insertMeeting(in: store, title: "Child Meeting", folderID: child, start: start.addingTimeInterval(60))
+        let outsideMeeting = try insertMeeting(in: store, title: "Outside", folderID: outsider, start: start.addingTimeInterval(120))
+
+        try store.archiveFolderTree(id: root, archivedAt: "2026-06-06T11:00:00.000Z")
+
+        #expect(try store.listFolders().map(\.id) == [outsider])
+        #expect(try store.listFolders(archiveFilter: .archived).map(\.id) == [root, child])
+        #expect(try store.recentMeetings(limit: 10).map(\.id) == [outsideMeeting])
+        #expect(Set(try store.recentMeetings(limit: 10, archiveFilter: .archived).map(\.id)) == Set([rootMeeting, childMeeting]))
+    }
+
+    @Test("restore folder tree clears archived rows")
+    func restoreFolderTreeClearsArchiveState() throws {
+        let store = try makeStore()
+        let root = try store.createFolder(name: "Root")
+        let child = try store.createFolder(name: "Child", parentFolderID: root)
+        let start = Date()
+        let meeting = try insertMeeting(in: store, title: "Child Meeting", folderID: child, start: start)
+
+        try store.archiveFolderTree(id: root, archivedAt: "2026-06-06T11:00:00.000Z")
+        try store.restoreFolderTree(id: root)
+
+        #expect(try store.listFolders().map(\.id) == [root, child])
+        #expect(try store.listFolders(archiveFilter: .archived).isEmpty)
+        #expect(try store.recentMeetings(limit: 10).map(\.id) == [meeting])
     }
 
     // MARK: - Move Meeting to Folder

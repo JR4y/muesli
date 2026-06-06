@@ -15,6 +15,24 @@ public enum DictationStoreError: Error, LocalizedError {
     }
 }
 
+public enum MeetingArchiveFilter: Sendable {
+    case active
+    case archived
+    case all
+
+    func sqlPredicate(qualifiedBy tableAlias: String? = nil) -> String {
+        let column = tableAlias.map { "\($0).archived_at" } ?? "archived_at"
+        switch self {
+        case .active:
+            return "\(column) IS NULL"
+        case .archived:
+            return "\(column) IS NOT NULL"
+        case .all:
+            return "1 = 1"
+        }
+    }
+}
+
 public final class DictationStore {
     private let databaseURL: URL
     private static let dictationColumns = """
@@ -22,7 +40,7 @@ public final class DictationStore {
     t.id, t.final_status, t.final_message, t.trace_json, t.created_at
     """
     private static let meetingColumns = """
-    id, title, start_time, duration_seconds, raw_transcript, formatted_notes, word_count, folder_id, calendar_event_id, mic_audio_path, system_audio_path, saved_recording_path, merged_into_meeting_id, meeting_status, manual_notes, selected_template_id, selected_template_name, selected_template_kind, selected_template_prompt, source, calendar_event_snapshot
+    id, title, start_time, duration_seconds, raw_transcript, formatted_notes, word_count, folder_id, calendar_event_id, mic_audio_path, system_audio_path, saved_recording_path, merged_into_meeting_id, meeting_status, manual_notes, selected_template_id, selected_template_name, selected_template_kind, selected_template_prompt, source, calendar_event_snapshot, archived_at
     """
 
     public init() {
@@ -92,6 +110,7 @@ public final class DictationStore {
             selected_template_kind TEXT,
             selected_template_prompt TEXT,
             source TEXT NOT NULL DEFAULT 'meeting',
+            archived_at TEXT,
             created_at TEXT DEFAULT (datetime('now'))
         );
         CREATE INDEX IF NOT EXISTS idx_meetings_start_time ON meetings(start_time DESC);
@@ -114,6 +133,7 @@ public final class DictationStore {
             color_hex TEXT,
             icon_name TEXT,
             sort_order INTEGER NOT NULL DEFAULT 0,
+            archived_at TEXT,
             created_at TEXT DEFAULT (datetime('now'))
         );
         """
@@ -125,6 +145,9 @@ public final class DictationStore {
             // Column may already exist.
         }
         if sqlite3_exec(db, "ALTER TABLE meeting_folders ADD COLUMN icon_name TEXT", nil, nil, nil) != SQLITE_OK {
+            // Column may already exist.
+        }
+        if sqlite3_exec(db, "ALTER TABLE meeting_folders ADD COLUMN archived_at TEXT", nil, nil, nil) != SQLITE_OK {
             // Column may already exist.
         }
 
@@ -164,12 +187,17 @@ public final class DictationStore {
         if sqlite3_exec(db, "ALTER TABLE meetings ADD COLUMN source TEXT NOT NULL DEFAULT 'meeting'", nil, nil, nil) != SQLITE_OK {
             // Column may already exist.
         }
+        if sqlite3_exec(db, "ALTER TABLE meetings ADD COLUMN archived_at TEXT", nil, nil, nil) != SQLITE_OK {
+            // Column may already exist.
+        }
         if sqlite3_exec(db, "ALTER TABLE dictations ADD COLUMN source TEXT NOT NULL DEFAULT 'dictation'", nil, nil, nil) != SQLITE_OK {
             // Column may already exist.
         }
         let _ = sqlite3_exec(db, "CREATE INDEX IF NOT EXISTS idx_meeting_folders_parent ON meeting_folders(parent_folder_id)", nil, nil, nil)
         let _ = sqlite3_exec(db, "CREATE INDEX IF NOT EXISTS idx_meetings_folder ON meetings(folder_id)", nil, nil, nil)
         let _ = sqlite3_exec(db, "CREATE INDEX IF NOT EXISTS idx_meetings_merged_into ON meetings(merged_into_meeting_id)", nil, nil, nil)
+        let _ = sqlite3_exec(db, "CREATE INDEX IF NOT EXISTS idx_meetings_archived_at ON meetings(archived_at)", nil, nil, nil)
+        let _ = sqlite3_exec(db, "CREATE INDEX IF NOT EXISTS idx_meeting_folders_archived_at ON meeting_folders(archived_at)", nil, nil, nil)
     }
 
     @discardableResult
@@ -281,13 +309,14 @@ public final class DictationStore {
         return makeDictationRecord(statement)
     }
 
-    public func meetingCounts() throws -> (total: Int, byFolder: [Int64: Int]) {
+    public func meetingCounts(archiveFilter: MeetingArchiveFilter = .active) throws -> (total: Int, byFolder: [Int64: Int]) {
         let db = try openDatabase()
         defer { sqlite3_close(db) }
+        let archivePredicate = archiveFilter.sqlPredicate()
 
         var total = 0
         var stmt: OpaquePointer?
-        if sqlite3_prepare_v2(db, "SELECT COUNT(*) FROM meetings WHERE merged_into_meeting_id IS NULL", -1, &stmt, nil) == SQLITE_OK {
+        if sqlite3_prepare_v2(db, "SELECT COUNT(*) FROM meetings WHERE merged_into_meeting_id IS NULL AND \(archivePredicate)", -1, &stmt, nil) == SQLITE_OK {
             if sqlite3_step(stmt) == SQLITE_ROW { total = Int(sqlite3_column_int(stmt, 0)) }
             sqlite3_finalize(stmt)
         } else {
@@ -296,7 +325,7 @@ public final class DictationStore {
 
         var byFolder: [Int64: Int] = [:]
         var stmt2: OpaquePointer?
-        if sqlite3_prepare_v2(db, "SELECT folder_id, COUNT(*) FROM meetings WHERE folder_id IS NOT NULL AND merged_into_meeting_id IS NULL GROUP BY folder_id", -1, &stmt2, nil) == SQLITE_OK {
+        if sqlite3_prepare_v2(db, "SELECT folder_id, COUNT(*) FROM meetings WHERE folder_id IS NOT NULL AND merged_into_meeting_id IS NULL AND \(archivePredicate) GROUP BY folder_id", -1, &stmt2, nil) == SQLITE_OK {
             while sqlite3_step(stmt2) == SQLITE_ROW {
                 byFolder[sqlite3_column_int64(stmt2, 0)] = Int(sqlite3_column_int(stmt2, 1))
             }
@@ -308,28 +337,38 @@ public final class DictationStore {
         return (total, byFolder)
     }
 
-    public func recentMeetings(limit: Int? = nil, folderID: Int64? = nil) throws -> [MeetingRecord] {
+    public func recentMeetings(
+        limit: Int? = nil,
+        folderID: Int64? = nil,
+        archiveFilter: MeetingArchiveFilter = .active
+    ) throws -> [MeetingRecord] {
         let db = try openDatabase()
         defer { sqlite3_close(db) }
 
         var sql: String
         if folderID != nil {
+            let folderPredicate = archiveFilter.sqlPredicate(qualifiedBy: "meeting_folders")
+            let childFolderPredicate = archiveFilter.sqlPredicate(qualifiedBy: "child")
+            let meetingPredicate = archiveFilter.sqlPredicate(qualifiedBy: "meetings")
             sql = """
             WITH RECURSIVE folder_tree(id) AS (
-                SELECT id FROM meeting_folders WHERE id = ?
+                SELECT id FROM meeting_folders WHERE id = ? AND \(folderPredicate)
                 UNION ALL
                 SELECT child.id
                 FROM meeting_folders child
                 JOIN folder_tree parent ON child.parent_folder_id = parent.id
+                WHERE \(childFolderPredicate)
             )
             SELECT \(Self.meetingColumns)
             FROM meetings
             WHERE merged_into_meeting_id IS NULL
+              AND \(meetingPredicate)
               AND folder_id IN (SELECT id FROM folder_tree)
             ORDER BY id DESC
             """
         } else {
-            sql = "SELECT \(Self.meetingColumns) FROM meetings WHERE merged_into_meeting_id IS NULL ORDER BY id DESC"
+            let meetingPredicate = archiveFilter.sqlPredicate()
+            sql = "SELECT \(Self.meetingColumns) FROM meetings WHERE merged_into_meeting_id IS NULL AND \(meetingPredicate) ORDER BY id DESC"
         }
         if limit != nil { sql += " LIMIT ?" }
 
@@ -450,6 +489,7 @@ public final class DictationStore {
         SELECT \(Self.meetingColumns)
         FROM meetings
         WHERE merged_into_meeting_id IS NULL
+          AND archived_at IS NULL
           AND (
             title LIKE ? ESCAPE '\\'
             OR raw_transcript LIKE ? ESCAPE '\\'
@@ -694,6 +734,7 @@ public final class DictationStore {
         FROM meetings
         WHERE merged_into_meeting_id IS NULL
           AND meeting_status IN (?, ?)
+          AND archived_at IS NULL
         """
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
@@ -1418,10 +1459,15 @@ public final class DictationStore {
         }
     }
 
-    public func listFolders() throws -> [MeetingFolder] {
+    public func listFolders(archiveFilter: MeetingArchiveFilter = .active) throws -> [MeetingFolder] {
         let db = try openDatabase()
         defer { sqlite3_close(db) }
-        let sql = "SELECT id, name, parent_folder_id, color_hex, icon_name, created_at FROM meeting_folders ORDER BY created_at ASC, id ASC"
+        let sql = """
+        SELECT id, name, parent_folder_id, color_hex, icon_name, created_at, archived_at
+        FROM meeting_folders
+        WHERE \(archiveFilter.sqlPredicate())
+        ORDER BY created_at ASC, id ASC
+        """
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
             throw lastError(db)
@@ -1435,10 +1481,27 @@ public final class DictationStore {
                 parentFolderID: sqlite3_column_type(statement, 2) == SQLITE_NULL ? nil : sqlite3_column_int64(statement, 2),
                 colorHex: sqlite3_column_type(statement, 3) == SQLITE_NULL ? nil : stringColumn(statement, index: 3),
                 iconName: sqlite3_column_type(statement, 4) == SQLITE_NULL ? nil : stringColumn(statement, index: 4),
-                createdAt: stringColumn(statement, index: 5)
+                createdAt: stringColumn(statement, index: 5),
+                archivedAt: sqlite3_column_type(statement, 6) == SQLITE_NULL ? nil : stringColumn(statement, index: 6)
             ))
         }
         return rows
+    }
+
+    public func archiveMeeting(id: Int64, archivedAt: String = SyncTimestamp.now()) throws {
+        try setMeetingArchivedAt(id: id, archivedAt: archivedAt)
+    }
+
+    public func restoreMeeting(id: Int64) throws {
+        try setMeetingArchivedAt(id: id, archivedAt: nil)
+    }
+
+    public func archiveFolderTree(id: Int64, archivedAt: String = SyncTimestamp.now()) throws {
+        try setFolderTreeArchivedAt(id: id, archivedAt: archivedAt)
+    }
+
+    public func restoreFolderTree(id: Int64) throws {
+        try setFolderTreeArchivedAt(id: id, archivedAt: nil)
     }
 
     public func moveMeeting(id: Int64, toFolder folderID: Int64?) throws {
@@ -1456,6 +1519,83 @@ public final class DictationStore {
             sqlite3_bind_null(statement, 1)
         }
         sqlite3_bind_int64(statement, 2, id)
+        guard sqlite3_step(statement) == SQLITE_DONE else {
+            throw lastError(db)
+        }
+    }
+
+    private func setMeetingArchivedAt(id: Int64, archivedAt: String?) throws {
+        let db = try openDatabase()
+        defer { sqlite3_close(db) }
+        let sql = "UPDATE meetings SET archived_at = ? WHERE id = ?"
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw lastError(db)
+        }
+        defer { sqlite3_finalize(statement) }
+        bindOptionalText(archivedAt, at: 1, statement: statement)
+        sqlite3_bind_int64(statement, 2, id)
+        guard sqlite3_step(statement) == SQLITE_DONE else {
+            throw lastError(db)
+        }
+        guard sqlite3_changes(db) > 0 else {
+            throw DictationStoreError.meetingNotFound(id: id)
+        }
+    }
+
+    private func setFolderTreeArchivedAt(id: Int64, archivedAt: String?) throws {
+        let db = try openDatabase()
+        defer { sqlite3_close(db) }
+        guard sqlite3_exec(db, "BEGIN TRANSACTION", nil, nil, nil) == SQLITE_OK else {
+            throw lastError(db)
+        }
+
+        do {
+            let folderSQL = """
+            WITH RECURSIVE folder_tree(id) AS (
+                SELECT id FROM meeting_folders WHERE id = ?
+                UNION ALL
+                SELECT child.id
+                FROM meeting_folders child
+                JOIN folder_tree parent ON child.parent_folder_id = parent.id
+            )
+            UPDATE meeting_folders
+            SET archived_at = ?
+            WHERE id IN (SELECT id FROM folder_tree)
+            """
+            try execArchiveTreeUpdate(sql: folderSQL, rootID: id, archivedAt: archivedAt, db: db)
+
+            let meetingSQL = """
+            WITH RECURSIVE folder_tree(id) AS (
+                SELECT id FROM meeting_folders WHERE id = ?
+                UNION ALL
+                SELECT child.id
+                FROM meeting_folders child
+                JOIN folder_tree parent ON child.parent_folder_id = parent.id
+            )
+            UPDATE meetings
+            SET archived_at = ?
+            WHERE folder_id IN (SELECT id FROM folder_tree)
+            """
+            try execArchiveTreeUpdate(sql: meetingSQL, rootID: id, archivedAt: archivedAt, db: db)
+
+            guard sqlite3_exec(db, "COMMIT", nil, nil, nil) == SQLITE_OK else {
+                throw lastError(db)
+            }
+        } catch {
+            sqlite3_exec(db, "ROLLBACK", nil, nil, nil)
+            throw error
+        }
+    }
+
+    private func execArchiveTreeUpdate(sql: String, rootID: Int64, archivedAt: String?, db: OpaquePointer?) throws {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw lastError(db)
+        }
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_int64(statement, 1, rootID)
+        bindOptionalText(archivedAt, at: 2, statement: statement)
         guard sqlite3_step(statement) == SQLITE_DONE else {
             throw lastError(db)
         }
@@ -1520,6 +1660,7 @@ public final class DictationStore {
         let calendarEventSnapshot = Self.decodeCalendarEventSnapshot(
             sqlite3_column_type(statement, 20) == SQLITE_NULL ? nil : stringColumn(statement, index: 20)
         )
+        let archivedAt: String? = sqlite3_column_type(statement, 21) == SQLITE_NULL ? nil : stringColumn(statement, index: 21)
         return MeetingRecord(
             id: sqlite3_column_int64(statement, 0),
             title: stringColumn(statement, index: 1),
@@ -1541,7 +1682,8 @@ public final class DictationStore {
             selectedTemplateName: selectedTemplateName,
             selectedTemplateKind: selectedTemplateKind,
             selectedTemplatePrompt: selectedTemplatePrompt,
-            source: source
+            source: source,
+            archivedAt: archivedAt
         )
     }
 
