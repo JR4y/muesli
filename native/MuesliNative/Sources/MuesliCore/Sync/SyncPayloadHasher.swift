@@ -46,7 +46,8 @@ public enum SyncPayloadHasher {
         selectedTemplateKind: String?,
         selectedTemplatePrompt: String?,
         folderRemoteID: String?,
-        mergedIntoMeetingRemoteID: String?
+        mergedIntoMeetingRemoteID: String?,
+        archivedAt: String?
     ) -> String {
         let snapshot: Any = canonicalizeJSON(calendarEventSnapshotJSON) ?? NSNull()
         let payload: [String: Any] = [
@@ -67,6 +68,7 @@ public enum SyncPayloadHasher {
             "selected_template_prompt": selectedTemplatePrompt as Any? ?? NSNull(),
             "folder_remote_id": folderRemoteID as Any? ?? NSNull(),
             "merged_into_meeting_id": mergedIntoMeetingRemoteID as Any? ?? NSNull(),
+            "archived_at": archivedAt as Any? ?? NSNull(),
         ]
         return hash(payload)
     }
@@ -76,7 +78,8 @@ public enum SyncPayloadHasher {
         parentRemoteID: String?,
         colorHex: String?,
         iconName: String?,
-        sortOrder: Int
+        sortOrder: Int,
+        archivedAt: String?
     ) -> String {
         let payload: [String: Any] = [
             "name": name,
@@ -84,6 +87,7 @@ public enum SyncPayloadHasher {
             "color_hex": colorHex as Any? ?? NSNull(),
             "icon_name": iconName as Any? ?? NSNull(),
             "sort_order": sortOrder,
+            "archived_at": archivedAt as Any? ?? NSNull(),
         ]
         return hash(payload)
     }

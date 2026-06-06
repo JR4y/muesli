@@ -326,6 +326,10 @@ struct MeetingsView: View {
         appState.meetingRows
     }
 
+    private var isArchiveMode: Bool {
+        appState.meetingBrowserMode == .archive
+    }
+
     private var filteredMeetings: [MeetingRecord] {
         MeetingBrowserLogic.filteredMeetings(
             from: scopedMeetings,
@@ -335,8 +339,11 @@ struct MeetingsView: View {
     }
 
     private var currentFolderName: String {
-        guard let folderID = appState.selectedFolderID else { return L10n.text(.sidebarAllMeetings, config: appState.config) }
-        return appState.folders.first(where: { $0.id == folderID })?.name ?? L10n.text(.sidebarAllMeetings, config: appState.config)
+        guard let folderID = appState.selectedFolderID else {
+            return isArchiveMode ? L10n.text(.sidebarArchive, config: appState.config) : L10n.text(.sidebarAllMeetings, config: appState.config)
+        }
+        return appState.browserFolders.first(where: { $0.id == folderID })?.name
+            ?? (isArchiveMode ? L10n.text(.sidebarArchive, config: appState.config) : L10n.text(.sidebarAllMeetings, config: appState.config))
     }
 
     private var selectedFolder: MeetingFolder? {
@@ -373,8 +380,16 @@ struct MeetingsView: View {
                     meeting: meeting,
                     controller: controller,
                     appState: appState,
-                    onBack: { controller.showMeetingsHome(folderID: appState.selectedFolderID) },
-                    backLabel: L10n.text(.meetingBackToMeetings, config: appState.config)
+                    onBack: {
+                        if isArchiveMode {
+                            controller.showMeetingsArchive(folderID: appState.selectedFolderID)
+                        } else {
+                            controller.showMeetingsHome(folderID: appState.selectedFolderID)
+                        }
+                    },
+                    backLabel: isArchiveMode
+                        ? L10n.text(.meetingBackToArchive, config: appState.config)
+                        : L10n.text(.meetingBackToMeetings, config: appState.config)
                 )
                 .id(meeting.id)
             } else {
@@ -455,7 +470,7 @@ struct MeetingsView: View {
                                     record: meeting,
                                     config: appState.config,
                                     isSelected: appState.selectedMeetingID == meeting.id,
-                                    folders: appState.folders,
+                                    folders: appState.browserFolders,
                                     onSelect: { controller.showMeetingDocument(id: meeting.id) },
                                     onMove: { folderID in
                                         controller.moveMeeting(id: meeting.id, toFolder: folderID)
@@ -463,6 +478,12 @@ struct MeetingsView: View {
                                     onCreateFolderAndMove: { name in
                                         controller.createFolderAndMoveMeeting(name: name, meetingID: meeting.id)
                                     },
+                                    onArchive: isArchiveMode || !controller.canDeleteMeeting(meeting) ? nil : {
+                                        controller.archiveMeeting(id: meeting.id)
+                                    },
+                                    onRestore: isArchiveMode ? {
+                                        controller.restoreMeeting(id: meeting.id)
+                                    } : nil,
                                     onDelete: controller.canDeleteMeeting(meeting) ? {
                                         controller.deleteMeeting(id: meeting.id)
                                     } : nil
@@ -488,7 +509,7 @@ struct MeetingsView: View {
                 selectedFolderID: appState.selectedFolderID,
                 isSearchActive: appState.isSearchActive,
                 navigationState: appState.meetingsNavigationState
-            ), let folderID = appState.selectedFolderID {
+            ), !isArchiveMode, let folderID = appState.selectedFolderID {
                 MeetingChatPanel(
                     scope: .folder(folderID),
                     meetings: appState.meetingRows,
@@ -847,7 +868,7 @@ struct MeetingsView: View {
     @ViewBuilder
     private var browserHeaderTitle: some View {
         HStack(spacing: MuesliTheme.spacing12) {
-            if let selectedFolder {
+            if let selectedFolder, !isArchiveMode {
                 Button {
                     isFolderEditorPresented = true
                 } label: {
@@ -875,7 +896,7 @@ struct MeetingsView: View {
                 .foregroundStyle(MuesliTheme.textSecondary)
                 .fixedSize()
 
-            if selectedFolder == nil {
+            if selectedFolder == nil, !isArchiveMode {
                 Text("\u{2022}")
                     .font(MuesliTheme.callout())
                     .foregroundStyle(MuesliTheme.textTertiary)
@@ -892,7 +913,7 @@ struct MeetingsView: View {
     @ViewBuilder
     private var browserHeaderActions: some View {
         HStack(spacing: MuesliTheme.spacing8) {
-            ForEach(MeetingsHomeChrome.trailingToolbarItems, id: \.self) { item in
+            ForEach(isArchiveMode ? [MeetingsHomeToolbarItem.sort, .filter] : MeetingsHomeChrome.trailingToolbarItems, id: \.self) { item in
                 toolbarItemView(item)
             }
         }
@@ -1151,18 +1172,26 @@ struct MeetingsView: View {
     @ViewBuilder
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: MuesliTheme.spacing12) {
-            Image(systemName: appState.selectedFolderID == nil ? "person.2.wave.2" : "folder")
+            Image(systemName: isArchiveMode ? "archivebox" : (appState.selectedFolderID == nil ? "person.2.wave.2" : "folder"))
                 .font(.system(size: 30, weight: .thin))
                 .foregroundStyle(MuesliTheme.textTertiary)
 
-            Text(appState.selectedFolderID == nil ? L10n.text(.meetingsEmptyTitle, config: appState.config) : L10n.text(.meetingsEmptyFolderTitle, config: appState.config))
+            Text(
+                isArchiveMode
+                    ? L10n.text(.meetingsArchiveEmptyTitle, config: appState.config)
+                    : (appState.selectedFolderID == nil ? L10n.text(.meetingsEmptyTitle, config: appState.config) : L10n.text(.meetingsEmptyFolderTitle, config: appState.config))
+            )
                 .font(MuesliTheme.title3())
                 .foregroundStyle(MuesliTheme.textSecondary)
 
             Text(
-                appState.selectedFolderID == nil
-                    ? L10n.text(.meetingsEmptyMessage, config: appState.config)
-                    : L10n.text(.meetingsEmptyFolderMessage, config: appState.config)
+                isArchiveMode
+                    ? L10n.text(.meetingsArchiveEmptyMessage, config: appState.config)
+                    : (
+                        appState.selectedFolderID == nil
+                            ? L10n.text(.meetingsEmptyMessage, config: appState.config)
+                            : L10n.text(.meetingsEmptyFolderMessage, config: appState.config)
+                    )
             )
             .font(MuesliTheme.callout())
             .foregroundStyle(MuesliTheme.textTertiary)

@@ -1,11 +1,109 @@
 import Foundation
 import MuesliMeetingChat
+import MuesliCore
 import Testing
 @testable import MuesliNativeApp
 
 @MainActor
 @Suite("Supabase REST client", .serialized)
 struct SupabaseRESTClientTests {
+    @Test("upserts archived folder and meeting fields through PostgREST")
+    func upsertsArchiveFields() async throws {
+        let recorder = RequestRecorder()
+        let session = URLSession(configuration: recorder.configuration(responseBodies: [
+            [
+                "id": "11111111-1111-1111-1111-111111111111",
+                "parent_folder_id": NSNull(),
+                "name": "Archive Folder",
+                "color_hex": NSNull(),
+                "icon_name": NSNull(),
+                "sort_order": 0,
+                "client_updated_at": "2026-06-06T11:00:00.000Z",
+                "server_updated_at": "2026-06-06T11:00:01.000Z",
+                "remote_version": 1,
+                "last_writer_device_id": "device-a",
+                "deleted_at": NSNull(),
+                "archived_at": "2026-06-06T11:00:00.000Z",
+            ],
+            [
+                "id": "22222222-2222-2222-2222-222222222222",
+                "folder_id": "11111111-1111-1111-1111-111111111111",
+                "merged_into_meeting_id": NSNull(),
+                "title": "Archive Meeting",
+                "calendar_event_id": NSNull(),
+                "calendar_event_snapshot": NSNull(),
+                "start_time": "2026-06-06T10:00:00.000Z",
+                "end_time": NSNull(),
+                "duration_seconds": 60,
+                "raw_transcript": "Transcript",
+                "formatted_notes": "Notes",
+                "meeting_status": "completed",
+                "manual_notes": "",
+                "word_count": 2,
+                "selected_template_id": NSNull(),
+                "selected_template_name": NSNull(),
+                "selected_template_kind": NSNull(),
+                "selected_template_prompt": NSNull(),
+                "client_updated_at": "2026-06-06T11:00:00.000Z",
+                "server_updated_at": "2026-06-06T11:00:01.000Z",
+                "remote_version": 1,
+                "last_writer_device_id": "device-a",
+                "deleted_at": NSNull(),
+                "archived_at": "2026-06-06T11:00:00.000Z",
+            ],
+        ]))
+        let config = SupabaseConfig(
+            baseURL: URL(string: "https://example.supabase.co")!,
+            anonKey: "anon-key"
+        )
+        let auth = try authenticatedManager(config: config)
+        let client = SupabaseRESTClient(config: config, auth: auth, urlSession: session)
+
+        let folder = try await client.upsertFolder(
+            remoteID: nil,
+            userID: "user-id",
+            parentRemoteID: nil,
+            name: "Archive Folder",
+            colorHex: nil,
+            iconName: nil,
+            sortOrder: 0,
+            clientUpdatedAt: "2026-06-06T11:00:00.000Z",
+            deviceID: "device-a",
+            deletedAt: nil,
+            archivedAt: "2026-06-06T11:00:00.000Z"
+        )
+        let meeting = try await client.upsertMeeting(
+            remoteID: nil,
+            userID: "user-id",
+            folderRemoteID: "11111111-1111-1111-1111-111111111111",
+            mergedIntoMeetingRemoteID: nil,
+            title: "Archive Meeting",
+            calendarEventID: nil,
+            calendarEventSnapshotJSON: nil,
+            startTime: "2026-06-06T10:00:00.000Z",
+            endTime: nil,
+            durationSeconds: 60,
+            rawTranscript: "Transcript",
+            formattedNotes: "Notes",
+            meetingStatus: "completed",
+            manualNotes: "",
+            wordCount: 2,
+            selectedTemplateID: nil,
+            selectedTemplateName: nil,
+            selectedTemplateKind: nil,
+            selectedTemplatePrompt: nil,
+            clientUpdatedAt: "2026-06-06T11:00:00.000Z",
+            deviceID: "device-a",
+            deletedAt: nil,
+            archivedAt: "2026-06-06T11:00:00.000Z"
+        )
+
+        #expect(folder.archivedAt == "2026-06-06T11:00:00.000Z")
+        #expect(meeting.archivedAt == "2026-06-06T11:00:00.000Z")
+        #expect(try jsonBody(recorder.requests[0])["archived_at"] as? String == "2026-06-06T11:00:00.000Z")
+        #expect(try jsonBody(recorder.requests[1])["archived_at"] as? String == "2026-06-06T11:00:00.000Z")
+    }
+
     @Test("upserts chat thread and message through PostgREST")
     func upsertsChatThreadAndMessage() async throws {
         let recorder = RequestRecorder()
@@ -121,6 +219,33 @@ struct SupabaseRESTClientTests {
             keychain: SupabaseKeychainStore(service: "muesli-rest-client-test-\(UUID().uuidString)"),
             sessionStore: store
         )
+    }
+
+    private func jsonBody(_ request: URLRequest) throws -> [String: Any] {
+        let body = try bodyData(request)
+        return try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    }
+
+    private func bodyData(_ request: URLRequest) throws -> Data {
+        if let body = request.httpBody {
+            return body
+        }
+        let stream = try #require(request.httpBodyStream)
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 1024)
+        while stream.hasBytesAvailable {
+            let read = stream.read(&buffer, maxLength: buffer.count)
+            if read < 0 {
+                throw stream.streamError ?? CocoaError(.fileReadUnknown)
+            }
+            if read == 0 {
+                break
+            }
+            data.append(buffer, count: read)
+        }
+        return data
     }
 }
 

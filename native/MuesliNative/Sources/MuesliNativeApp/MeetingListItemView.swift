@@ -9,6 +9,8 @@ struct MeetingListItemView: View {
     let onSelect: () -> Void
     let onMove: (Int64?) -> Void
     let onCreateFolderAndMove: ((String) -> Void)?
+    let onArchive: (() -> Void)?
+    let onRestore: (() -> Void)?
     let onDelete: (() -> Void)?
     @State private var isHovering = false
     @State private var showDeleteConfirmation = false
@@ -52,6 +54,14 @@ struct MeetingListItemView: View {
                     .lineLimit(2)
 
                 Spacer(minLength: 4)
+
+                if onArchive != nil {
+                    archiveButton
+                }
+
+                if onRestore != nil {
+                    restoreButton
+                }
 
                 if onDelete != nil {
                     deleteButton
@@ -214,6 +224,38 @@ struct MeetingListItemView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var archiveButton: some View {
+        Button {
+            onArchive?()
+        } label: {
+            Image(systemName: "archivebox")
+                .font(.system(size: 11))
+                .foregroundStyle(isHovering ? MuesliTheme.accent : MuesliTheme.textTertiary)
+                .frame(width: 24, height: 24)
+                .background(MuesliTheme.surfacePrimary.opacity(isHovering ? 1 : 0))
+                .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help(L10n.text(.meetingArchive, config: config))
+    }
+
+    @ViewBuilder
+    private var restoreButton: some View {
+        Button {
+            onRestore?()
+        } label: {
+            Image(systemName: "arrow.uturn.backward")
+                .font(.system(size: 11))
+                .foregroundStyle(isHovering ? MuesliTheme.accent : MuesliTheme.textTertiary)
+                .frame(width: 24, height: 24)
+                .background(MuesliTheme.surfacePrimary.opacity(isHovering ? 1 : 0))
+                .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help(L10n.text(.meetingRestore, config: config))
     }
 
     @ViewBuilder

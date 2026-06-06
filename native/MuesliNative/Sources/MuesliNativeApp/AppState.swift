@@ -51,6 +51,18 @@ enum MeetingsNavigationState: Equatable {
     case document(Int64)
 }
 
+enum MeetingBrowserMode: Equatable {
+    case active
+    case archive
+
+    var archiveFilter: MeetingArchiveFilter {
+        switch self {
+        case .active: return .active
+        case .archive: return .archived
+        }
+    }
+}
+
 enum SparkleUpdateStatus: Equatable {
     case idle
     case checking
@@ -79,11 +91,15 @@ final class AppState {
     var dictationRows: [DictationRecord] = []
     var meetingRows: [MeetingRecord] = []
     var totalMeetingCount: Int = 0
+    var archivedMeetingCount: Int = 0
     var meetingCountsByFolder: [Int64: Int] = [:]
+    var archivedMeetingCountsByFolder: [Int64: Int] = [:]
     var selectedMeetingID: Int64?
     var selectedMeetingRecord: MeetingRecord?
     var folders: [MeetingFolder] = []
+    var archivedFolders: [MeetingFolder] = []
     var selectedFolderID: Int64?  // nil = "All Meetings"
+    var meetingBrowserMode: MeetingBrowserMode = .active
     var meetingsNavigationState: MeetingsNavigationState = .browser
     var isMeetingTemplatesManagerPresented: Bool = false
     var dictationStats: DictationStats = DictationStats(
@@ -172,24 +188,32 @@ final class AppState {
         return folder(id: selectedFolderID)
     }
 
+    var browserFolders: [MeetingFolder] {
+        meetingBrowserMode == .archive ? archivedFolders : folders
+    }
+
+    var browserMeetingCountsByFolder: [Int64: Int] {
+        meetingBrowserMode == .archive ? archivedMeetingCountsByFolder : meetingCountsByFolder
+    }
+
     func folder(id: Int64?) -> MeetingFolder? {
         guard let id else { return nil }
-        return folders.first(where: { $0.id == id })
+        return browserFolders.first(where: { $0.id == id })
     }
 
-    func childFolders(of parentFolderID: Int64?) -> [MeetingFolder] {
-        folders.filter { $0.parentFolderID == parentFolderID }
+    func childFolders(of parentFolderID: Int64?, includeArchived: Bool? = nil) -> [MeetingFolder] {
+        folders(forArchiveMode: includeArchived).filter { $0.parentFolderID == parentFolderID }
     }
 
-    func hasChildFolders(_ folderID: Int64) -> Bool {
-        folders.contains(where: { $0.parentFolderID == folderID })
+    func hasChildFolders(_ folderID: Int64, includeArchived: Bool? = nil) -> Bool {
+        folders(forArchiveMode: includeArchived).contains(where: { $0.parentFolderID == folderID })
     }
 
-    func descendantFolderIDs(of folderID: Int64) -> Set<Int64> {
+    func descendantFolderIDs(of folderID: Int64, includeArchived: Bool? = nil) -> Set<Int64> {
         var descendants = Set<Int64>()
         var pending = [folderID]
         while let next = pending.popLast() {
-            for child in childFolders(of: next) where descendants.insert(child.id).inserted {
+            for child in childFolders(of: next, includeArchived: includeArchived) where descendants.insert(child.id).inserted {
                 pending.append(child.id)
             }
         }
@@ -205,5 +229,10 @@ final class AppState {
             currentParentID = parent.parentFolderID
         }
         return names.reversed().joined(separator: separator)
+    }
+
+    func folders(forArchiveMode includeArchived: Bool? = nil) -> [MeetingFolder] {
+        let archiveMode = includeArchived ?? (meetingBrowserMode == .archive)
+        return archiveMode ? archivedFolders : folders
     }
 }

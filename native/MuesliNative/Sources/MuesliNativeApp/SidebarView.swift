@@ -120,7 +120,7 @@ struct SidebarView: View {
         }
         .onChange(of: appState.folders.map(\.id)) { _, ids in
             guard !hasInitializedFolderExpansion else { return }
-            expandedFolderIDs = Set(ids)
+            expandedFolderIDs = Set(ids + appState.archivedFolders.map(\.id))
             hasInitializedFolderExpansion = true
         }
         .alert(
@@ -133,7 +133,11 @@ struct SidebarView: View {
             Button(L10n.text(.sidebarDelete, config: appState.config), role: .destructive) {
                 if let folder = folderToDelete {
                     controller.deleteFolder(id: folder.id)
-                    controller.showMeetingsHome(folderID: appState.selectedFolderID)
+                    if appState.meetingBrowserMode == .archive {
+                        controller.showMeetingsArchive(folderID: appState.selectedFolderID)
+                    } else {
+                        controller.showMeetingsHome(folderID: appState.selectedFolderID)
+                    }
                 }
                 folderToDelete = nil
             }
@@ -285,13 +289,26 @@ struct SidebarView: View {
                         icon: "tray.2",
                         label: L10n.text(.sidebarAllMeetings, config: appState.config),
                         count: appState.totalMeetingCount,
-                        isSelected: appState.selectedTab == .meetings && appState.selectedFolderID == nil
+                        isSelected: appState.selectedTab == .meetings && appState.meetingBrowserMode == .active && appState.selectedFolderID == nil
                     ) {
                         controller.showMeetingsHome()
                     }
 
-                    ForEach(rootFolders) { folder in
-                        folderTree(folder, depth: 0)
+                    ForEach(rootFolders(isArchive: false)) { folder in
+                        folderTree(folder, depth: 0, isArchive: false)
+                    }
+
+                    meetingFilterRow(
+                        icon: "archivebox",
+                        label: L10n.text(.sidebarArchive, config: appState.config),
+                        count: appState.archivedMeetingCount,
+                        isSelected: appState.selectedTab == .meetings && appState.meetingBrowserMode == .archive && appState.selectedFolderID == nil
+                    ) {
+                        controller.showMeetingsArchive()
+                    }
+
+                    ForEach(rootFolders(isArchive: true)) { folder in
+                        folderTree(folder, depth: 0, isArchive: true)
                     }
                 }
                 .padding(.horizontal, sidebarRowOuterPadding)
@@ -483,20 +500,29 @@ struct SidebarView: View {
         .onTapGesture(perform: action)
     }
 
-    private func folderTree(_ folder: MeetingFolder, depth: Int) -> AnyView {
+    private func folderTree(_ folder: MeetingFolder, depth: Int, isArchive: Bool) -> AnyView {
         AnyView(
             VStack(alignment: .leading, spacing: 2) {
-                if renamingFolderID == folder.id {
+                if !isArchive, renamingFolderID == folder.id {
                     folderRenameField(folder: folder, depth: depth)
                 } else {
-                    folderTreeRow(folder: folder, depth: depth)
+                    folderTreeRow(folder: folder, depth: depth, isArchive: isArchive)
                         .contextMenu {
-                            Button(L10n.text(.sidebarRename, config: appState.config)) {
-                                renamingFolderID = folder.id
-                                renamingFolderName = folder.name
-                            }
-                            Button(L10n.text(.sidebarAddSubfolder, config: appState.config)) {
-                                createNewFolder(parentFolderID: folder.id)
+                            if isArchive {
+                                Button(L10n.text(.meetingRestore, config: appState.config)) {
+                                    controller.restoreFolder(id: folder.id)
+                                }
+                            } else {
+                                Button(L10n.text(.sidebarRename, config: appState.config)) {
+                                    renamingFolderID = folder.id
+                                    renamingFolderName = folder.name
+                                }
+                                Button(L10n.text(.sidebarAddSubfolder, config: appState.config)) {
+                                    createNewFolder(parentFolderID: folder.id)
+                                }
+                                Button(L10n.text(.meetingArchive, config: appState.config)) {
+                                    controller.archiveFolder(id: folder.id)
+                                }
                             }
                             Divider()
                             Button(L10n.text(.sidebarDelete, config: appState.config), role: .destructive) {
@@ -506,9 +532,9 @@ struct SidebarView: View {
                         }
                 }
 
-                if appState.hasChildFolders(folder.id), isFolderExpanded(folder.id) {
-                    ForEach(appState.childFolders(of: folder.id)) { child in
-                        folderTree(child, depth: depth + 1)
+                if appState.hasChildFolders(folder.id, includeArchived: isArchive), isFolderExpanded(folder.id) {
+                    ForEach(appState.childFolders(of: folder.id, includeArchived: isArchive)) { child in
+                        folderTree(child, depth: depth + 1, isArchive: isArchive)
                     }
                 }
             }
@@ -516,9 +542,9 @@ struct SidebarView: View {
     }
 
     @ViewBuilder
-    private func folderTreeRow(folder: MeetingFolder, depth: Int) -> some View {
-        let hasChildren = appState.hasChildFolders(folder.id)
-        let isSelected = appState.selectedTab == .meetings && appState.selectedFolderID == folder.id
+    private func folderTreeRow(folder: MeetingFolder, depth: Int, isArchive: Bool) -> some View {
+        let hasChildren = appState.hasChildFolders(folder.id, includeArchived: isArchive)
+        let isSelected = appState.selectedTab == .meetings && appState.meetingBrowserMode == (isArchive ? .archive : .active) && appState.selectedFolderID == folder.id
 
         HStack(spacing: MuesliTheme.spacing8) {
             Color.clear
@@ -553,7 +579,7 @@ struct SidebarView: View {
 
             Spacer()
 
-            Text(formattedCount(appState.meetingCountsByFolder[folder.id] ?? 0))
+            Text(formattedCount((isArchive ? appState.archivedMeetingCountsByFolder : appState.meetingCountsByFolder)[folder.id] ?? 0))
                 .font(MuesliTheme.caption())
                 .monospacedDigit()
                 .foregroundStyle(MuesliTheme.textTertiary)
@@ -567,7 +593,11 @@ struct SidebarView: View {
         )
         .contentShape(Rectangle())
         .onTapGesture {
-            controller.showMeetingsHome(folderID: folder.id)
+            if isArchive {
+                controller.showMeetingsArchive(folderID: folder.id)
+            } else {
+                controller.showMeetingsHome(folderID: folder.id)
+            }
         }
     }
 
@@ -608,8 +638,13 @@ struct SidebarView: View {
         return "\(count / 1000)k"
     }
 
-    private var rootFolders: [MeetingFolder] {
-        appState.childFolders(of: nil)
+    private func rootFolders(isArchive: Bool) -> [MeetingFolder] {
+        let folders = appState.folders(forArchiveMode: isArchive)
+        let ids = Set(folders.map(\.id))
+        return folders.filter { folder in
+            guard let parentID = folder.parentFolderID else { return true }
+            return !ids.contains(parentID)
+        }
     }
 
     private func isFolderExpanded(_ folderID: Int64) -> Bool {

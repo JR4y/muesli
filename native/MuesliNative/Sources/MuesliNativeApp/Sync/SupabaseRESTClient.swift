@@ -58,7 +58,8 @@ final class SupabaseRESTClient {
         sortOrder: Int,
         clientUpdatedAt: String,
         deviceID: String,
-        deletedAt: String?
+        deletedAt: String?,
+        archivedAt: String?
     ) async throws -> RemoteFolderPayload {
         var body: [String: Any] = [
             "user_id": userID,
@@ -67,6 +68,7 @@ final class SupabaseRESTClient {
             "last_writer_device_id": deviceID,
             "sort_order": sortOrder,
             "deleted_at": deletedAt as Any? ?? NSNull(),
+            "archived_at": archivedAt as Any? ?? NSNull(),
             "parent_folder_id": parentRemoteID as Any? ?? NSNull(),
             "color_hex": colorHex as Any? ?? NSNull(),
             "icon_name": iconName as Any? ?? NSNull(),
@@ -92,7 +94,8 @@ final class SupabaseRESTClient {
         sortOrder: Int,
         clientUpdatedAt: String,
         deviceID: String,
-        deletedAt: String?
+        deletedAt: String?,
+        archivedAt: String?
     ) async throws -> RemoteFolderPayload? {
         let body: [String: Any] = [
             "name": name,
@@ -103,6 +106,7 @@ final class SupabaseRESTClient {
             "client_updated_at": clientUpdatedAt,
             "last_writer_device_id": deviceID,
             "deleted_at": deletedAt as Any? ?? NSNull(),
+            "archived_at": archivedAt as Any? ?? NSNull(),
         ]
         let query: [URLQueryItem] = [
             URLQueryItem(name: "id", value: "eq.\(remoteID)"),
@@ -280,7 +284,8 @@ final class SupabaseRESTClient {
         selectedTemplatePrompt: String?,
         clientUpdatedAt: String,
         deviceID: String,
-        deletedAt: String?
+        deletedAt: String?,
+        archivedAt: String?
     ) async throws -> RemoteMeetingPayload {
         var body: [String: Any] = [
             "user_id": userID,
@@ -304,6 +309,7 @@ final class SupabaseRESTClient {
             "client_updated_at": clientUpdatedAt,
             "last_writer_device_id": deviceID,
             "deleted_at": deletedAt as Any? ?? NSNull(),
+            "archived_at": archivedAt as Any? ?? NSNull(),
         ]
         if let remoteID {
             body["id"] = remoteID
@@ -338,7 +344,8 @@ final class SupabaseRESTClient {
         selectedTemplatePrompt: String?,
         clientUpdatedAt: String,
         deviceID: String,
-        deletedAt: String?
+        deletedAt: String?,
+        archivedAt: String?
     ) async throws -> RemoteMeetingPayload? {
         let body: [String: Any] = [
             "folder_id": folderRemoteID as Any? ?? NSNull(),
@@ -361,6 +368,7 @@ final class SupabaseRESTClient {
             "client_updated_at": clientUpdatedAt,
             "last_writer_device_id": deviceID,
             "deleted_at": deletedAt as Any? ?? NSNull(),
+            "archived_at": archivedAt as Any? ?? NSNull(),
         ]
         let query: [URLQueryItem] = [
             URLQueryItem(name: "id", value: "eq.\(remoteID)"),
@@ -727,6 +735,7 @@ final class SupabaseRESTClient {
         let sortOrder = row["sort_order"] as? Int ?? 0
         let remoteVersion = (row["remote_version"] as? Int64) ?? Int64((row["remote_version"] as? Int) ?? 1)
         let deletedAt = row["deleted_at"] as? String
+        let archivedAt = row["archived_at"] as? String
         return RemoteFolderPayload(
             remoteID: id,
             parentRemoteID: parentID,
@@ -738,7 +747,8 @@ final class SupabaseRESTClient {
             serverUpdatedAt: serverUpdatedAt,
             remoteVersion: remoteVersion,
             lastWriterDeviceID: deviceID,
-            deletedAt: deletedAt
+            deletedAt: deletedAt,
+            archivedAt: archivedAt
         )
     }
 
@@ -811,6 +821,7 @@ final class SupabaseRESTClient {
         let selectedTemplatePrompt = row["selected_template_prompt"] as? String
         let remoteVersion = (row["remote_version"] as? Int64) ?? Int64((row["remote_version"] as? Int) ?? 1)
         let deletedAt = row["deleted_at"] as? String
+        let archivedAt = row["archived_at"] as? String
         return RemoteMeetingPayload(
             remoteID: id,
             folderRemoteID: folderRemoteID,
@@ -834,7 +845,8 @@ final class SupabaseRESTClient {
             serverUpdatedAt: serverUpdatedAt,
             remoteVersion: remoteVersion,
             lastWriterDeviceID: deviceID,
-            deletedAt: deletedAt
+            deletedAt: deletedAt,
+            archivedAt: archivedAt
         )
     }
 

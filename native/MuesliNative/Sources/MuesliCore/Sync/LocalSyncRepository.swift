@@ -369,7 +369,7 @@ public final class LocalSyncRepository {
                 me.merged_into_meeting_id, me.meeting_status, me.manual_notes,
                 me.selected_template_id, me.selected_template_name,
                 me.selected_template_kind, me.selected_template_prompt,
-                me.calendar_event_snapshot,
+                me.calendar_event_snapshot, me.archived_at,
                 m.remote_id, m.client_updated_at, m.remote_version,
                 m.last_seen_server_updated_at, m.last_payload_hash,
                 m.dirty, m.last_writer_device_id,
@@ -401,16 +401,16 @@ public final class LocalSyncRepository {
                 let metadata = SyncMetadataRecord(
                     entityType: .meeting,
                     localID: record.id,
-                    remoteID: optionalStringColumn(stmt, 20),
-                    clientUpdatedAt: stringColumn(stmt, 21),
-                    remoteVersion: sqlite3_column_int64(stmt, 22),
-                    lastSeenServerUpdatedAt: optionalStringColumn(stmt, 23),
-                    lastPayloadHash: optionalStringColumn(stmt, 24),
-                    dirty: sqlite3_column_int(stmt, 25) != 0,
-                    lastWriterDeviceID: optionalStringColumn(stmt, 26)
+                    remoteID: optionalStringColumn(stmt, 21),
+                    clientUpdatedAt: stringColumn(stmt, 22),
+                    remoteVersion: sqlite3_column_int64(stmt, 23),
+                    lastSeenServerUpdatedAt: optionalStringColumn(stmt, 24),
+                    lastPayloadHash: optionalStringColumn(stmt, 25),
+                    dirty: sqlite3_column_int(stmt, 26) != 0,
+                    lastWriterDeviceID: optionalStringColumn(stmt, 27)
                 )
-                let folderRemoteID = optionalStringColumn(stmt, 27)
-                let mergedIntoMeetingRemoteID = optionalStringColumn(stmt, 28)
+                let folderRemoteID = optionalStringColumn(stmt, 28)
+                let mergedIntoMeetingRemoteID = optionalStringColumn(stmt, 29)
                 result.append(
                     DirtyMeeting(
                         metadata: metadata,
@@ -430,6 +430,7 @@ public final class LocalSyncRepository {
             let sql = """
             SELECT
                 f.id, f.name, f.parent_folder_id, f.color_hex, f.icon_name, f.created_at,
+                f.archived_at,
                 m.remote_id, m.client_updated_at, m.remote_version,
                 m.last_seen_server_updated_at, m.last_payload_hash,
                 m.dirty, m.last_writer_device_id,
@@ -456,26 +457,28 @@ public final class LocalSyncRepository {
                 let colorHex = optionalStringColumn(stmt, 3)
                 let iconName = optionalStringColumn(stmt, 4)
                 let createdAt = stringColumn(stmt, 5)
+                let archivedAt = optionalStringColumn(stmt, 6)
                 let folder = MeetingFolder(
                     id: id,
                     name: name,
                     parentFolderID: parentLocalID,
                     colorHex: colorHex,
                     iconName: iconName,
-                    createdAt: createdAt
+                    createdAt: createdAt,
+                    archivedAt: archivedAt
                 )
                 let metadata = SyncMetadataRecord(
                     entityType: .folder,
                     localID: id,
-                    remoteID: optionalStringColumn(stmt, 6),
-                    clientUpdatedAt: stringColumn(stmt, 7),
-                    remoteVersion: sqlite3_column_int64(stmt, 8),
-                    lastSeenServerUpdatedAt: optionalStringColumn(stmt, 9),
-                    lastPayloadHash: optionalStringColumn(stmt, 10),
-                    dirty: sqlite3_column_int(stmt, 11) != 0,
-                    lastWriterDeviceID: optionalStringColumn(stmt, 12)
+                    remoteID: optionalStringColumn(stmt, 7),
+                    clientUpdatedAt: stringColumn(stmt, 8),
+                    remoteVersion: sqlite3_column_int64(stmt, 9),
+                    lastSeenServerUpdatedAt: optionalStringColumn(stmt, 10),
+                    lastPayloadHash: optionalStringColumn(stmt, 11),
+                    dirty: sqlite3_column_int(stmt, 12) != 0,
+                    lastWriterDeviceID: optionalStringColumn(stmt, 13)
                 )
-                let parentRemoteID = optionalStringColumn(stmt, 13)
+                let parentRemoteID = optionalStringColumn(stmt, 14)
                 result.append(DirtyFolder(metadata: metadata, record: folder, parentRemoteID: parentRemoteID))
             }
         }
@@ -721,7 +724,8 @@ public final class LocalSyncRepository {
                     parentRemoteID: payload.parentRemoteID,
                     colorHex: payload.colorHex,
                     iconName: payload.iconName,
-                    sortOrder: payload.sortOrder
+                    sortOrder: payload.sortOrder,
+                    archivedAt: payload.archivedAt
                 )
                 try writeMetadata(
                     entityType: .folder,
@@ -868,7 +872,8 @@ public final class LocalSyncRepository {
                     selectedTemplateKind: payload.selectedTemplateKind,
                     selectedTemplatePrompt: payload.selectedTemplatePrompt,
                     folderRemoteID: payload.folderRemoteID,
-                    mergedIntoMeetingRemoteID: payload.mergedIntoMeetingRemoteID
+                    mergedIntoMeetingRemoteID: payload.mergedIntoMeetingRemoteID,
+                    archivedAt: payload.archivedAt
                 )
                 try writeMetadata(
                     entityType: .meeting,
@@ -962,7 +967,7 @@ public final class LocalSyncRepository {
                 me.merged_into_meeting_id, me.meeting_status, me.manual_notes,
                 me.selected_template_id, me.selected_template_name,
                 me.selected_template_kind, me.selected_template_prompt,
-                me.calendar_event_snapshot
+                me.calendar_event_snapshot, me.archived_at
             FROM meetings me
             JOIN sync_metadata m
                 ON m.entity_type = 'meeting' AND m.local_id = me.id
@@ -988,7 +993,7 @@ public final class LocalSyncRepository {
         var result: [MeetingFolder] = []
         try withDB { db in
             let sql = """
-            SELECT f.id, f.name, f.parent_folder_id, f.color_hex, f.icon_name, f.created_at
+            SELECT f.id, f.name, f.parent_folder_id, f.color_hex, f.icon_name, f.created_at, f.archived_at
             FROM meeting_folders f
             JOIN sync_metadata m
                 ON m.entity_type = 'folder' AND m.local_id = f.id
@@ -1010,7 +1015,8 @@ public final class LocalSyncRepository {
                         parentFolderID: optionalInt64Column(stmt, 2),
                         colorHex: optionalStringColumn(stmt, 3),
                         iconName: optionalStringColumn(stmt, 4),
-                        createdAt: stringColumn(stmt, 5)
+                        createdAt: stringColumn(stmt, 5),
+                        archivedAt: optionalStringColumn(stmt, 6)
                     )
                 )
             }
@@ -1315,8 +1321,8 @@ public final class LocalSyncRepository {
          system_audio_path, saved_recording_path, merged_into_meeting_id,
          meeting_status, manual_notes, word_count, selected_template_id,
          selected_template_name, selected_template_kind,
-         selected_template_prompt, source, folder_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, 'meeting', ?)
+         selected_template_prompt, source, folder_id, archived_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, 'meeting', ?, ?)
         """
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
@@ -1352,6 +1358,7 @@ public final class LocalSyncRepository {
         } else {
             sqlite3_bind_null(stmt, 17)
         }
+        bindOptionalText(stmt, 18, payload.archivedAt)
         guard sqlite3_step(stmt) == SQLITE_DONE else {
             throw lastError(db)
         }
@@ -1375,7 +1382,7 @@ public final class LocalSyncRepository {
             manual_notes = ?, word_count = ?, selected_template_id = ?,
             selected_template_name = ?, selected_template_kind = ?,
             selected_template_prompt = ?, folder_id = ?,
-            merged_into_meeting_id = ?
+            merged_into_meeting_id = ?, archived_at = ?
         WHERE id = ?
         """
         var stmt: OpaquePointer?
@@ -1412,7 +1419,8 @@ public final class LocalSyncRepository {
         } else {
             sqlite3_bind_null(stmt, 17)
         }
-        sqlite3_bind_int64(stmt, 18, localID)
+        bindOptionalText(stmt, 18, payload.archivedAt)
+        sqlite3_bind_int64(stmt, 19, localID)
         guard sqlite3_step(stmt) == SQLITE_DONE else {
             throw lastError(db)
         }
@@ -1434,8 +1442,8 @@ public final class LocalSyncRepository {
     ) throws -> Int64 {
         let sql = """
         INSERT INTO meeting_folders
-        (name, parent_folder_id, color_hex, icon_name, sort_order)
-        VALUES (?, ?, ?, ?, ?)
+        (name, parent_folder_id, color_hex, icon_name, sort_order, archived_at)
+        VALUES (?, ?, ?, ?, ?, ?)
         """
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
@@ -1451,6 +1459,7 @@ public final class LocalSyncRepository {
         bindOptionalText(stmt, 3, payload.colorHex)
         bindOptionalText(stmt, 4, payload.iconName)
         sqlite3_bind_int(stmt, 5, Int32(payload.sortOrder))
+        bindOptionalText(stmt, 6, payload.archivedAt)
         guard sqlite3_step(stmt) == SQLITE_DONE else {
             throw lastError(db)
         }
@@ -1465,7 +1474,7 @@ public final class LocalSyncRepository {
     ) throws {
         let sql = """
         UPDATE meeting_folders
-        SET name = ?, parent_folder_id = ?, color_hex = ?, icon_name = ?, sort_order = ?
+        SET name = ?, parent_folder_id = ?, color_hex = ?, icon_name = ?, sort_order = ?, archived_at = ?
         WHERE id = ?
         """
         var stmt: OpaquePointer?
@@ -1482,7 +1491,8 @@ public final class LocalSyncRepository {
         bindOptionalText(stmt, 3, payload.colorHex)
         bindOptionalText(stmt, 4, payload.iconName)
         sqlite3_bind_int(stmt, 5, Int32(payload.sortOrder))
-        sqlite3_bind_int64(stmt, 6, localID)
+        bindOptionalText(stmt, 6, payload.archivedAt)
+        sqlite3_bind_int64(stmt, 7, localID)
         guard sqlite3_step(stmt) == SQLITE_DONE else {
             throw lastError(db)
         }
@@ -1755,6 +1765,7 @@ public final class LocalSyncRepository {
         let templateKind = templateKindRaw.flatMap(MeetingTemplateKind.init(rawValue:))
         let templatePrompt = optionalStringColumn(stmt, baseColumn + 18)
         let snapshotJSON = optionalStringColumn(stmt, baseColumn + 19)
+        let archivedAt = optionalStringColumn(stmt, baseColumn + 20)
         let snapshot: MeetingCalendarEventSnapshot? = {
             guard let json = snapshotJSON, let data = json.data(using: .utf8) else { return nil }
             return try? JSONDecoder().decode(MeetingCalendarEventSnapshot.self, from: data)
@@ -1779,7 +1790,8 @@ public final class LocalSyncRepository {
             selectedTemplateID: templateID,
             selectedTemplateName: templateName,
             selectedTemplateKind: templateKind,
-            selectedTemplatePrompt: templatePrompt
+            selectedTemplatePrompt: templatePrompt,
+            archivedAt: archivedAt
         )
     }
 

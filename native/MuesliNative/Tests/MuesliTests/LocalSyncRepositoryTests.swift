@@ -411,7 +411,8 @@ struct LocalSyncRepositoryTests {
                 serverUpdatedAt: now,
                 remoteVersion: 2,
                 lastWriterDeviceID: "device-B",
-                deletedAt: nil
+                deletedAt: nil,
+                archivedAt: nil
             )
         )
 
@@ -453,7 +454,8 @@ struct LocalSyncRepositoryTests {
                 serverUpdatedAt: now,
                 remoteVersion: 1,
                 lastWriterDeviceID: "device-B",
-                deletedAt: nil
+                deletedAt: nil,
+                archivedAt: nil
             )
         )
 
@@ -481,7 +483,8 @@ struct LocalSyncRepositoryTests {
                 serverUpdatedAt: now,
                 remoteVersion: 1,
                 lastWriterDeviceID: "device-B",
-                deletedAt: nil
+                deletedAt: nil,
+                archivedAt: nil
             )
         )
 
@@ -490,6 +493,45 @@ struct LocalSyncRepositoryTests {
         #expect(targetLocalID != nil)
         #expect(sourceLocalID != nil)
         #expect(try fx.store.meeting(id: sourceLocalID!)?.mergedIntoMeetingID == targetLocalID)
+    }
+
+    @Test("applyRemoteMeeting stores archive state locally")
+    func applyRemoteMeetingStoresArchiveState() throws {
+        let fx = try makeFixture()
+        let now = SyncTimestamp.now()
+        let archivedAt = "2026-06-06T11:00:00.000Z"
+
+        try fx.repo.applyRemoteMeeting(
+            RemoteMeetingPayload(
+                remoteID: "rem-archived",
+                folderRemoteID: nil,
+                title: "Archived",
+                calendarEventID: nil,
+                calendarEventSnapshotJSON: nil,
+                startTime: "2026-06-06T10:00:00.000Z",
+                endTime: nil,
+                durationSeconds: 60,
+                rawTranscript: "remote-text",
+                formattedNotes: "",
+                meetingStatus: "completed",
+                manualNotes: "",
+                wordCount: 2,
+                selectedTemplateID: nil,
+                selectedTemplateName: nil,
+                selectedTemplateKind: nil,
+                selectedTemplatePrompt: nil,
+                clientUpdatedAt: now,
+                serverUpdatedAt: now,
+                remoteVersion: 1,
+                lastWriterDeviceID: "device-B",
+                deletedAt: nil,
+                archivedAt: archivedAt
+            )
+        )
+
+        #expect(try fx.store.recentMeetings(limit: 10).isEmpty)
+        let archived = try fx.store.recentMeetings(limit: 10, archiveFilter: .archived)
+        #expect(archived.map(\.archivedAt) == [archivedAt])
     }
 
     @Test("applyRemoteFolder remaps parent through sync_metadata")
@@ -508,7 +550,8 @@ struct LocalSyncRepositoryTests {
                 serverUpdatedAt: now,
                 remoteVersion: 1,
                 lastWriterDeviceID: "device-B",
-                deletedAt: nil
+                deletedAt: nil,
+                archivedAt: nil
             )
         )
         try fx.repo.applyRemoteFolder(
@@ -523,7 +566,8 @@ struct LocalSyncRepositoryTests {
                 serverUpdatedAt: now,
                 remoteVersion: 1,
                 lastWriterDeviceID: "device-B",
-                deletedAt: nil
+                deletedAt: nil,
+                archivedAt: nil
             )
         )
 
@@ -531,6 +575,34 @@ struct LocalSyncRepositoryTests {
         let parent = folders.first(where: { $0.name == "Top" })!
         let child = folders.first(where: { $0.name == "Bottom" })!
         #expect(child.parentFolderID == parent.id)
+    }
+
+    @Test("applyRemoteFolder stores archive state locally")
+    func applyRemoteFolderStoresArchiveState() throws {
+        let fx = try makeFixture()
+        let now = SyncTimestamp.now()
+        let archivedAt = "2026-06-06T11:00:00.000Z"
+
+        try fx.repo.applyRemoteFolder(
+            RemoteFolderPayload(
+                remoteID: "f-archived",
+                parentRemoteID: nil,
+                name: "Archived Folder",
+                colorHex: nil,
+                iconName: nil,
+                sortOrder: 0,
+                clientUpdatedAt: now,
+                serverUpdatedAt: now,
+                remoteVersion: 1,
+                lastWriterDeviceID: "device-B",
+                deletedAt: nil,
+                archivedAt: archivedAt
+            )
+        )
+
+        #expect(try fx.store.listFolders().isEmpty)
+        let archived = try fx.store.listFolders(archiveFilter: .archived)
+        #expect(archived.map(\.archivedAt) == [archivedAt])
     }
 
     // MARK: - Cursors & preferences state
@@ -692,7 +764,8 @@ struct LocalSyncRepositoryTests {
             selectedTemplateKind: nil,
             selectedTemplatePrompt: nil,
             folderRemoteID: nil,
-            mergedIntoMeetingRemoteID: nil
+            mergedIntoMeetingRemoteID: nil,
+            archivedAt: nil
         )
         let merged = SyncPayloadHasher.meetingHash(
             title: "Weekly sync",
@@ -711,9 +784,76 @@ struct LocalSyncRepositoryTests {
             selectedTemplateKind: nil,
             selectedTemplatePrompt: nil,
             folderRemoteID: nil,
-            mergedIntoMeetingRemoteID: "remote-target"
+            mergedIntoMeetingRemoteID: "remote-target",
+            archivedAt: nil
         )
         #expect(base != merged)
+    }
+
+    @Test("meeting payload hash changes when archive state changes")
+    func meetingHashDiffersForArchiveState() {
+        let active = SyncPayloadHasher.meetingHash(
+            title: "Planning",
+            calendarEventID: nil,
+            calendarEventSnapshotJSON: nil,
+            startTime: "2026-06-06T10:00:00Z",
+            endTime: nil,
+            durationSeconds: 60,
+            rawTranscript: "Transcript",
+            formattedNotes: "Notes",
+            meetingStatus: "completed",
+            manualNotes: "",
+            wordCount: 2,
+            selectedTemplateID: nil,
+            selectedTemplateName: nil,
+            selectedTemplateKind: nil,
+            selectedTemplatePrompt: nil,
+            folderRemoteID: nil,
+            mergedIntoMeetingRemoteID: nil,
+            archivedAt: nil
+        )
+        let archived = SyncPayloadHasher.meetingHash(
+            title: "Planning",
+            calendarEventID: nil,
+            calendarEventSnapshotJSON: nil,
+            startTime: "2026-06-06T10:00:00Z",
+            endTime: nil,
+            durationSeconds: 60,
+            rawTranscript: "Transcript",
+            formattedNotes: "Notes",
+            meetingStatus: "completed",
+            manualNotes: "",
+            wordCount: 2,
+            selectedTemplateID: nil,
+            selectedTemplateName: nil,
+            selectedTemplateKind: nil,
+            selectedTemplatePrompt: nil,
+            folderRemoteID: nil,
+            mergedIntoMeetingRemoteID: nil,
+            archivedAt: "2026-06-06T11:00:00.000Z"
+        )
+        #expect(active != archived)
+    }
+
+    @Test("folder payload hash changes when archive state changes")
+    func folderHashDiffersForArchiveState() {
+        let active = SyncPayloadHasher.folderHash(
+            name: "Customers",
+            parentRemoteID: nil,
+            colorHex: nil,
+            iconName: nil,
+            sortOrder: 0,
+            archivedAt: nil
+        )
+        let archived = SyncPayloadHasher.folderHash(
+            name: "Customers",
+            parentRemoteID: nil,
+            colorHex: nil,
+            iconName: nil,
+            sortOrder: 0,
+            archivedAt: "2026-06-06T11:00:00.000Z"
+        )
+        #expect(active != archived)
     }
 
     @Test("preferences hash is stable for equivalent JSON payloads")

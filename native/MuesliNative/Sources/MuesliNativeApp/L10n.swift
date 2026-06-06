@@ -59,6 +59,7 @@ enum L10nKey {
     case sidebarSearchPlaceholder
     case sidebarNewMeetingFolder
     case sidebarAllMeetings
+    case sidebarArchive
     case sidebarRename
     case sidebarAddSubfolder
     case sidebarFolderName
@@ -124,6 +125,8 @@ enum L10nKey {
     case meetingsEmptyFolderTitle
     case meetingsEmptyMessage
     case meetingsEmptyFolderMessage
+    case meetingsArchiveEmptyTitle
+    case meetingsArchiveEmptyMessage
     case meetingDeleteTitle
     case meetingDeleteMessage
     case meetingMoveToFolder
@@ -134,6 +137,9 @@ enum L10nKey {
     case meetingNewFolderMessage
     case meetingDeleteHelp
     case meetingBackToMeetings
+    case meetingBackToArchive
+    case meetingArchive
+    case meetingRestore
     case meetingAssociateEvent
     case meetingCalendarLinked
     case meetingAssociatedEvent
@@ -485,6 +491,8 @@ enum L10n {
             return "New Meeting Folder"
         case .sidebarAllMeetings:
             return "All Meetings"
+        case .sidebarArchive:
+            return "Archive"
         case .sidebarRename:
             return "Rename"
         case .sidebarAddSubfolder:
@@ -615,6 +623,10 @@ enum L10n {
             return "Start a recording from the menu bar to create your first meeting note."
         case .meetingsEmptyFolderMessage:
             return "Choose another folder or move a meeting here from the browser."
+        case .meetingsArchiveEmptyTitle:
+            return "Archive is empty"
+        case .meetingsArchiveEmptyMessage:
+            return "Archived folders and meetings will appear here."
         case .meetingDeleteTitle:
             return "Delete Meeting"
         case .meetingDeleteMessage:
@@ -635,6 +647,12 @@ enum L10n {
             return "Delete meeting"
         case .meetingBackToMeetings:
             return "Back to Meetings"
+        case .meetingBackToArchive:
+            return "Back to Archive"
+        case .meetingArchive:
+            return "Archive"
+        case .meetingRestore:
+            return "Restore"
         case .meetingAssociateEvent:
             return "Associate event"
         case .meetingCalendarLinked:
@@ -1279,6 +1297,8 @@ enum L10n {
             return "Nueva carpeta de reuniones"
         case .sidebarAllMeetings:
             return "Todas las reuniones"
+        case .sidebarArchive:
+            return "Archivo"
         case .sidebarRename:
             return "Renombrar"
         case .sidebarAddSubfolder:
@@ -1409,6 +1429,10 @@ enum L10n {
             return "Inicia una grabacion desde la barra de menu para crear tu primera nota de reunion."
         case .meetingsEmptyFolderMessage:
             return "Elige otra carpeta o mueve una reunion aqui desde el explorador."
+        case .meetingsArchiveEmptyTitle:
+            return "Archivo vacio"
+        case .meetingsArchiveEmptyMessage:
+            return "Las carpetas y reuniones archivadas apareceran aqui."
         case .meetingDeleteTitle:
             return "Eliminar reunion"
         case .meetingDeleteMessage:
@@ -1429,6 +1453,12 @@ enum L10n {
             return "Eliminar reunion"
         case .meetingBackToMeetings:
             return "Volver a Reuniones"
+        case .meetingBackToArchive:
+            return "Volver a Archivo"
+        case .meetingArchive:
+            return "Archivar"
+        case .meetingRestore:
+            return "Restaurar"
         case .meetingAssociateEvent:
             return "Asociar cita"
         case .meetingCalendarLinked:

@@ -222,6 +222,7 @@ public struct RemoteFolderPayload: Sendable {
     public let remoteVersion: Int64
     public let lastWriterDeviceID: String
     public let deletedAt: String?
+    public let archivedAt: String?
 
     public init(
         remoteID: String,
@@ -234,7 +235,8 @@ public struct RemoteFolderPayload: Sendable {
         serverUpdatedAt: String,
         remoteVersion: Int64,
         lastWriterDeviceID: String,
-        deletedAt: String?
+        deletedAt: String?,
+        archivedAt: String?
     ) {
         self.remoteID = remoteID
         self.parentRemoteID = parentRemoteID
@@ -247,6 +249,7 @@ public struct RemoteFolderPayload: Sendable {
         self.remoteVersion = remoteVersion
         self.lastWriterDeviceID = lastWriterDeviceID
         self.deletedAt = deletedAt
+        self.archivedAt = archivedAt
     }
 }
 
@@ -323,6 +326,7 @@ public struct RemoteMeetingPayload: Sendable {
     public let remoteVersion: Int64
     public let lastWriterDeviceID: String
     public let deletedAt: String?
+    public let archivedAt: String?
 
     public init(
         remoteID: String,
@@ -347,7 +351,8 @@ public struct RemoteMeetingPayload: Sendable {
         serverUpdatedAt: String,
         remoteVersion: Int64,
         lastWriterDeviceID: String,
-        deletedAt: String?
+        deletedAt: String?,
+        archivedAt: String?
     ) {
         self.remoteID = remoteID
         self.folderRemoteID = folderRemoteID
@@ -372,6 +377,7 @@ public struct RemoteMeetingPayload: Sendable {
         self.remoteVersion = remoteVersion
         self.lastWriterDeviceID = lastWriterDeviceID
         self.deletedAt = deletedAt
+        self.archivedAt = archivedAt
     }
 }
 

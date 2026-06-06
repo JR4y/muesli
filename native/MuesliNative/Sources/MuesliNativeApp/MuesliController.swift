@@ -890,12 +890,25 @@ final class MuesliController: NSObject {
         )) ?? []
         appState.dictationRows = rows
         appState.hasMoreDictations = rows.count >= appState.dictationPageSize
-        appState.meetingRows = (try? dictationStore.recentMeetings(limit: 200, folderID: appState.selectedFolderID)) ?? []
         let allFolders = (try? dictationStore.listFolders()) ?? []
+        let archivedFolders = (try? dictationStore.listFolders(archiveFilter: .archived)) ?? []
         let counts = (try? dictationStore.meetingCounts()) ?? (total: 0, byFolder: [:])
-        appState.totalMeetingCount = counts.total
+        let archivedCounts = (try? dictationStore.meetingCounts(archiveFilter: .archived)) ?? (total: 0, byFolder: [:])
         appState.folders = allFolders
+        appState.archivedFolders = archivedFolders
+        if let selectedFolderID = appState.selectedFolderID,
+           !appState.browserFolders.contains(where: { $0.id == selectedFolderID }) {
+            appState.selectedFolderID = nil
+        }
+        appState.meetingRows = (try? dictationStore.recentMeetings(
+            limit: 200,
+            folderID: appState.selectedFolderID,
+            archiveFilter: appState.meetingBrowserMode.archiveFilter
+        )) ?? []
+        appState.totalMeetingCount = counts.total
+        appState.archivedMeetingCount = archivedCounts.total
         appState.meetingCountsByFolder = aggregatedFolderCounts(directCounts: counts.byFolder, folders: allFolders)
+        appState.archivedMeetingCountsByFolder = aggregatedFolderCounts(directCounts: archivedCounts.byFolder, folders: archivedFolders)
         if let selectedMeetingID = appState.selectedMeetingID {
             appState.selectedMeetingRecord = appState.meetingRows.first(where: { $0.id == selectedMeetingID })
                 ?? meeting(id: selectedMeetingID)
@@ -2509,6 +2522,15 @@ final class MuesliController: NSObject {
 
     func showMeetingsHome(folderID: Int64? = nil) {
         appState.selectedTab = .meetings
+        appState.meetingBrowserMode = .active
+        appState.selectedFolderID = folderID
+        appState.meetingsNavigationState = .browser
+        syncAppState()
+    }
+
+    func showMeetingsArchive(folderID: Int64? = nil) {
+        appState.selectedTab = .meetings
+        appState.meetingBrowserMode = .archive
         appState.selectedFolderID = folderID
         appState.meetingsNavigationState = .browser
         syncAppState()
@@ -3342,6 +3364,22 @@ final class MuesliController: NSObject {
         syncAppState()
     }
 
+    func archiveFolder(id: Int64) {
+        try? dictationStore.archiveFolderTree(id: id)
+        if appState.selectedFolderID == id {
+            appState.selectedFolderID = nil
+        }
+        syncAppState()
+    }
+
+    func restoreFolder(id: Int64) {
+        try? dictationStore.restoreFolderTree(id: id)
+        if appState.meetingBrowserMode == .archive, appState.selectedFolderID == id {
+            appState.selectedFolderID = nil
+        }
+        syncAppState()
+    }
+
     func hideCalendarEvent(_ eventID: String) {
         appState.hiddenCalendarEventIDs.insert(eventID)
         updateConfig { $0.hiddenCalendarEventIDs = self.appState.hiddenCalendarEventIDs.sorted() }
@@ -3505,6 +3543,27 @@ final class MuesliController: NSObject {
 
         historyWindowController?.reload()
         statusBarController?.refresh()
+        syncAppState()
+    }
+
+    func archiveMeeting(id: Int64) {
+        guard let meeting = meeting(id: id), canDeleteMeeting(meeting) else { return }
+        try? dictationStore.archiveMeeting(id: id)
+        if appState.selectedMeetingID == id {
+            appState.selectedMeetingID = nil
+            appState.selectedMeetingRecord = nil
+            if case .document(let selectedID) = appState.meetingsNavigationState, selectedID == id {
+                appState.meetingsNavigationState = .browser
+            }
+        }
+        syncAppState()
+    }
+
+    func restoreMeeting(id: Int64) {
+        try? dictationStore.restoreMeeting(id: id)
+        if appState.selectedMeetingID == id {
+            appState.selectedMeetingRecord = meeting(id: id)
+        }
         syncAppState()
     }
 

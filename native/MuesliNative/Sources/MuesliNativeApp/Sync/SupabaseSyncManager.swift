@@ -361,7 +361,8 @@ actor SupabaseSyncManager {
                 parentRemoteID: payload.parentRemoteID,
                 colorHex: payload.colorHex,
                 iconName: payload.iconName,
-                sortOrder: payload.sortOrder
+                sortOrder: payload.sortOrder,
+                archivedAt: payload.archivedAt
             )
             try repo.attachRemoteID(
                 entityType: .folder,
@@ -451,7 +452,8 @@ actor SupabaseSyncManager {
                     selectedTemplateKind: payload.selectedTemplateKind,
                     selectedTemplatePrompt: payload.selectedTemplatePrompt,
                     folderRemoteID: payload.folderRemoteID,
-                    mergedIntoMeetingRemoteID: payload.mergedIntoMeetingRemoteID
+                    mergedIntoMeetingRemoteID: payload.mergedIntoMeetingRemoteID,
+                    archivedAt: payload.archivedAt
                 )
                 try repo.attachRemoteID(
                     entityType: .meeting,
@@ -502,7 +504,8 @@ actor SupabaseSyncManager {
             parentRemoteID: entry.parentRemoteID,
             colorHex: entry.record.colorHex,
             iconName: entry.record.iconName,
-            sortOrder: 0
+            sortOrder: 0,
+            archivedAt: entry.record.archivedAt
         )
         if entry.metadata.lastPayloadHash == hash, entry.metadata.remoteID != nil {
             // Nothing actually changed — clean the dirty flag without an upload.
@@ -529,7 +532,8 @@ actor SupabaseSyncManager {
                 sortOrder: 0,
                 clientUpdatedAt: entry.metadata.clientUpdatedAt,
                 deviceID: deviceID,
-                deletedAt: nil
+                deletedAt: nil,
+                archivedAt: entry.record.archivedAt
             )
             if let updated {
                 try repo.markFolderSynced(
@@ -558,7 +562,8 @@ actor SupabaseSyncManager {
                 sortOrder: 0,
                 clientUpdatedAt: entry.metadata.clientUpdatedAt,
                 deviceID: deviceID,
-                deletedAt: nil
+                deletedAt: nil,
+                archivedAt: entry.record.archivedAt
             )
             try repo.markFolderSynced(
                 localID: entry.record.id,
@@ -700,7 +705,8 @@ actor SupabaseSyncManager {
             selectedTemplateKind: entry.record.selectedTemplateKind?.rawValue,
             selectedTemplatePrompt: entry.record.selectedTemplatePrompt,
             folderRemoteID: entry.folderRemoteID,
-            mergedIntoMeetingRemoteID: entry.mergedIntoMeetingRemoteID
+            mergedIntoMeetingRemoteID: entry.mergedIntoMeetingRemoteID,
+            archivedAt: entry.record.archivedAt
         )
         if entry.metadata.lastPayloadHash == hash, entry.metadata.remoteID != nil {
             try repo.markMeetingSynced(
@@ -737,7 +743,8 @@ actor SupabaseSyncManager {
                 selectedTemplatePrompt: entry.record.selectedTemplatePrompt,
                 clientUpdatedAt: entry.metadata.clientUpdatedAt,
                 deviceID: deviceID,
-                deletedAt: nil
+                deletedAt: nil,
+                archivedAt: entry.record.archivedAt
             )
             if let updated {
                 try repo.markMeetingSynced(
@@ -775,7 +782,8 @@ actor SupabaseSyncManager {
                 selectedTemplatePrompt: entry.record.selectedTemplatePrompt,
                 clientUpdatedAt: entry.metadata.clientUpdatedAt,
                 deviceID: deviceID,
-                deletedAt: nil
+                deletedAt: nil,
+                archivedAt: entry.record.archivedAt
             )
             try repo.markMeetingSynced(
                 localID: entry.record.id,
@@ -940,7 +948,8 @@ actor SupabaseSyncManager {
                     sortOrder: 0,
                     clientUpdatedAt: tombstone.clientDeletedAt,
                     deviceID: deviceID,
-                    deletedAt: tombstone.clientDeletedAt
+                    deletedAt: tombstone.clientDeletedAt,
+                    archivedAt: nil
                 )
             case .dictation:
                 _ = try await rest.upsertDictation(
@@ -981,7 +990,8 @@ actor SupabaseSyncManager {
                     selectedTemplatePrompt: nil,
                     clientUpdatedAt: tombstone.clientDeletedAt,
                     deviceID: deviceID,
-                    deletedAt: tombstone.clientDeletedAt
+                    deletedAt: tombstone.clientDeletedAt,
+                    archivedAt: nil
                 )
             }
             try repo.markTombstoneSynced(
@@ -1053,14 +1063,16 @@ actor SupabaseSyncManager {
             parentRemoteID: remote.parentRemoteID,
             colorHex: remote.colorHex,
             iconName: remote.iconName,
-            sortOrder: remote.sortOrder
+            sortOrder: remote.sortOrder,
+            archivedAt: remote.archivedAt
         )
         let localHash = SyncPayloadHasher.folderHash(
             name: local.record.name,
             parentRemoteID: local.parentRemoteID,
             colorHex: local.record.colorHex,
             iconName: local.record.iconName,
-            sortOrder: 0
+            sortOrder: 0,
+            archivedAt: local.record.archivedAt
         )
         if remoteHash == localHash {
             try repo.markFolderSynced(
@@ -1087,7 +1099,8 @@ actor SupabaseSyncManager {
                 sortOrder: 0,
                 clientUpdatedAt: local.metadata.clientUpdatedAt,
                 deviceID: deviceID,
-                deletedAt: nil
+                deletedAt: nil,
+                archivedAt: local.record.archivedAt
             )
             if let updated {
                 try repo.markFolderSynced(
@@ -1200,7 +1213,8 @@ actor SupabaseSyncManager {
             selectedTemplateKind: remote.selectedTemplateKind,
             selectedTemplatePrompt: remote.selectedTemplatePrompt,
             folderRemoteID: remote.folderRemoteID,
-            mergedIntoMeetingRemoteID: remote.mergedIntoMeetingRemoteID
+            mergedIntoMeetingRemoteID: remote.mergedIntoMeetingRemoteID,
+            archivedAt: remote.archivedAt
         )
         let localHash = SyncPayloadHasher.meetingHash(
             title: local.record.title,
@@ -1219,7 +1233,8 @@ actor SupabaseSyncManager {
             selectedTemplateKind: local.record.selectedTemplateKind?.rawValue,
             selectedTemplatePrompt: local.record.selectedTemplatePrompt,
             folderRemoteID: local.folderRemoteID,
-            mergedIntoMeetingRemoteID: local.mergedIntoMeetingRemoteID
+            mergedIntoMeetingRemoteID: local.mergedIntoMeetingRemoteID,
+            archivedAt: local.record.archivedAt
         )
         if remoteHash == localHash {
             try repo.markMeetingSynced(
@@ -1257,7 +1272,8 @@ actor SupabaseSyncManager {
                 selectedTemplatePrompt: local.record.selectedTemplatePrompt,
                 clientUpdatedAt: local.metadata.clientUpdatedAt,
                 deviceID: deviceID,
-                deletedAt: nil
+                deletedAt: nil,
+                archivedAt: local.record.archivedAt
             )
             if let updated {
                 try repo.markMeetingSynced(
