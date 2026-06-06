@@ -448,6 +448,17 @@ struct MeetingChatMountPolicyTests {
         )
     }
 
+    @Test("clear chat sync warning is localized")
+    func clearChatSyncWarningLocalized() {
+        var english = AppConfig()
+        english.appLanguage = AppLanguage.english.rawValue
+        var spanish = AppConfig()
+        spanish.appLanguage = AppLanguage.spanish.rawValue
+
+        #expect(L10n.text(.meetingChatClearSyncedMessage, config: english).contains("all synced devices"))
+        #expect(L10n.text(.meetingChatClearSyncedMessage, config: spanish).contains("todos los dispositivos"))
+    }
+
     private func meetingRecord(
         id: Int64,
         title: String,

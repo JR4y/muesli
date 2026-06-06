@@ -216,6 +216,7 @@ enum L10nKey {
     case meetingChatPlaceholderMeeting
     case meetingChatPlaceholderFolder
     case meetingChatClear
+    case meetingChatClearSyncedMessage
     case meetingChatSend
     case meetingChatMoreContext
     case meetingChatIncludeTranscript
@@ -798,6 +799,8 @@ enum L10n {
             return "Ask about Folder"
         case .meetingChatClear:
             return "Clear chat"
+        case .meetingChatClearSyncedMessage:
+            return "This clears this chat on all synced devices. This cannot be undone."
         case .meetingChatSend:
             return "Send"
         case .meetingChatMoreContext:
@@ -1590,6 +1593,8 @@ enum L10n {
             return "Pregunta sobre la carpeta"
         case .meetingChatClear:
             return "Limpiar chat"
+        case .meetingChatClearSyncedMessage:
+            return "Esto limpia este chat en todos los dispositivos sincronizados. Esta accion no se puede deshacer."
         case .meetingChatSend:
             return "Enviar"
         case .meetingChatMoreContext:

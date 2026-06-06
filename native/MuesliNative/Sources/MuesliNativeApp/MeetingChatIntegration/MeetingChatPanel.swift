@@ -18,6 +18,7 @@ struct MeetingChatPanel: View {
     @State private var isSending = false
     @State private var includeTranscript = false
     @State private var isExpanded = false
+    @State private var isConfirmingClear = false
     @FocusState private var isDraftFocused: Bool
 
     var body: some View {
@@ -48,6 +49,17 @@ struct MeetingChatPanel: View {
         }
         .onChange(of: isDraftFocused) { _, focused in
             if focused { isExpanded = true }
+        }
+        .alert(
+            L10n.text(.meetingChatClear, config: config),
+            isPresented: $isConfirmingClear
+        ) {
+            Button(L10n.text(.sidebarCancel, config: config), role: .cancel) {}
+            Button(L10n.text(.meetingChatClear, config: config), role: .destructive) {
+                clearChat()
+            }
+        } message: {
+            Text(L10n.text(.meetingChatClearSyncedMessage, config: config))
         }
         .animation(.snappy(duration: 0.18), value: isExpanded)
         .animation(.snappy(duration: 0.16), value: mentionSuggestions)
@@ -120,7 +132,7 @@ struct MeetingChatPanel: View {
             if !messages.isEmpty {
                 Divider()
                 Button(role: .destructive) {
-                    clearChat()
+                    isConfirmingClear = true
                 } label: {
                     Label(L10n.text(.meetingChatClear, config: config), systemImage: "trash")
                 }
