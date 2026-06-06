@@ -1246,6 +1246,58 @@ This was an important stabilization pass because the calendar popups are not a
 minor UX detail in this fork; for normal meeting recordings they are expected
 to be the primary and trustworthy entry points.
 
+### Supabase chat sync, archive, and next-session follow-ups
+
+The June 2026 beta pass added two related sync features and one project
+direction note:
+
+- Meeting Chat now syncs through Supabase in the normal sync cycle, using
+  `meeting_chat_threads`, `meeting_chat_messages`, local chat sync metadata,
+  tombstones, and cursor state.
+- Clearing chat is now a synced delete: one device clearing a chat marks it for
+  deletion and other devices remove it through the same sync path.
+- Supabase migration `20260605000000` was applied remotely after the beta app
+  showed the expected missing-table schema-cache error for
+  `meeting_chat_threads`.
+- Meetings and meeting folders now support reversible archive state through
+  `archived_at` locally and remotely.
+- Supabase migration `20260606000000_add_archive_state.sql` was applied
+  remotely and verified with `supabase migration list`.
+- Archive state is included in REST upsert/update bodies, remote payload
+  parsing, payload hashing, and last-writer-wins conflict comparison.
+- The beta app now has an `Archivo` / `Archive` browser mode inside the
+  Reuniones/Meetings sidebar section, reusing the existing meeting browser
+  rather than introducing a new visual surface.
+- Archived folders preserve their archived subtree structure. Archived
+  standalone meetings appear in Archive, and folder restore clears archive
+  state across the subtree.
+- The destructive Supabase purge button remains separate from archive and only
+  purges rows marked with `deleted_at`.
+
+Verification performed for this pass:
+
+- `swift test --filter "DictationStore|LocalSyncRepository|SupabaseRESTClient"`
+  passed with 89 tests.
+- `scripts/beta-test.sh` installed and launched `/Applications/muesli-beta.app`.
+- `origin/beta` was pushed through commit
+  `7b8e697 feat: sync and browse archived meetings`.
+
+Next-session follow-ups to keep visible:
+
+1. Finish the visible terminology pass from Reuniones/Meetings to
+   Notas/Notes where the app is describing the managed note records, while
+   keeping calendar-specific language as meeting language where appropriate.
+2. Review and commit any local label/navigation edits already present in the
+   working tree before starting unrelated work.
+3. Decide whether Archive needs confirmation copy for archiving folders, since
+   that action moves a whole subtree.
+4. Review whether archived content should become searchable from a dedicated
+   archive search path; active search intentionally excludes archived content
+   for now.
+5. Continue evaluating the product model: code/database names can remain
+   `Meeting`/`meetings`, but the user-facing concept should probably become
+   Notes/Notas.
+
 ## Current technical notes
 
 ### Permissions after reinstall

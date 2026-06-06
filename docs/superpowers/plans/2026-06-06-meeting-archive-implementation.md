@@ -1453,3 +1453,39 @@ git push origin beta
 ```
 
 Expected: `origin/beta` includes all archive commits.
+
+---
+
+## Completion Note: 2026-06-06
+
+Archive was implemented and pushed to `origin/beta`.
+
+Delivered:
+
+- Local archive schema and APIs for meetings and folders.
+- Supabase archive schema through `20260606000000_add_archive_state.sql`.
+- Remote migration pushed and verified with `supabase migration list`.
+- Archive state included in REST bodies, remote parsing, sync payload hashes,
+  local apply paths, upload, and conflict comparison.
+- Archive browser mode added inside the existing Meetings sidebar section via
+  `MeetingBrowserMode.archive`; no separate `DashboardTab.archive` was added.
+- Archive/restore actions added for meetings and folders.
+- Beta app installed through `scripts/beta-test.sh`.
+- Branch `beta` pushed through commit
+  `7b8e697 feat: sync and browse archived meetings`.
+
+Verified:
+
+```bash
+env CLANG_MODULE_CACHE_PATH=/private/tmp/muesli-clang-cache SWIFTPM_MODULECACHE_OVERRIDE=/private/tmp/muesli-swiftpm-cache MUESLI_SWIFTPM_SCRATCH_PATH=/private/tmp/muesli-swiftpm-scratch swift test --package-path native/MuesliNative --scratch-path /private/tmp/muesli-swiftpm-scratch --filter "DictationStore|LocalSyncRepository|SupabaseRESTClient"
+```
+
+Result: 89 tests passed.
+
+Deferred to a later session:
+
+- Visible terminology pass from Reuniones/Meetings to Notas/Notes.
+- Final confirmation/wording for folder archive, since it archives a subtree.
+- Any dedicated search path for archived content.
+- Any deeper technical rename from Meeting to Note remains out of scope until
+  product language is stable.

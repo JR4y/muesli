@@ -2,6 +2,7 @@
 
 Date: 2026-06-05
 Branch: beta
+Status: Implemented on beta
 
 ## Summary
 
@@ -11,6 +12,18 @@ sync subsystem integrated into `SupabaseSyncManager`, rather than forcing chat
 threads into the existing `LocalSyncRepository` metadata model. This keeps the
 current sync model stable while giving chat the UUID/text identifiers and
 message-level behavior it needs.
+
+Implementation status:
+
+- Supabase migration `20260605000000` creates the remote chat sync tables,
+  indexes, RLS policies, and version triggers.
+- The migration was pushed to the remote project after beta surfaced the
+  missing `public.meeting_chat_threads` schema-cache error.
+- Existing local chat threads/messages are backfilled into chat sync metadata
+  and upload through the normal sync cycle.
+- Chat clear is a synced delete and uses tombstones, so other devices remove
+  the cleared thread through sync.
+- The beta app was rebuilt and installed after the migration fix.
 
 ## Decisions
 
@@ -211,4 +224,5 @@ Run the focused chat/sync tests and the full native suite before completion.
 - Semantic retrieval, embeddings, or project memory improvements.
 - Syncing full provider prompts or raw context bundles.
 - Multi-user shared workspaces.
-- Renaming Reuniones to Notas.
+- Renaming Reuniones to Notas; this remains a separate visible terminology
+  follow-up.

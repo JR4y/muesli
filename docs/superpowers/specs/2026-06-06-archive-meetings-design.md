@@ -2,7 +2,7 @@
 
 Date: 2026-06-06
 Branch: beta
-Status: Proposed
+Status: Implemented on beta through commit `7b8e697`
 
 ## Summary
 
@@ -142,11 +142,17 @@ views.
 
 ## Navigation And UI
 
-Add a top-level sidebar item:
+Implemented navigation keeps Archive inside the existing Meetings sidebar
+section rather than adding a separate global dashboard tab. This keeps the
+current layout stable while making Archive a first-class browser mode for the
+meeting/note collection.
+
+Add an Archive row in the Meetings section:
 
 - Label: `Archivo` in Spanish, `Archive` in English.
 - Icon: `archivebox`.
-- Tab: add `DashboardTab.archive`.
+- State: `MeetingBrowserMode.archive` while `DashboardTab.meetings` remains
+  selected.
 
 The Archive screen should reuse the Meetings browser structure instead of
 introducing a separate visual system. It can share the same list item component
@@ -247,6 +253,7 @@ completion.
 
 ### Phase 3A: Archive Data And Sync
 
+- Status: Implemented.
 - Add local and remote schema fields.
 - Add store archive/restore APIs.
 - Include `archived_at` in sync payloads, hashes, and conflict resolution.
@@ -254,7 +261,8 @@ completion.
 
 ### Phase 3B: Archive Navigation
 
-- Add `DashboardTab.archive`.
+- Status: Implemented with `MeetingBrowserMode.archive` inside
+  `DashboardTab.meetings`.
 - Add sidebar item.
 - Add Archive browser mode using the existing Meetings browser structure.
 - Add archive/restore actions and localized copy.
@@ -262,11 +270,49 @@ completion.
 
 ### Phase 3C: Notes Label Evaluation
 
+- Status: Deferred to a follow-up session.
 - Change visible copy from Reuniones/Meetings to Notas/Notes for the primary
   sidebar label, browser headers, empty states, and actions that describe the
   records as a collection.
 - Keep code and schema names unchanged.
 - Add localization tests for key labels.
+
+## Implementation Notes
+
+Implemented details:
+
+- Local SQLite migrations add `archived_at` to `meetings` and
+  `meeting_folders`.
+- Supabase migration `20260606000000_add_archive_state.sql` adds
+  `archived_at` and `(user_id, archived_at)` indexes to `public.meetings` and
+  `public.meeting_folders`; it was pushed to the remote project.
+- `MeetingRecord`, `MeetingFolder`, `RemoteMeetingPayload`, and
+  `RemoteFolderPayload` carry `archivedAt`.
+- `SupabaseRESTClient` sends and parses `archived_at`.
+- `SupabaseSyncManager` includes archive state in upload, tombstone fallback,
+  conflict comparison, and remote apply paths.
+- `LocalSyncRepository` reads/writes archive state for dirty rows, unsynced
+  rows, remote apply, and payload hashes.
+- `AppState` tracks active and archived folder/count state separately.
+- `MuesliController` exposes `showMeetingsArchive`, `archiveMeeting`,
+  `restoreMeeting`, `archiveFolder`, and `restoreFolder`.
+- `SidebarView`, `MeetingsView`, and `MeetingListItemView` reuse the existing
+  meetings browser for Archive with archive/restore actions.
+
+Verification:
+
+- `swift test --filter "DictationStore|LocalSyncRepository|SupabaseRESTClient"`
+  passed with 89 tests.
+- `/Applications/muesli-beta.app` was refreshed with `scripts/beta-test.sh`.
+- `origin/beta` was pushed at `7b8e697`.
+
+Known follow-ups:
+
+- Finish the Notes/Notas visible label pass.
+- Review whether folder archive needs confirmation copy before setting
+  `archived_at` across a subtree.
+- Add an archived-content search path only if the product needs it; active
+  search intentionally excludes archive for now.
 
 ## Out Of Scope
 
