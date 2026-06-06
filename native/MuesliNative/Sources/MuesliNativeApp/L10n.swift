@@ -95,6 +95,18 @@ enum L10nKey {
     case meetingsCollapsedHint
     case meetingsCalendarSyncHint
     case meetingsJoinAndRecord
+    case meetingsPreviousPage
+    case meetingsNextPage
+    case meetingsPageStatus(page: Int, total: Int)
+    case meetingsImportAudio
+    case meetingsImportAudioHelp
+    case meetingsOpenNote
+    case meetingsPauseRecording
+    case meetingsResumeRecording
+    case meetingsStopRecordingShort
+    case meetingsFinalizingNotes
+    case meetingsRecordingPaused
+    case meetingsRecordingNow
     case meetingsPopupUpcomingTitle
     case meetingsPopupStartingNowTitle
     case meetingsPopupStartRecording
@@ -166,6 +178,18 @@ enum L10nKey {
     case meetingNoSelectionMessage
     case meetingSummarySaveErrorTitle
     case meetingSummarySaveErrorMessage
+    case meetingRetranscriptionErrorTitle
+    case meetingRetranscriptionErrorMessage
+    case meetingResummaryPromptTitle
+    case meetingResummaryPromptMessage
+    case meetingResummaryNotNow
+    case meetingRetranscribe
+    case meetingRetranscribing
+    case meetingTranscriptResizeHelp
+    case meetingMoreActions
+    case meetingMoreOptions
+    case meetingCancelPreparationHelp
+    case meetingUnknownAttendee
     case meetingTitlePlaceholder
     case meetingNotes
     case meetingTranscript
@@ -471,7 +495,7 @@ enum L10n {
         case .sidebarUpdateTooltip: return "Open About to install the update"
         case .sidebarRestartTooltip: return "Open About to finish installing the update"
         case .sidebarDictations: return "Dictations"
-        case .sidebarMeetings: return "Meetings"
+        case .sidebarMeetings: return "Notes"
         case .sidebarDictionary: return "Dictionary"
         case .sidebarModels: return "Models"
         case .sidebarShortcuts: return "Shortcuts"
@@ -480,7 +504,7 @@ enum L10n {
         case .sidebarDelete: return "Delete"
         case .sidebarCancel: return "Cancel"
         case .sidebarMeetingsMovedToUnfiled(let count):
-            return "\(count) meeting\(count == 1 ? "" : "s") in this folder will be moved to Unfiled."
+            return "\(count) note\(count == 1 ? "" : "s") in this folder will be moved to Unfiled."
         case .sidebarFolderRemoved:
             return "This folder will be permanently removed."
         case .sidebarGreeting(let name):
@@ -488,9 +512,9 @@ enum L10n {
         case .sidebarSearchPlaceholder:
             return "Search..."
         case .sidebarNewMeetingFolder:
-            return "New Meeting Folder"
+            return "New Notes Folder"
         case .sidebarAllMeetings:
-            return "All Meetings"
+            return "All Notes"
         case .sidebarArchive:
             return "Archive"
         case .sidebarRename:
@@ -563,6 +587,30 @@ enum L10n {
             return "Add Google to macOS Calendar for real-time sync"
         case .meetingsJoinAndRecord:
             return "Join & Record"
+        case .meetingsPreviousPage:
+            return "Previous page"
+        case .meetingsNextPage:
+            return "Next page"
+        case .meetingsPageStatus(let page, let total):
+            return "\(page) of \(total)"
+        case .meetingsImportAudio:
+            return "Import Audio"
+        case .meetingsImportAudioHelp:
+            return "Import an audio file for offline transcription"
+        case .meetingsOpenNote:
+            return "Open Note"
+        case .meetingsPauseRecording:
+            return "Pause"
+        case .meetingsResumeRecording:
+            return "Resume"
+        case .meetingsStopRecordingShort:
+            return "Stop"
+        case .meetingsFinalizingNotes:
+            return "Finalizing note"
+        case .meetingsRecordingPaused:
+            return "Recording paused"
+        case .meetingsRecordingNow:
+            return "Recording now"
         case .meetingsPopupUpcomingTitle:
             return "Upcoming meeting"
         case .meetingsPopupStartingNowTitle:
@@ -594,9 +642,9 @@ enum L10n {
         case .meetingsHideFromComingUp:
             return "Hide from Coming Up"
         case .meetingsCount(let count):
-            return "\(count) meeting\(count == 1 ? "" : "s")"
+            return "\(count) note\(count == 1 ? "" : "s")"
         case .meetingsHeaderHint:
-            return "Open a meeting to review notes, transcript, and template-driven summaries"
+            return "Open a note to review notes, transcript, and template-driven summaries"
         case .meetingsManageTemplates:
             return "Manage Templates"
         case .meetingsEditFolder:
@@ -616,21 +664,21 @@ enum L10n {
         case .meetingsFolderSave:
             return "Save"
         case .meetingsEmptyTitle:
-            return "No meetings yet"
+            return "No notes yet"
         case .meetingsEmptyFolderTitle:
-            return "No meetings in this folder"
+            return "No notes in this folder"
         case .meetingsEmptyMessage:
-            return "Start a recording from the menu bar to create your first meeting note."
+            return "Start a recording from the menu bar to create your first note."
         case .meetingsEmptyFolderMessage:
-            return "Choose another folder or move a meeting here from the browser."
+            return "Choose another folder or move a note here from the browser."
         case .meetingsArchiveEmptyTitle:
             return "Archive is empty"
         case .meetingsArchiveEmptyMessage:
-            return "Archived folders and meetings will appear here."
+            return "Archived folders and notes will appear here."
         case .meetingDeleteTitle:
-            return "Delete Meeting"
+            return "Delete Note"
         case .meetingDeleteMessage:
-            return "Are you sure you want to delete this meeting? Saved notes, transcript, and any retained recording will be removed."
+            return "Are you sure you want to delete this note? Saved notes, transcript, and any retained recording will be removed."
         case .meetingMoveToFolder:
             return "Move to folder"
         case .meetingUnfiled:
@@ -642,11 +690,11 @@ enum L10n {
         case .meetingCreate:
             return "Create"
         case .meetingNewFolderMessage:
-            return "Create a new folder and move this meeting into it."
+            return "Create a new folder and move this note into it."
         case .meetingDeleteHelp:
-            return "Delete meeting"
+            return "Delete note"
         case .meetingBackToMeetings:
-            return "Back to Meetings"
+            return "Back to Notes"
         case .meetingBackToArchive:
             return "Back to Archive"
         case .meetingArchive:
@@ -654,11 +702,11 @@ enum L10n {
         case .meetingRestore:
             return "Restore"
         case .meetingAssociateEvent:
-            return "Associate event"
+            return "Associate meeting"
         case .meetingCalendarLinked:
-            return "Calendar linked"
+            return "Meeting linked"
         case .meetingAssociatedEvent:
-            return "Associated Event"
+            return "Associated Meeting"
         case .meetingAttendees:
             return "Attendees"
         case .meetingOpenJoinLink:
@@ -686,27 +734,51 @@ enum L10n {
         case .meetingAttendeeUnknown:
             return "Unknown"
         case .meetingSelectCalendarEvent:
-            return "Select a calendar event"
+            return "Select a calendar meeting"
         case .meetingSelectCalendarEventHint:
-            return "Choose the meeting invite that best matches this recording."
+            return "Choose the calendar meeting that best matches this note."
         case .meetingNoNearbyCalendarEvents:
-            return "No nearby calendar events found for this meeting."
+            return "No nearby calendar meetings found for this note."
         case .meetingUseThisCalendarEvent:
-            return "Use this event"
+            return "Use this meeting"
         case .meetingCalendarAssociationFailedTitle:
-            return "Couldn't associate calendar event"
+            return "Couldn't associate meeting"
         case .meetingCalendarAssociationFailedMessage:
-            return "The selected calendar event could not be linked to this meeting."
+            return "The selected calendar meeting could not be linked to this note."
         case .meetingNoSelectionTitle:
-            return "No meeting selected"
+            return "No note selected"
         case .meetingNoSelectionMessage:
-            return "Choose a meeting from the Meetings browser to open it here."
+            return "Choose a note from the Notes browser to open it here."
         case .meetingSummarySaveErrorTitle:
             return "Couldn't Save Summary"
         case .meetingSummarySaveErrorMessage:
-            return "The updated meeting notes could not be saved."
+            return "The updated notes could not be saved."
+        case .meetingRetranscriptionErrorTitle:
+            return "Couldn't Re-transcribe Note"
+        case .meetingRetranscriptionErrorMessage:
+            return "The saved recording could not be re-transcribed."
+        case .meetingResummaryPromptTitle:
+            return "Re-summarize Notes?"
+        case .meetingResummaryPromptMessage:
+            return "Your transcript edits may change the generated notes. Re-summarize now to update them from the edited transcript."
+        case .meetingResummaryNotNow:
+            return "Not Now"
+        case .meetingRetranscribe:
+            return "Re-transcribe"
+        case .meetingRetranscribing:
+            return "Re-transcribing..."
+        case .meetingTranscriptResizeHelp:
+            return "Drag to resize transcript"
+        case .meetingMoreActions:
+            return "More actions"
+        case .meetingMoreOptions:
+            return "More options"
+        case .meetingCancelPreparationHelp:
+            return "Cancel note preparation"
+        case .meetingUnknownAttendee:
+            return "Unknown attendee"
         case .meetingTitlePlaceholder:
-            return "Meeting Title"
+            return "Note Title"
         case .meetingNotes:
             return "Notes"
         case .meetingTranscript:
@@ -754,7 +826,7 @@ enum L10n {
         case .meetingExportNotes:
             return "Export Notes"
         case .meetingExportFull:
-            return "Export Full Meeting"
+            return "Export Full Note"
         case .meetingOpenSettings:
             return "Open Settings"
         case .meetingApplyTemplate:
@@ -762,9 +834,9 @@ enum L10n {
         case .meetingResummarize:
             return "Re-summarize"
         case .meetingTranscriptCallout(let action):
-            return "Use \(action) to turn this raw transcript into AI meeting notes and a cleaned-up title."
+            return "Use \(action) to turn this raw transcript into AI notes and a cleaned-up title."
         case .meetingAddApiKey:
-            return "Add your API key in Settings to generate meeting notes"
+            return "Add your API key in Settings to generate notes"
         case .meetingWords(let count):
             return "\(count) words"
         case .meetingBuiltInTemplates:
@@ -812,7 +884,7 @@ enum L10n {
         case .meetingLiveChatPlaceholder:
             return "Ask anything (coming soon)"
         case .meetingChatPlaceholderMeeting:
-            return "Ask about Meeting"
+            return "Ask about Note"
         case .meetingChatPlaceholderFolder:
             return "Ask about Folder"
         case .meetingChatClear:
@@ -1277,7 +1349,7 @@ enum L10n {
         case .sidebarUpdateTooltip: return "Abre Acerca de para instalar la actualizacion"
         case .sidebarRestartTooltip: return "Abre Acerca de para terminar la instalacion"
         case .sidebarDictations: return "Dictados"
-        case .sidebarMeetings: return "Reuniones"
+        case .sidebarMeetings: return "Notas"
         case .sidebarDictionary: return "Diccionario"
         case .sidebarModels: return "Modelos"
         case .sidebarShortcuts: return "Atajos"
@@ -1286,7 +1358,7 @@ enum L10n {
         case .sidebarDelete: return "Eliminar"
         case .sidebarCancel: return "Cancelar"
         case .sidebarMeetingsMovedToUnfiled(let count):
-            return "\(count) reunion\(count == 1 ? "" : "es") de esta carpeta se movera a Sin carpeta."
+            return "\(count) nota\(count == 1 ? "" : "s") de esta carpeta se movera a Sin carpeta."
         case .sidebarFolderRemoved:
             return "Esta carpeta se eliminara permanentemente."
         case .sidebarGreeting(let name):
@@ -1294,9 +1366,9 @@ enum L10n {
         case .sidebarSearchPlaceholder:
             return "Buscar..."
         case .sidebarNewMeetingFolder:
-            return "Nueva carpeta de reuniones"
+            return "Nueva carpeta de notas"
         case .sidebarAllMeetings:
-            return "Todas las reuniones"
+            return "Todas las notas"
         case .sidebarArchive:
             return "Archivo"
         case .sidebarRename:
@@ -1369,6 +1441,30 @@ enum L10n {
             return "Agrega Google al Calendario de macOS para sincronizacion en tiempo real"
         case .meetingsJoinAndRecord:
             return "Entrar y grabar"
+        case .meetingsPreviousPage:
+            return "Pagina anterior"
+        case .meetingsNextPage:
+            return "Pagina siguiente"
+        case .meetingsPageStatus(let page, let total):
+            return "\(page) de \(total)"
+        case .meetingsImportAudio:
+            return "Importar audio"
+        case .meetingsImportAudioHelp:
+            return "Importar un archivo de audio para transcripcion sin conexion"
+        case .meetingsOpenNote:
+            return "Abrir nota"
+        case .meetingsPauseRecording:
+            return "Pausar"
+        case .meetingsResumeRecording:
+            return "Reanudar"
+        case .meetingsStopRecordingShort:
+            return "Detener"
+        case .meetingsFinalizingNotes:
+            return "Finalizando nota"
+        case .meetingsRecordingPaused:
+            return "Grabacion pausada"
+        case .meetingsRecordingNow:
+            return "Grabando ahora"
         case .meetingsPopupUpcomingTitle:
             return "Proxima reunion"
         case .meetingsPopupStartingNowTitle:
@@ -1400,9 +1496,9 @@ enum L10n {
         case .meetingsHideFromComingUp:
             return "Ocultar de Proximamente"
         case .meetingsCount(let count):
-            return "\(count) reunion\(count == 1 ? "" : "es")"
+            return "\(count) nota\(count == 1 ? "" : "s")"
         case .meetingsHeaderHint:
-            return "Abre una reunion para revisar notas, transcripcion y resumenes basados en plantillas"
+            return "Abre una nota para revisar notas, transcripcion y resumenes basados en plantillas"
         case .meetingsManageTemplates:
             return "Gestionar plantillas"
         case .meetingsEditFolder:
@@ -1422,21 +1518,21 @@ enum L10n {
         case .meetingsFolderSave:
             return "Guardar"
         case .meetingsEmptyTitle:
-            return "Aun no hay reuniones"
+            return "Aun no hay notas"
         case .meetingsEmptyFolderTitle:
-            return "No hay reuniones en esta carpeta"
+            return "No hay notas en esta carpeta"
         case .meetingsEmptyMessage:
-            return "Inicia una grabacion desde la barra de menu para crear tu primera nota de reunion."
+            return "Inicia una grabacion desde la barra de menu para crear tu primera nota."
         case .meetingsEmptyFolderMessage:
-            return "Elige otra carpeta o mueve una reunion aqui desde el explorador."
+            return "Elige otra carpeta o mueve una nota aqui desde el explorador."
         case .meetingsArchiveEmptyTitle:
             return "Archivo vacio"
         case .meetingsArchiveEmptyMessage:
-            return "Las carpetas y reuniones archivadas apareceran aqui."
+            return "Las carpetas y notas archivadas apareceran aqui."
         case .meetingDeleteTitle:
-            return "Eliminar reunion"
+            return "Eliminar nota"
         case .meetingDeleteMessage:
-            return "Seguro que quieres eliminar esta reunion? Se borraran las notas guardadas, la transcripcion y cualquier grabacion retenida."
+            return "Seguro que quieres eliminar esta nota? Se borraran las notas guardadas, la transcripcion y cualquier grabacion retenida."
         case .meetingMoveToFolder:
             return "Mover a carpeta"
         case .meetingUnfiled:
@@ -1448,11 +1544,11 @@ enum L10n {
         case .meetingCreate:
             return "Crear"
         case .meetingNewFolderMessage:
-            return "Crea una nueva carpeta y mueve esta reunion alli."
+            return "Crea una nueva carpeta y mueve esta nota alli."
         case .meetingDeleteHelp:
-            return "Eliminar reunion"
+            return "Eliminar nota"
         case .meetingBackToMeetings:
-            return "Volver a Reuniones"
+            return "Volver a Notas"
         case .meetingBackToArchive:
             return "Volver a Archivo"
         case .meetingArchive:
@@ -1460,11 +1556,11 @@ enum L10n {
         case .meetingRestore:
             return "Restaurar"
         case .meetingAssociateEvent:
-            return "Asociar cita"
+            return "Asociar reunion"
         case .meetingCalendarLinked:
-            return "Cita asociada"
+            return "Reunion asociada"
         case .meetingAssociatedEvent:
-            return "Evento asociado"
+            return "Reunion asociada"
         case .meetingAttendees:
             return "Asistentes"
         case .meetingOpenJoinLink:
@@ -1492,27 +1588,51 @@ enum L10n {
         case .meetingAttendeeUnknown:
             return "Desconocido"
         case .meetingSelectCalendarEvent:
-            return "Selecciona una cita"
+            return "Selecciona una reunion"
         case .meetingSelectCalendarEventHint:
-            return "Elige la invitacion de calendario que mejor coincide con esta grabacion."
+            return "Elige la reunion del calendario que mejor coincide con esta nota."
         case .meetingNoNearbyCalendarEvents:
-            return "No se encontraron citas cercanas para esta reunion."
+            return "No se encontraron reuniones cercanas para esta nota."
         case .meetingUseThisCalendarEvent:
-            return "Usar esta cita"
+            return "Usar esta reunion"
         case .meetingCalendarAssociationFailedTitle:
-            return "No se pudo asociar la cita"
+            return "No se pudo asociar la reunion"
         case .meetingCalendarAssociationFailedMessage:
-            return "No se pudo vincular la cita seleccionada con esta reunion."
+            return "No se pudo vincular la reunion seleccionada con esta nota."
         case .meetingNoSelectionTitle:
-            return "No hay reunion seleccionada"
+            return "No hay nota seleccionada"
         case .meetingNoSelectionMessage:
-            return "Elige una reunion desde el navegador de Reuniones para abrirla aqui."
+            return "Elige una nota desde el navegador de Notas para abrirla aqui."
         case .meetingSummarySaveErrorTitle:
             return "No se pudo guardar el resumen"
         case .meetingSummarySaveErrorMessage:
-            return "No se pudieron guardar las notas actualizadas de la reunion."
+            return "No se pudieron guardar las notas actualizadas."
+        case .meetingRetranscriptionErrorTitle:
+            return "No se pudo volver a transcribir la nota"
+        case .meetingRetranscriptionErrorMessage:
+            return "No se pudo volver a transcribir la grabacion guardada."
+        case .meetingResummaryPromptTitle:
+            return "Volver a resumir notas?"
+        case .meetingResummaryPromptMessage:
+            return "Tus cambios en la transcripcion pueden modificar las notas generadas. Vuelve a resumir ahora para actualizarlas desde la transcripcion editada."
+        case .meetingResummaryNotNow:
+            return "Ahora no"
+        case .meetingRetranscribe:
+            return "Volver a transcribir"
+        case .meetingRetranscribing:
+            return "Volviendo a transcribir..."
+        case .meetingTranscriptResizeHelp:
+            return "Arrastra para redimensionar la transcripcion"
+        case .meetingMoreActions:
+            return "Mas acciones"
+        case .meetingMoreOptions:
+            return "Mas opciones"
+        case .meetingCancelPreparationHelp:
+            return "Cancelar preparacion de la nota"
+        case .meetingUnknownAttendee:
+            return "Asistente desconocido"
         case .meetingTitlePlaceholder:
-            return "Titulo de la reunion"
+            return "Titulo de la nota"
         case .meetingNotes:
             return "Notas"
         case .meetingTranscript:
@@ -1560,7 +1680,7 @@ enum L10n {
         case .meetingExportNotes:
             return "Exportar notas"
         case .meetingExportFull:
-            return "Exportar reunion completa"
+            return "Exportar nota completa"
         case .meetingOpenSettings:
             return "Abrir ajustes"
         case .meetingApplyTemplate:
@@ -1568,9 +1688,9 @@ enum L10n {
         case .meetingResummarize:
             return "Volver a resumir"
         case .meetingTranscriptCallout(let action):
-            return "Usa \(action) para convertir esta transcripcion cruda en notas de reunion con IA y un titulo mas limpio."
+            return "Usa \(action) para convertir esta transcripcion cruda en notas con IA y un titulo mas limpio."
         case .meetingAddApiKey:
-            return "Agrega tu clave API en Ajustes para generar notas de reunion"
+            return "Agrega tu clave API en Ajustes para generar notas"
         case .meetingWords(let count):
             return "\(count) palabras"
         case .meetingBuiltInTemplates:
@@ -1618,7 +1738,7 @@ enum L10n {
         case .meetingLiveChatPlaceholder:
             return "Pregunta lo que quieras (proximamente)"
         case .meetingChatPlaceholderMeeting:
-            return "Pregunta sobre la reunion"
+            return "Pregunta sobre la nota"
         case .meetingChatPlaceholderFolder:
             return "Pregunta sobre la carpeta"
         case .meetingChatClear:

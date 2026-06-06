@@ -992,6 +992,100 @@ struct MeetingBrowserLogicTests {
         )
     }
 
+    @Test("upcoming pager keeps six events across three days on one page")
+    func upcomingPagerKeepsSixEventsAcrossThreeDaysOnOnePage() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = try #require(ISO8601DateFormatter().date(from: "2026-06-06T10:00:00Z"))
+        let events = (0..<6).map { index in
+            let dayOffset = index / 2
+            let hourOffset = index % 2
+            let start = calendar.date(byAdding: .day, value: dayOffset, to: now)!
+                .addingTimeInterval(TimeInterval(hourOffset * 3600))
+            return makeUpcomingEvent(id: "event-\(index)", start: start)
+        }
+
+        let pages = UpcomingEventsPager.pages(from: events, hiddenEventIDs: [], now: now, calendar: calendar)
+
+        #expect(pages.count == 1)
+        #expect(pages[0].days.count == 3)
+        #expect(pages[0].eventCount == 6)
+    }
+
+    @Test("upcoming pager moves overflow events to the next page")
+    func upcomingPagerMovesOverflowEventsToNextPage() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = try #require(ISO8601DateFormatter().date(from: "2026-06-06T10:00:00Z"))
+        let events = (0..<8).map { index in
+            let dayOffset = index / 3
+            let start = calendar.date(byAdding: .day, value: dayOffset, to: now)!
+                .addingTimeInterval(TimeInterval((index % 3) * 3600))
+            return makeUpcomingEvent(id: "event-\(index)", start: start)
+        }
+
+        let pages = UpcomingEventsPager.pages(from: events, hiddenEventIDs: [], now: now, calendar: calendar)
+
+        #expect(pages.count == 2)
+        #expect(pages[0].eventCount == 6)
+        #expect(pages[1].eventCount == 2)
+    }
+
+    @Test("upcoming pager starts a new page after three days")
+    func upcomingPagerStartsNewPageAfterThreeDays() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = try #require(ISO8601DateFormatter().date(from: "2026-06-06T10:00:00Z"))
+        let events = (0..<4).map { index in
+            let start = calendar.date(byAdding: .day, value: index, to: now)!
+            return makeUpcomingEvent(id: "event-\(index)", start: start)
+        }
+
+        let pages = UpcomingEventsPager.pages(from: events, hiddenEventIDs: [], now: now, calendar: calendar)
+
+        #expect(pages.count == 2)
+        #expect(pages[0].days.count == 3)
+        #expect(pages[0].eventCount == 3)
+        #expect(pages[1].days.count == 1)
+        #expect(pages[1].eventCount == 1)
+    }
+
+    @Test("upcoming pager excludes hidden all-day past and beyond-week events")
+    func upcomingPagerExcludesUnavailableEvents() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = try #require(ISO8601DateFormatter().date(from: "2026-06-06T10:00:00Z"))
+        let visible = makeUpcomingEvent(id: "visible", start: now.addingTimeInterval(3600))
+        let hidden = makeUpcomingEvent(id: "hidden", start: now.addingTimeInterval(7200))
+        let allDay = makeUpcomingEvent(id: "all-day", start: now.addingTimeInterval(10_800), isAllDay: true)
+        let past = makeUpcomingEvent(id: "past", start: now.addingTimeInterval(-7200), duration: 1800)
+        let beyondWeek = makeUpcomingEvent(
+            id: "beyond-week",
+            start: calendar.date(byAdding: .day, value: 8, to: now)!
+        )
+
+        let pages = UpcomingEventsPager.pages(
+            from: [visible, hidden, allDay, past, beyondWeek],
+            hiddenEventIDs: ["hidden"],
+            now: now,
+            calendar: calendar
+        )
+
+        #expect(pages.count == 1)
+        #expect(pages[0].eventCount == 1)
+        #expect(pages[0].days[0].events[0].id == "visible")
+    }
+
+    @Test("notes localization keeps calendar association as meeting")
+    func notesLocalizationKeepsCalendarAssociationAsMeeting() {
+        var english = AppConfig()
+        english.appLanguage = AppLanguage.english.rawValue
+        var spanish = AppConfig()
+        spanish.appLanguage = AppLanguage.spanish.rawValue
+
+        #expect(L10n.text(.sidebarMeetings, config: english) == "Notes")
+        #expect(L10n.text(.sidebarMeetings, config: spanish) == "Notas")
+        #expect(L10n.text(.meetingAssociatedEvent, config: english) == "Associated Meeting")
+        #expect(L10n.text(.meetingAssociatedEvent, config: spanish) == "Reunion asociada")
+        #expect(L10n.text(.meetingsPageStatus(page: 2, total: 3), config: spanish) == "2 de 3")
+    }
+
     private static func isoDate(daysAgo: Int, now: Date, calendar: Calendar) -> String {
         let date = calendar.date(byAdding: .day, value: -daysAgo, to: now) ?? now
         let formatter = ISO8601DateFormatter()
@@ -1003,6 +1097,27 @@ struct MeetingBrowserLogicTests {
         let now = Date(timeIntervalSince1970: 1_710_000_000)
         let calendar = Calendar(identifier: .gregorian)
         return makeMeeting(id: id, rawDate: Self.isoDate(daysAgo: daysAgo, now: now, calendar: calendar), title: title)
+    }
+
+    private func makeUpcomingEvent(
+        id: String,
+        start: Date,
+        duration: TimeInterval = 1800,
+        isAllDay: Bool = false
+    ) -> UnifiedCalendarEvent {
+        UnifiedCalendarEvent(
+            id: id,
+            title: id,
+            startDate: start,
+            endDate: start.addingTimeInterval(duration),
+            isAllDay: isAllDay,
+            source: .eventKit,
+            meetingURL: nil,
+            calendarID: "calendar-1",
+            calendarName: "Calendario",
+            calendarSourceTitle: "Infoavan",
+            calendarColorHex: "CB30E0"
+        )
     }
 
     private func makeMeeting(id: Int64, rawDate: String, title: String) -> MeetingRecord {

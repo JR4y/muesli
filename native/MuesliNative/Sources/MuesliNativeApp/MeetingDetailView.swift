@@ -153,22 +153,22 @@ struct MeetingDetailView: View {
         } message: {
             Text(calendarAssociationErrorMessage ?? L10n.text(.meetingCalendarAssociationFailedMessage, config: appState.config))
         }
-        .alert("Couldn't Re-transcribe Meeting", isPresented: retranscriptionErrorBinding) {
-            Button("OK", role: .cancel) {
+        .alert(L10n.text(.meetingRetranscriptionErrorTitle, config: appState.config), isPresented: retranscriptionErrorBinding) {
+            Button(L10n.text(.commonOK, config: appState.config), role: .cancel) {
                 retranscriptionErrorMessage = nil
             }
         } message: {
-            Text(retranscriptionErrorMessage ?? "The saved recording could not be re-transcribed.")
+            Text(retranscriptionErrorMessage ?? L10n.text(.meetingRetranscriptionErrorMessage, config: appState.config))
         }
-        .alert("Re-summarize Notes?", isPresented: transcriptResummaryPromptBinding) {
-            Button("Re-summarize") {
+        .alert(L10n.text(.meetingResummaryPromptTitle, config: appState.config), isPresented: transcriptResummaryPromptBinding) {
+            Button(L10n.text(.meetingResummarize, config: appState.config)) {
                 resummarizeAfterTranscriptEdit()
             }
-            Button("Not Now", role: .cancel) {
+            Button(L10n.text(.meetingResummaryNotNow, config: appState.config), role: .cancel) {
                 transcriptResummaryPromptMeetingID = nil
             }
         } message: {
-            Text("Your transcript edits may change the generated notes. Re-summarize now to update them from the edited transcript.")
+            Text(L10n.text(.meetingResummaryPromptMessage, config: appState.config))
         }
         .alert(L10n.text(.meetingDeleteTitle, config: appState.config), isPresented: $showDeleteConfirmation) {
             Button(L10n.text(.sidebarDelete, config: appState.config), role: .destructive) {
@@ -655,8 +655,8 @@ struct MeetingDetailView: View {
 
     private var documentModePicker: some View {
         Picker("", selection: $documentMode) {
-            Text("Notes").tag(MeetingDocumentMode.notes)
-            Text("Transcript").tag(MeetingDocumentMode.transcript)
+            Text(L10n.text(.meetingNotes, config: appState.config)).tag(MeetingDocumentMode.notes)
+            Text(L10n.text(.meetingTranscript, config: appState.config)).tag(MeetingDocumentMode.transcript)
         }
         .pickerStyle(.segmented)
         .tint(MuesliTheme.accent)
@@ -1032,13 +1032,13 @@ struct MeetingDetailView: View {
                 HStack(spacing: 6) {
                     ProgressView()
                         .controlSize(.small)
-                    Text("Re-transcribing...")
+                    Text(L10n.text(.meetingRetranscribing, config: appState.config))
                         .font(.system(size: 11))
                         .foregroundStyle(MuesliTheme.textTertiary)
                 }
                 .padding(.horizontal, MuesliTheme.spacing8)
             } else {
-                iconButton("arrow.clockwise", label: "Re-transcribe") {
+                iconButton("arrow.clockwise", label: L10n.text(.meetingRetranscribe, config: appState.config)) {
                     isRetranscribing = true
                     controller.retranscribe(meeting: meeting) { [meeting] result in
                         isRetranscribing = false
@@ -1065,7 +1065,7 @@ struct MeetingDetailView: View {
                     .controlSize(.small)
                     .frame(width: 30, height: 28)
             } else {
-                compactIconButton("arrow.clockwise", label: "Re-transcribe") {
+                compactIconButton("arrow.clockwise", label: L10n.text(.meetingRetranscribe, config: appState.config)) {
                     isRetranscribing = true
                     controller.retranscribe(meeting: meeting) { [meeting] result in
                         isRetranscribing = false
@@ -1541,7 +1541,7 @@ struct MeetingDetailView: View {
                     liveTranscriptResizeStartHeight = nil
                 }
         )
-        .help("Drag to resize transcript")
+        .help(L10n.text(.meetingTranscriptResizeHelp, config: appState.config))
     }
 
     private func clampedTranscriptPanelHeight(_ height: CGFloat) -> CGFloat {
@@ -1732,7 +1732,7 @@ struct MeetingDetailView: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
-            .help("More actions")
+            .help(L10n.text(.meetingMoreActions, config: appState.config))
         }
     }
 
@@ -1778,7 +1778,7 @@ struct MeetingDetailView: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .help("More options")
+        .help(L10n.text(.meetingMoreOptions, config: appState.config))
     }
 
     @ViewBuilder
@@ -1852,10 +1852,10 @@ struct MeetingDetailView: View {
     }
 
     private var cancelMeetingPreparationButton: some View {
-        iconButton("xmark", label: "Cancel") {
+        iconButton("xmark", label: L10n.text(.sidebarCancel, config: appState.config)) {
             controller.cancelMeetingPreparation()
         }
-        .help("Cancel meeting preparation")
+        .help(L10n.text(.meetingCancelPreparationHelp, config: appState.config))
     }
 
     private var pauseResumeRecordingButton: some View {
@@ -2545,7 +2545,7 @@ struct MeetingDetailView: View {
         if let email = attendee.email?.trimmingCharacters(in: .whitespacesAndNewlines), !email.isEmpty {
             return email
         }
-        return "Unknown attendee"
+        return L10n.text(.meetingUnknownAttendee, config: appState.config)
     }
 
     private func attendeeStatusLabel(_ status: MeetingCalendarEventAttendee.ResponseStatus) -> String {

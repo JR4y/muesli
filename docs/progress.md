@@ -1041,13 +1041,15 @@ before promoting them into `beta`.
 - Slack meeting detection was hardened so Slack no longer behaves like a noisy generic app-presence signal and instead requires stronger audio attribution before prompting
 - the meeting prompt state machine now adds a short candidate dwell period and stronger suppression semantics so repeated prompts are less jumpy
 - detection prompts are now suppressed while dictation activity is active, reducing cross-talk between dictation and meeting detection flows
-- `Coming Up` now temporarily caps the visible upcoming-meetings list to 5 events, which is acceptable for now and can later evolve into proper pagination
+- `Coming Up` temporarily capped the visible upcoming-meetings list to 5
+  events as an interim upstream behavior; this was superseded on 2026-06-06 by
+  the compact paginated dashboard block
 - upstream Sparkle/update verification hardening and related release metadata updates were also pulled in
 
 This upstream pass was intentionally accepted as infrastructure-first work. The
-Slack and prompt-state changes improve reliability immediately, while the
-5-item `Coming Up` cap gives a reasonable short-term ceiling until a richer
-pagination or expansion model is added.
+Slack and prompt-state changes improve reliability immediately, while the old
+5-item `Coming Up` cap gave a short-term ceiling until the 2026-06-06
+pagination pass replaced it.
 ### 2026-04-27 to 2026-04-28
 
 This was the first major fork setup and product-shaping pass.
@@ -1284,19 +1286,40 @@ Verification performed for this pass:
 
 Next-session follow-ups to keep visible:
 
-1. Finish the visible terminology pass from Reuniones/Meetings to
-   Notas/Notes where the app is describing the managed note records, while
-   keeping calendar-specific language as meeting language where appropriate.
-2. Review and commit any local label/navigation edits already present in the
-   working tree before starting unrelated work.
-3. Decide whether Archive needs confirmation copy for archiving folders, since
+1. Decide whether Archive needs confirmation copy for archiving folders, since
    that action moves a whole subtree.
-4. Review whether archived content should become searchable from a dedicated
+2. Review whether archived content should become searchable from a dedicated
    archive search path; active search intentionally excludes archived content
    for now.
-5. Continue evaluating the product model: code/database names can remain
-   `Meeting`/`meetings`, but the user-facing concept should probably become
-   Notes/Notas.
+
+### 2026-06-06: Notes terminology and Coming Up pagination
+
+This pass finished the small UX/product terminology cleanup that had been
+tracked after Archive:
+
+- user-facing browser copy now uses `Notes` / `Notas` for stored records while
+  leaving code, database, CLI, and calendar-specific internals as
+  `Meeting`/`meetings`
+- calendar association copy now treats the linked calendar item as an
+  associated meeting rather than mixing event/cita terminology
+- the `Coming Up` dashboard section no longer relies on the temporary 5-event
+  cap; it now uses a compact date column and pages current/future events within
+  the existing 7-day calendar window
+- each `Coming Up` page is bounded by whichever comes first: 3 calendar days or
+  6 events, so dense days spill cleanly onto the next page
+- visible labels around import, active-note actions, re-transcription, and
+  transcript controls were moved into `L10n.swift`
+
+Verification performed for this pass:
+
+- `swift test --filter upcomingPager` passed with the four new pagination tests.
+- `swift test --filter notesLocalizationKeepsCalendarAssociationAsMeeting`
+  passed.
+- `swift test --filter MeetingsNavigationTests` currently compiles but still
+  exposes an unrelated existing failure in
+  `showMeetingsHomeReturnsToBrowser`, where `selectedFolderID` resolves to
+  `nil` instead of the expected `99`.
+- `scripts/beta-test.sh` installed and launched `/Applications/muesli-beta.app`.
 
 ## Current technical notes
 
@@ -1345,7 +1368,10 @@ README "delivered features" section:
 - Localized meeting notification popups and quick-note / live-notes editing surfaces
 - Quick notes can now default to note-only mode with an independent auto-record toggle
 - Hardened Slack meeting detection and meeting prompt suppression from newer upstream work
-- Temporary 5-event cap in `Coming Up` adopted from upstream as a stepping stone toward future pagination
+- Compact paginated `Coming Up` dashboard section replacing the temporary
+  5-event cap
+- Visible terminology pass from Reuniones/Meetings to Notas/Notes for stored
+  note records, while preserving meeting language for calendar meetings
 
 ## Recommended next work
 
@@ -1353,8 +1379,7 @@ README "delivered features" section:
 2. Decide whether Google Calendar configuration should remain hidden/disabled without credentials or be exposed more explicitly
 3. Continue improving summary/title quality now that template and title-prompt controls exist
 4. Continue UX polish for meeting detail and in-meeting note handling, especially how aggressively the note window steals focus during live meetings
-5. Replace the temporary 5-item `Coming Up` cap with a more intentional pagination or expansion model once the desired browsing behavior is clearer
-6. Explore meeting-chat / copilot direction
+5. Explore meeting-chat / copilot direction
 
 ## Editing note
 

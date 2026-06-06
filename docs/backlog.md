@@ -24,8 +24,10 @@ Completed or largely completed:
 
 - Separate beta app install (`muesli-beta.app`) for safe daily testing
 - Warm beige light theme baseline
-- `Meetings` promoted above `Dictations`
-- `Meetings` made the default landing view
+- `Meetings` promoted above `Dictations` before the later visible terminology
+  pass renamed the primary surface to `Notes` / `Notas`
+- `Meetings` made the default landing view before the later visible terminology
+  pass renamed the primary surface to `Notes` / `Notas`
 - Localization foundation via `L10n.swift`
 - Language preference stored in app config
 - Sidebar localization
@@ -57,7 +59,13 @@ Completed or largely completed:
 - The main window now uses an app-owned split shell plus a real AppKit titlebar accessory for the sidebar toggle, while the quick-note CTA lives inside the meetings content as `Nota rápida`
 - Manual-note editor toolbar commands were stabilized so formatting actions work reliably after button clicks
 - Upstream Slack meeting detection hardening and stronger meeting-prompt suppression are now integrated into `beta`
-- `Coming Up` now caps visible upcoming meetings to 5 for the moment, pending a more intentional pagination/expansion design
+- `Coming Up` now uses compact date labels plus pagination instead of the
+  temporary 5-item cap: each page shows up to 3 days or 6 events, whichever
+  comes first, while still limiting the source window to the current 7-day
+  calendar range
+- The primary user-facing browser terminology now says `Notes` / `Notas`
+  where Muesli is describing stored note records, while calendar-specific
+  affordances continue to use meeting language
 - Multi-Mac sync via Supabase (project `molli`, `eu-west-1`), scoped to `muesli-beta.app`. New tables, triggers, and tombstones live in `MuesliCore/Sync/`; auth, REST client, and orchestrator live in `MuesliNativeApp/Sync/`. Configured per build via `config/Supabase.xcconfig` (gitignored, with committed `.example` template). Settings → Sync pane handles signup, signin, manual sync, and surfaces status. Same-day beta fixes covered first-sync metadata backfill for existing local data, PostgREST cursor timestamp normalization, and safe parent-before-child upload ordering for nested folders. See `docs/progress.md` 2026-05-04 entry for the implementation map and `docs/plans/2026-05-04-supabase-sync-corrected-plan.md` for the design rationale.
 - Live meeting transcript is now isolated behind a real `Settings → Meetings → Live transcript` toggle instead of being an always-on behavior
 - Meeting detail now renders the final transcript as a chat-style conversation while keeping `rawTranscript` as the storage/export source of truth
@@ -189,13 +197,14 @@ Possible scope:
 - Copy tone
 - Visual emphasis of primary actions
 - Consistency across onboarding, settings, and meetings
-- Further improve the `Coming Up` dashboard block
+- Continue validating the compact `Coming Up` dashboard block in daily beta use
 
 Notes:
 
-- first ergonomic pass can stay small: keep the new collapse/expand behavior
-- `Coming Up` is now temporarily capped at 5 visible upcoming meetings
-- next likely step: replace that temporary cap with pagination or a clearer expand/load-more model so the meetings browser stays visible without excessive scrolling
+- first ergonomic pass can stay small: keep the collapse/expand behavior and
+  the new compact paginated layout
+- `Coming Up` now pages events instead of relying on the old temporary 5-item
+  cap; page boundaries are intentionally simple at up to 3 days or 6 events
 - also worth exploring later: a direct shortcut from `Coming Up` into the relevant calendar area instead of only sync guidance
 - folders are now hierarchical and visually identifiable, but they are still single-assignment folders rather than multi-tag classification
 - meetings list now shows a subtle indicator when a note already has an associated calendar event

@@ -212,6 +212,77 @@ enum MeetingsHomeChrome {
     }
 }
 
+enum UpcomingEventsPager {
+    static let maxDaysPerPage = 3
+    static let maxEventsPerPage = 6
+    static let daysAhead = 7
+
+    struct PageDay {
+        let date: Date
+        let events: [UnifiedCalendarEvent]
+    }
+
+    struct Page {
+        let days: [PageDay]
+
+        var eventCount: Int {
+            days.reduce(0) { $0 + $1.events.count }
+        }
+    }
+
+    static func pages(
+        from events: [UnifiedCalendarEvent],
+        hiddenEventIDs: Set<String>,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> [Page] {
+        let weekEnd = calendar.date(byAdding: .day, value: daysAhead, to: now) ?? now.addingTimeInterval(TimeInterval(daysAhead * 24 * 60 * 60))
+        let visibleEvents = events
+            .filter { event in
+                !event.isAllDay
+                    && !hiddenEventIDs.contains(event.id)
+                    && event.endDate >= now
+                    && event.startDate < weekEnd
+            }
+            .sorted { $0.startDate < $1.startDate }
+
+        var pages: [Page] = []
+        var currentDays: [PageDay] = []
+        var currentEventCount = 0
+
+        func flushCurrentPage() {
+            guard !currentDays.isEmpty else { return }
+            pages.append(Page(days: currentDays))
+            currentDays = []
+            currentEventCount = 0
+        }
+
+        for event in visibleEvents {
+            let day = calendar.startOfDay(for: event.startDate)
+
+            if currentEventCount == maxEventsPerPage {
+                flushCurrentPage()
+            }
+
+            if let last = currentDays.last, calendar.isDate(last.date, inSameDayAs: day) {
+                currentDays[currentDays.count - 1] = PageDay(date: last.date, events: last.events + [event])
+                currentEventCount += 1
+                continue
+            }
+
+            if currentDays.count == maxDaysPerPage {
+                flushCurrentPage()
+            }
+
+            currentDays.append(PageDay(date: day, events: [event]))
+            currentEventCount += 1
+        }
+
+        flushCurrentPage()
+        return pages
+    }
+}
+
 enum MeetingBrowserLogic {
     static func availableFilters(
         for meetings: [MeetingRecord],
@@ -320,6 +391,7 @@ struct MeetingsView: View {
     @State private var selectedFilter: MeetingBrowserFilter = .all
     @State private var selectedSort: MeetingBrowserSort = .newestFirst
     @State private var isComingUpExpanded = true
+    @State private var comingUpPageIndex = 0
     @State private var isFolderEditorPresented = false
 
     private var scopedMeetings: [MeetingRecord] {
@@ -577,29 +649,25 @@ struct MeetingsView: View {
         let f = DateFormatter(); f.dateFormat = "EEE"; return f
     }()
 
-    private static let maxUpcomingEvents = 5
+    private var upcomingPages: [UpcomingEventsPager.Page] {
+        UpcomingEventsPager.pages(
+            from: appState.upcomingCalendarEvents,
+            hiddenEventIDs: appState.hiddenCalendarEventIDs
+        )
+    }
 
     private var groupedUpcomingEvents: [UpcomingEventGroup] {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
-        let timedEvents = appState.upcomingCalendarEvents.filter { !$0.isAllDay && !appState.hiddenCalendarEventIDs.contains($0.id) }
-        let grouped = Dictionary(grouping: timedEvents) { event in
-            calendar.startOfDay(for: event.startDate)
-        }
         let dayFormatter = Self.dayFormatter
         let monthFormatter = Self.monthFormatter
         let weekdayFormatter = Self.weekdayFormatter
+        let pages = upcomingPages
+        guard !pages.isEmpty else { return [] }
+        let pageIndex = min(max(comingUpPageIndex, 0), pages.count - 1)
 
-        let sortedDates = grouped.keys.sorted()
-        var result: [UpcomingEventGroup] = []
-        var remaining = Self.maxUpcomingEvents
-
-        for date in sortedDates {
-            guard remaining > 0 else { break }
-            let sortedEvents = grouped[date]!.sorted { $0.startDate < $1.startDate }
-            let limitedEvents = Array(sortedEvents.prefix(remaining))
-            remaining -= limitedEvents.count
-
+        return pages[pageIndex].days.map { day in
+            let date = day.date
             let isToday = calendar.isDate(date, inSameDayAs: today)
             let isTomorrow = calendar.date(byAdding: .day, value: 1, to: today).map { calendar.isDate(date, inSameDayAs: $0) } ?? false
             let dayLabel: String
@@ -610,22 +678,26 @@ struct MeetingsView: View {
             } else {
                 dayLabel = monthFormatter.string(from: date)
             }
-            result.append(UpcomingEventGroup(
+            return UpcomingEventGroup(
                 id: date.description,
                 date: date,
                 dayLabel: dayLabel,
                 dayNumber: dayFormatter.string(from: date),
                 dayOfWeek: weekdayFormatter.string(from: date),
                 isToday: isToday,
-                events: limitedEvents
-            ))
+                events: day.events
+            )
         }
-
-        return result
     }
 
     private var visibleUpcomingEventCount: Int {
-        groupedUpcomingEvents.reduce(0) { $0 + $1.events.count }
+        upcomingPages.reduce(0) { $0 + $1.eventCount }
+    }
+
+    private var selectedUpcomingPageIndex: Int {
+        let pages = upcomingPages
+        guard !pages.isEmpty else { return 0 }
+        return min(max(comingUpPageIndex, 0), pages.count - 1)
     }
 
     @ViewBuilder
@@ -669,31 +741,83 @@ struct MeetingsView: View {
 
                 Spacer(minLength: 0)
 
-                Button {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        isComingUpExpanded.toggle()
-                    }
-                } label: {
-                    Image(systemName: MeetingsHomeChrome.comingUpToggleSymbolName(isExpanded: isComingUpExpanded))
-                        .font(.system(size: 11, weight: .semibold))
-                        .frame(width: 30, height: 30)
-                        .foregroundStyle(MuesliTheme.textSecondary)
+                HStack(spacing: MuesliTheme.spacing8) {
+                    let pages = upcomingPages
+                    if pages.count > 1, isComingUpExpanded {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.16)) {
+                                comingUpPageIndex = max(selectedUpcomingPageIndex - 1, 0)
+                            }
+                        } label: {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 11, weight: .semibold))
+                                .frame(width: 28, height: 28)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(selectedUpcomingPageIndex == 0)
+                        .foregroundStyle(selectedUpcomingPageIndex == 0 ? MuesliTheme.textTertiary : MuesliTheme.textSecondary)
                         .background(MuesliTheme.surfacePrimary)
                         .clipShape(RoundedRectangle(cornerRadius: 7))
                         .overlay(
                             RoundedRectangle(cornerRadius: 7)
                                 .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 0.5)
                         )
+                        .help(L10n.text(.meetingsPreviousPage, config: appState.config))
+                        .accessibilityLabel(L10n.text(.meetingsPreviousPage, config: appState.config))
+
+                        Text(L10n.text(.meetingsPageStatus(page: selectedUpcomingPageIndex + 1, total: pages.count), config: appState.config))
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(MuesliTheme.textSecondary)
+                            .frame(minWidth: 44)
+
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.16)) {
+                                comingUpPageIndex = min(selectedUpcomingPageIndex + 1, pages.count - 1)
+                            }
+                        } label: {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 11, weight: .semibold))
+                                .frame(width: 28, height: 28)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(selectedUpcomingPageIndex >= pages.count - 1)
+                        .foregroundStyle(selectedUpcomingPageIndex >= pages.count - 1 ? MuesliTheme.textTertiary : MuesliTheme.textSecondary)
+                        .background(MuesliTheme.surfacePrimary)
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7)
+                                .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 0.5)
+                        )
+                        .help(L10n.text(.meetingsNextPage, config: appState.config))
+                        .accessibilityLabel(L10n.text(.meetingsNextPage, config: appState.config))
+                    }
+
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            isComingUpExpanded.toggle()
+                        }
+                    } label: {
+                        Image(systemName: MeetingsHomeChrome.comingUpToggleSymbolName(isExpanded: isComingUpExpanded))
+                            .font(.system(size: 11, weight: .semibold))
+                            .frame(width: 30, height: 30)
+                            .foregroundStyle(MuesliTheme.textSecondary)
+                            .background(MuesliTheme.surfacePrimary)
+                            .clipShape(RoundedRectangle(cornerRadius: 7))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 7)
+                                    .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 0.5)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .help(L10n.text(
+                        isComingUpExpanded ? .meetingsCollapseComingUp : .meetingsExpandComingUp,
+                        config: appState.config
+                    ))
+                    .accessibilityLabel(L10n.text(
+                        isComingUpExpanded ? .meetingsCollapseComingUp : .meetingsExpandComingUp,
+                        config: appState.config
+                    ))
                 }
-                .buttonStyle(.plain)
-                .help(L10n.text(
-                    isComingUpExpanded ? .meetingsCollapseComingUp : .meetingsExpandComingUp,
-                    config: appState.config
-                ))
-                .accessibilityLabel(L10n.text(
-                    isComingUpExpanded ? .meetingsCollapseComingUp : .meetingsExpandComingUp,
-                    config: appState.config
-                ))
             }
             .padding(.bottom, 4)
 
@@ -703,18 +827,23 @@ struct MeetingsView: View {
                 ForEach(groups) { group in
                     HStack(alignment: .top, spacing: 20) {
                         // Date column
-                        VStack(alignment: .center, spacing: 2) {
+                        HStack(alignment: .center, spacing: 7) {
                             Text(group.dayNumber)
                                 .font(.system(size: 24, weight: .light, design: .default))
                                 .foregroundStyle(group.isToday ? MuesliTheme.accent : MuesliTheme.textPrimary)
-                            Text(group.dayLabel)
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(group.isToday ? MuesliTheme.accent : MuesliTheme.textSecondary)
-                            Text(group.dayOfWeek)
-                                .font(.system(size: 10))
-                                .foregroundStyle(MuesliTheme.textSecondary)
+
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(group.dayLabel)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(group.isToday ? MuesliTheme.accent : MuesliTheme.textSecondary)
+                                    .lineLimit(1)
+                                Text(group.dayOfWeek)
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(MuesliTheme.textSecondary)
+                                    .lineLimit(1)
+                            }
                         }
-                        .frame(width: 60)
+                        .frame(width: 78, alignment: .leading)
 
                         // Events column
                         VStack(alignment: .leading, spacing: 10) {
@@ -800,6 +929,21 @@ struct MeetingsView: View {
             RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
         )
+        .onChange(of: appState.upcomingCalendarEvents.count) { _, _ in
+            clampComingUpPage()
+        }
+        .onChange(of: appState.hiddenCalendarEventIDs.count) { _, _ in
+            clampComingUpPage()
+        }
+    }
+
+    private func clampComingUpPage() {
+        let pages = upcomingPages
+        guard !pages.isEmpty else {
+            comingUpPageIndex = 0
+            return
+        }
+        comingUpPageIndex = min(max(comingUpPageIndex, 0), pages.count - 1)
     }
 
     private static let timeFormatter: DateFormatter = {
@@ -943,9 +1087,9 @@ struct MeetingsView: View {
     private var importAudioButton: some View {
         accentCapsuleButton(
             systemImage: "square.and.arrow.down",
-            title: "Import Audio",
+            title: L10n.text(.meetingsImportAudio, config: appState.config),
             isDisabled: isImportAudioDisabled,
-            helpText: "Import an audio file for offline transcription",
+            helpText: L10n.text(.meetingsImportAudioHelp, config: appState.config),
             action: {
                 controller.importAudioFile()
             }
@@ -1027,7 +1171,7 @@ struct MeetingsView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "square.and.pencil")
                         .font(.system(size: 11, weight: .semibold))
-                    Text("Open Notes")
+                    Text(L10n.text(.meetingsOpenNote, config: appState.config))
                         .font(.system(size: 12, weight: .semibold))
                 }
                 .foregroundStyle(MuesliTheme.textPrimary)
@@ -1045,7 +1189,7 @@ struct MeetingsView: View {
                     HStack(spacing: 6) {
                         Image(systemName: appState.isMeetingRecordingPaused ? "play.fill" : "pause.fill")
                             .font(.system(size: 10, weight: .semibold))
-                        Text(appState.isMeetingRecordingPaused ? "Resume" : "Pause")
+                        Text(appState.isMeetingRecordingPaused ? L10n.text(.meetingsResumeRecording, config: appState.config) : L10n.text(.meetingsPauseRecording, config: appState.config))
                             .font(.system(size: 12, weight: .semibold))
                     }
                     .foregroundStyle(appState.isMeetingRecordingPaused ? MuesliTheme.backgroundBase : MuesliTheme.textPrimary)
@@ -1067,7 +1211,7 @@ struct MeetingsView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "stop.fill")
                             .font(.system(size: 10, weight: .semibold))
-                        Text("Stop")
+                        Text(L10n.text(.meetingsStopRecordingShort, config: appState.config))
                             .font(.system(size: 12, weight: .semibold))
                     }
                     .foregroundStyle(.white)
@@ -1090,8 +1234,8 @@ struct MeetingsView: View {
     }
 
     private func activeMeetingStatusText(for meeting: MeetingRecord) -> String {
-        guard meeting.status == .recording else { return "Finalizing notes" }
-        return appState.isMeetingRecordingPaused ? "Recording paused" : "Recording now"
+        guard meeting.status == .recording else { return L10n.text(.meetingsFinalizingNotes, config: appState.config) }
+        return appState.isMeetingRecordingPaused ? L10n.text(.meetingsRecordingPaused, config: appState.config) : L10n.text(.meetingsRecordingNow, config: appState.config)
     }
 
     private func activeMeetingStatusColor(for meeting: MeetingRecord) -> Color {

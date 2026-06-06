@@ -47,7 +47,7 @@ Start a meeting recording → Muesli captures your mic (You) and system audio (O
 - **Chat-style final transcript** — Completed meeting transcripts now render in the note detail view as a chat-style conversation with left/right alignment and timestamps, while storage/export still use the raw text transcript format.
 - **Camera-based meeting detection** — Detects when your webcam + mic activate in a recognized meeting app (Zoom, Chrome, Teams, FaceTime, Slack, WhatsApp). Camera alone (e.g. Photo Booth) won't trigger false positives.
 - **Join & Record** — Extracts meeting URLs from calendar events (Zoom, Google Meet, Teams, Webex, Chime, FaceTime). Split-button notification: "Join & Record" opens the meeting + starts recording, "Join Only" opens without recording, "Record Only" starts recording without joining. Platform icons (Zoom, Meet) in the notification panel.
-- **Google Calendar integration** — Connect your Google Calendar to see upcoming meetings in the Coming Up section and status bar. Event-driven notifications via `EKEventStoreChangedNotification` for instant calendar change detection. Pre-meeting countdowns via Marauder's Map easter egg.
+- **Google Calendar integration** — Connect your Google Calendar to see upcoming meetings in the compact, paginated Coming Up section and status bar. Event-driven notifications via `EKEventStoreChangedNotification` for instant calendar change detection. Pre-meeting countdowns via Marauder's Map easter egg.
 - **Meeting export** — Export meeting notes or transcripts as PDF (paginated US Letter) or Markdown. Format picker in the save panel, auto-opens the exported file.
 - **Meeting templates** — Built-in and custom templates for meeting notes. Choose a template before or after recording — re-summarize any meeting with a different template.
 - **Dismiss calendar events** — Hide irrelevant events from Coming Up, status bar, and menu bar. Dismissed events are pruned automatically.
@@ -60,7 +60,7 @@ Start a meeting recording → Muesli captures your mic (You) and system audio (O
 - **Onboarding** — First-launch wizard with model selection, real OS permission verification, hotkey configuration, smoother Accessibility handoff, live dictation test to verify the full pipeline works, and optional summary setup for ChatGPT, OpenAI, OpenRouter, or Ollama. Progress saved on every step — survives crashes and manual quits.
 - **Launch at Login** — Start Muesli automatically with macOS login items, with approval-state refresh in Settings.
 - **Dark & light mode** — Adaptive theme with toggle in sidebar.
-- **SwiftUI dashboard** — Dictation history, meeting notes (Notes-style split view), meeting folders, dictionary, models, shortcuts, settings, about page.
+- **SwiftUI dashboard** — Dictation history, notes browser (backed by meeting recordings when applicable), note folders, dictionary, models, shortcuts, settings, about page.
 - **Floating indicator** — Frosted glass pill with dynamic waveform, accent color customization, and click-to-stop for meetings.
 
 ---
