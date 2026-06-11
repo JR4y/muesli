@@ -5,30 +5,49 @@ import MuesliCore
 import os
 
 final class MeetingChunkCollector<Value: Sendable> {
+    private struct PendingTask {
+        let id: UUID
+        let task: Task<Value, Never>
+    }
+
     private struct State {
-        var tasks: [Task<Value, Never>] = []
+        var pendingTasks: [PendingTask] = []
+        var completedValues: [Value] = []
         var isClosed = false
     }
 
     private let lock = OSAllocatedUnfairLock(initialState: State())
 
-    func add(_ task: Task<Value, Never>) -> Bool {
+    func add(_ task: Task<Value, Never>) -> (registered: Bool, retireID: UUID) {
+        let id = UUID()
+        let registered = lock.withLock { state in
+            guard !state.isClosed else { return false }
+            state.pendingTasks.append(PendingTask(id: id, task: task))
+            return true
+        }
+        return (registered, id)
+    }
+
+    func retire(id: UUID, value: Value) -> Bool {
         lock.withLock { state in
             guard !state.isClosed else { return false }
-            state.tasks.append(task)
+            state.completedValues.append(value)
+            state.pendingTasks.removeAll { $0.id == id }
             return true
         }
     }
 
     func closeAndDrain() async -> [Value] {
-        let tasksToAwait = lock.withLock { state in
+        let (tasksToAwait, alreadyCompleted) = lock.withLock { state in
             state.isClosed = true
-            let pendingTasks = state.tasks
-            state.tasks.removeAll()
-            return pendingTasks
+            let pendingTasks = state.pendingTasks.map(\.task)
+            let completedValues = state.completedValues
+            state.pendingTasks.removeAll()
+            state.completedValues.removeAll()
+            return (pendingTasks, completedValues)
         }
 
-        var values: [Value] = []
+        var values = alreadyCompleted
         for task in tasksToAwait {
             values.append(await task.value)
         }
@@ -38,12 +57,30 @@ final class MeetingChunkCollector<Value: Sendable> {
     func cancelAll() {
         let tasksToCancel = lock.withLock { state in
             state.isClosed = true
-            let pendingTasks = state.tasks
-            state.tasks.removeAll()
+            let pendingTasks = state.pendingTasks.map(\.task)
+            state.pendingTasks.removeAll()
+            state.completedValues.removeAll()
             return pendingTasks
         }
 
         tasksToCancel.forEach { $0.cancel() }
+    }
+}
+
+extension MeetingChunkCollector where Value == [SpeechSegment] {
+    func retire(id: UUID, segments: [SpeechSegment]) -> Bool {
+        retire(id: id, value: segments)
+    }
+
+    func closeAndDrainSortedSegments() async -> [SpeechSegment] {
+        (await closeAndDrain())
+            .flatMap { $0 }
+            .sorted { lhs, rhs in
+                if lhs.start == rhs.start {
+                    return lhs.text < rhs.text
+                }
+                return lhs.start < rhs.start
+            }
     }
 }
 
@@ -609,6 +646,8 @@ final class MeetingSession {
             rawMicURL: rawStreamingMicURL,
             systemAudioURL: systemAudioURL,
             systemCapture: (systemAudioRecorder as? SystemAudioDiagnosticsProviding)?.diagnosticsSnapshot,
+            micRecorder: nil,
+            micHealth: nil,
             aec: neuralAec.diagnosticsSnapshot,
             micChunks: micChunkHealthTracker.snapshot(),
             systemChunks: systemChunkHealthTracker.snapshot(),
@@ -701,9 +740,15 @@ final class MeetingSession {
             )
             return chunk ?? emptyChunk
         }
-        if !micChunkCollector.add(task) {
+        let registration = micChunkCollector.add(task)
+        if !registration.registered {
             task.cancel()
             cleanupTemporaryChunkURLs(rawChunkURL)
+        } else {
+            Task { [weak micChunkCollector] in
+                let value = await task.value
+                _ = micChunkCollector?.retire(id: registration.retireID, value: value)
+            }
         }
     }
 
@@ -762,8 +807,14 @@ final class MeetingSession {
             }
             return emptyChunk
         }
-        if !systemChunkCollector.add(task) {
+        let registration = systemChunkCollector.add(task)
+        if !registration.registered {
             task.cancel()
+        } else {
+            Task { [weak systemChunkCollector] in
+                let value = await task.value
+                _ = systemChunkCollector?.retire(id: registration.retireID, value: value)
+            }
         }
     }
 

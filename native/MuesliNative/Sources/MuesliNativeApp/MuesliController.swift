@@ -897,6 +897,7 @@ final class MuesliController: NSObject {
         appState.folders = allFolders
         appState.archivedFolders = archivedFolders
         if let selectedFolderID = appState.selectedFolderID,
+           !appState.browserFolders.isEmpty,
            !appState.browserFolders.contains(where: { $0.id == selectedFolderID }) {
             appState.selectedFolderID = nil
         }
@@ -1090,7 +1091,10 @@ final class MuesliController: NSObject {
 
         for meeting in meetings {
             do {
-                try dictationStore.updateMeetingStatus(id: meeting.id, status: .failed)
+                let recovered = try dictationStore.recoverLiveMeetingFromTranscriptCheckpoints(id: meeting.id)
+                if !recovered {
+                    try dictationStore.updateMeetingStatus(id: meeting.id, status: .failed)
+                }
                 staleLiveMeetingRecoveryFailures.remove(meeting.id)
             } catch {
                 staleLiveMeetingRecoveryFailures.insert(meeting.id)
@@ -1249,6 +1253,14 @@ final class MuesliController: NSObject {
         syncMeetingDetectionMonitor()
         updateMeetingNotificationVisibility()
         syncDictationRecorderWarmup(reason: "config")
+    }
+
+    func availableDictationInputDevices() -> [AudioInputDeviceInfo] {
+        dictationAudioRoutingController.availableInputDevices()
+    }
+
+    func selectDictationInputDeviceUID(_ uid: String?) {
+        updateConfig { $0.dictationInputDeviceUID = uid }
     }
 
     func setLaunchAtLogin(_ enabled: Bool) {
@@ -5909,10 +5921,41 @@ final class MuesliController: NSObject {
 
     private func syncDictationRecorderWarmup(reason: String, delay: TimeInterval = 0) {
         dictationAudioSessionManager.refreshRoute(
-            reason: reason,
+            intent: warmupIntent(for: reason),
             delay: delay,
             canWarmUp: canPrimeDictationRecorder && selectedBackend.backend != "nemotron"
         )
+    }
+
+    private func warmupIntent(for reason: String) -> DictationWarmupIntent {
+        switch reason {
+        case "cancel":
+            return .postDictation(.cancel)
+        case "stop-without-wav":
+            return .postDictation(.stopWithoutWav)
+        case "short-recording":
+            return .postDictation(.shortRecording)
+        case "dictation-stop":
+            return .postDictation(.dictationStop)
+        case "transcription-complete":
+            return .postDictation(.transcriptionComplete)
+        case "transcription-cancelled":
+            return .postDictation(.transcriptionCancelled)
+        case "transcription-failed":
+            return .postDictation(.transcriptionFailed)
+        case "route-change":
+            return .idlePrewarm(.routeChange)
+        case "config":
+            return .idlePrewarm(.configChange)
+        case "permissions-ready":
+            return .idlePrewarm(.permissionsReady)
+        case "nemotron-start-failed", "nemotron-runtime-failed", "nemotron-stop":
+            return .idlePrewarm(.backendRecovery)
+        case "meeting-start", "meeting-start-cancelled", "meeting-start-failed", "meeting-start-finished", "meeting-discard", "meeting-stop", "meeting-active":
+            return .idlePrewarm(.meetingStateChanged)
+        default:
+            return .idlePrewarm(.startup)
+        }
     }
 
     private func beginDictationLatencyTrace(reason: String) {

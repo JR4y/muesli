@@ -55,7 +55,8 @@ final class StreamingVadController: @unchecked Sendable {
     ) {
         self.init(
             minChunkDuration: 3.0,
-            maxChunkDuration: 60.0,
+            // Keep live transcript latency bounded by forcing shorter meeting chunks.
+            maxChunkDuration: 5.0,
             configuration: configuration,
             makeInitialState: { await vadManager.makeStreamState() },
             processStreamChunk: { samples, state in

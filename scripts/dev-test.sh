@@ -6,7 +6,11 @@ set -euo pipefail
 # - Separate bundle ID (com.muesli.dev) — won't interfere with production Muesli
 # - Separate data directory (~/Library/Application Support/MuesliDev/)
 # - Preserves existing dev config and database by default
-# - Signed with Developer ID when available; otherwise falls back to unsigned local install
+# - Signed with Developer ID by default (Accessibility permission persists across rebuilds)
+# - External contributors can set MUESLI_SKIP_SIGN=1 to build without the
+#   maintainer signing certificate
+# - Uses a shared, worktree-isolated SwiftPM scratch path by default; set
+#   MUESLI_DISABLE_SWIFTPM_SCRATCH_PATH=1 to use package-local .build instead
 # - Installs to /Applications/MuesliDev.app
 #
 # Usage:

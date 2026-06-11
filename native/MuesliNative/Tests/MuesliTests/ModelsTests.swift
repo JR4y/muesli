@@ -417,10 +417,9 @@ struct AppConfigTests {
         #expect(config.meetingTranscriptionModel == BackendOption.whisper.model)
         #expect(config.meetingSummaryBackend == "chatgpt")
         #expect(config.defaultMeetingTemplateID == MeetingTemplates.autoID)
-        #expect(config.autoTemplateTargetID.isEmpty)
-        #expect(config.meetingTitlePrompt == MeetingSummaryClient.defaultTitleInstructions)
         #expect(config.meetingRecordingSavePolicy == .never)
         #expect(config.showScheduledMeetingNotifications == true)
+        #expect(config.scheduledMeetingNotificationLeadTime == .atStart)
         #expect(config.showMeetingDetectionNotification == true)
         #expect(config.mutedMeetingDetectionAppBundleIDs.isEmpty)
         #expect(config.openAIAPIKey.isEmpty)
@@ -449,7 +448,6 @@ struct AppConfigTests {
         #expect(config.resolvedOnboardingUseCase == .dictation)
         #expect(config.userName.isEmpty)
         #expect(config.customMeetingTemplates.isEmpty)
-        #expect(config.hiddenBuiltInTemplateIDs.isEmpty)
         #expect(config.meetingHookEnabled == false)
         #expect(config.meetingHookPath.isEmpty)
         #expect(config.meetingHookTimeoutSeconds == 30)
@@ -464,8 +462,6 @@ struct AppConfigTests {
         config.onboardingUseCase = OnboardingUseCase.dictationAndMeetings.rawValue
         config.cohereLanguage = CohereTranscribeLanguage.german.rawValue
         config.defaultMeetingTemplateID = "weekly-team-meeting"
-        config.autoTemplateTargetID = "tmpl_123"
-        config.meetingTitlePrompt = "Return only a title in Spanish."
         config.meetingRecordingSavePolicy = .always
         config.customMeetingTemplates = [
             CustomMeetingTemplate(
@@ -475,11 +471,11 @@ struct AppConfigTests {
                 icon: "dollarsign.circle"
             )
         ]
-        config.hiddenBuiltInTemplateIDs = ["hiring"]
         config.meetingHookEnabled = true
         config.meetingHookPath = "/tmp/meeting-hook.sh"
         config.meetingHookTimeoutSeconds = 45
         config.showScheduledMeetingNotifications = false
+        config.scheduledMeetingNotificationLeadTime = .threeMinutes
         config.showMeetingDetectionNotification = false
         config.mutedMeetingDetectionAppBundleIDs = ["com.google.Chrome", "com.tinyspeck.slackmacgap"]
         config.computerUseHotkey = HotkeyConfig(keyCode: 62, label: "Right Ctrl")
@@ -506,17 +502,15 @@ struct AppConfigTests {
         #expect(decoded.resolvedOnboardingUseCase == .dictationAndMeetings)
         #expect(decoded.cohereLanguage == CohereTranscribeLanguage.german.rawValue)
         #expect(decoded.defaultMeetingTemplateID == "weekly-team-meeting")
-        #expect(decoded.autoTemplateTargetID == "tmpl_123")
-        #expect(decoded.meetingTitlePrompt == "Return only a title in Spanish.")
         #expect(decoded.meetingRecordingSavePolicy == .always)
         #expect(decoded.customMeetingTemplates.count == 1)
         #expect(decoded.customMeetingTemplates.first?.name == "Customer Follow-Up")
         #expect(decoded.customMeetingTemplates.first?.icon == "dollarsign.circle")
-        #expect(decoded.hiddenBuiltInTemplateIDs == ["hiring"])
         #expect(decoded.meetingHookEnabled == true)
         #expect(decoded.meetingHookPath == "/tmp/meeting-hook.sh")
         #expect(decoded.meetingHookTimeoutSeconds == 45)
         #expect(decoded.showScheduledMeetingNotifications == false)
+        #expect(decoded.scheduledMeetingNotificationLeadTime == .threeMinutes)
         #expect(decoded.showMeetingDetectionNotification == false)
         #expect(decoded.mutedMeetingDetectionAppBundleIDs == ["com.google.Chrome", "com.tinyspeck.slackmacgap"])
         #expect(decoded.meetingTranscriptionBackend == config.meetingTranscriptionBackend)
@@ -562,14 +556,11 @@ struct AppConfigTests {
         #expect(json["onboarding_use_case"] != nil)
         #expect(json["user_name"] != nil)
         #expect(json["default_meeting_template_id"] != nil)
-        #expect(json["auto_template_target_id"] != nil)
-        #expect(json["meeting_title_prompt"] != nil)
         #expect(json["meeting_recording_save_policy"] != nil)
         #expect(json["show_scheduled_meeting_notifications"] != nil)
         #expect(json["show_meeting_detection_notification"] != nil)
         #expect(json["muted_meeting_detection_app_bundle_ids"] != nil)
         #expect(json["custom_meeting_templates"] != nil)
-        #expect(json["hidden_built_in_template_ids"] != nil)
         #expect(json["meeting_hook_enabled"] != nil)
         #expect(json["meeting_hook_path"] != nil)
         #expect(json["meeting_hook_timeout_seconds"] != nil)
@@ -593,14 +584,11 @@ struct AppConfigTests {
         #expect(config.hasCompletedOnboarding == false)
         #expect(config.resolvedOnboardingUseCase == .dictation)
         #expect(config.defaultMeetingTemplateID == MeetingTemplates.autoID)
-        #expect(config.autoTemplateTargetID.isEmpty)
-        #expect(config.meetingTitlePrompt == MeetingSummaryClient.defaultTitleInstructions)
         #expect(config.meetingRecordingSavePolicy == .never)
         #expect(config.showScheduledMeetingNotifications == true)
         #expect(config.showMeetingDetectionNotification == true)
         #expect(config.mutedMeetingDetectionAppBundleIDs.isEmpty)
         #expect(config.customMeetingTemplates.isEmpty)
-        #expect(config.hiddenBuiltInTemplateIDs.isEmpty)
         #expect(config.computerUseHotkey == .computerUseDefault)
         #expect(config.enableComputerUseHotkey == false)
         #expect(config.computerUseHotkeyDefaultDisabledMigrationApplied == true)
@@ -950,8 +938,58 @@ struct AppConfigTests {
     }
 }
 
-@Suite("HotkeyMonitor", .serialized)
+@Suite("HotkeyMonitor")
 struct HotkeyMonitorTests {
+    final class ManualHotkeyScheduler {
+        private struct ScheduledItem {
+            let deadline: TimeInterval
+            let order: Int
+            let item: DispatchWorkItem
+        }
+
+        private static let referenceDate = Date(timeIntervalSinceReferenceDate: 0)
+
+        private var now: TimeInterval = 0
+        private var nextOrder = 0
+        private var scheduled: [ScheduledItem] = []
+
+        func schedule(after delay: TimeInterval, item: DispatchWorkItem) {
+            scheduled.append(ScheduledItem(deadline: now + delay, order: nextOrder, item: item))
+            nextOrder += 1
+        }
+
+        func currentDate() -> Date {
+            Date(timeInterval: now, since: Self.referenceDate)
+        }
+
+        func advance(by interval: TimeInterval) {
+            now += interval
+            while let next = scheduled
+                .filter({ $0.deadline <= now })
+                .min(by: { lhs, rhs in
+                    lhs.deadline == rhs.deadline ? lhs.order < rhs.order : lhs.deadline < rhs.deadline
+                }) {
+                scheduled.removeAll { $0.order == next.order }
+                if !next.item.isCancelled {
+                    next.item.perform()
+                }
+            }
+        }
+
+        func makeMonitor(
+            prepareDelay: TimeInterval = 0.15,
+            startDelay: TimeInterval = 0.25,
+            doubleTapWindow: TimeInterval = 0.35
+        ) -> HotkeyMonitor {
+            HotkeyMonitor(
+                prepareDelay: prepareDelay,
+                startDelay: startDelay,
+                doubleTapWindow: doubleTapWindow,
+                scheduleAfter: { self.schedule(after: $0, item: $1) },
+                now: currentDate
+            )
+        }
+    }
 
     @Test("escape still cancels active hold dictation immediately")
     func escapeCancelsActiveHoldDictation() async throws {
@@ -1040,8 +1078,9 @@ struct HotkeyMonitorTests {
 
     @Test("low trigger threshold still allows double-tap toggle")
     @MainActor
-    func lowTriggerThresholdStillAllowsDoubleTapToggle() async throws {
-        let monitor = HotkeyMonitor(doubleTapWindow: 0.35)
+    func lowTriggerThresholdStillAllowsDoubleTapToggle() {
+        let scheduler = ManualHotkeyScheduler()
+        let monitor = scheduler.makeMonitor(doubleTapWindow: 0.35)
         monitor.configureTriggerThreshold(milliseconds: 75)
         var prepareCount = 0
         var toggleStartCount = 0
@@ -1053,18 +1092,44 @@ struct HotkeyMonitorTests {
         }
 
         monitor.handleFlagsChanged(keyCode: 55, flags: .command)
-        try await Task.sleep(for: .milliseconds(100))
+        scheduler.advance(by: 0.10)
         monitor.handleFlagsChanged(keyCode: 55, flags: [])
+        scheduler.advance(by: 0.10)
         monitor.handleFlagsChanged(keyCode: 55, flags: .command)
 
         #expect(prepareCount == 0)
         #expect(toggleStartCount == 1)
     }
 
+    @Test("double-tap outside window arms instead of toggling")
+    @MainActor
+    func doubleTapOutsideWindowArmsInsteadOfToggling() {
+        let scheduler = ManualHotkeyScheduler()
+        let monitor = scheduler.makeMonitor(doubleTapWindow: 0.35)
+        monitor.configureTriggerThreshold(milliseconds: 75)
+        var toggleStartCount = 0
+        var armCount = 0
+        monitor.onToggleStart = {
+            toggleStartCount += 1
+        }
+        monitor.onArm = {
+            armCount += 1
+        }
+
+        monitor.handleFlagsChanged(keyCode: 55, flags: .command)
+        monitor.handleFlagsChanged(keyCode: 55, flags: [])
+        scheduler.advance(by: 0.40)
+        monitor.handleFlagsChanged(keyCode: 55, flags: .command)
+
+        #expect(toggleStartCount == 0)
+        #expect(armCount == 2)
+    }
+
     @Test("low trigger threshold arms immediately but defers audio while double-tap is possible")
     @MainActor
-    func lowTriggerThresholdArmsImmediatelyButDefersAudio() async throws {
-        let monitor = HotkeyMonitor(doubleTapWindow: 0.35)
+    func lowTriggerThresholdArmsImmediatelyButDefersAudio() {
+        let scheduler = ManualHotkeyScheduler()
+        let monitor = scheduler.makeMonitor(doubleTapWindow: 0.35)
         monitor.configureTriggerThreshold(milliseconds: 75)
         var armCount = 0
         var prepareCount = 0
@@ -1081,7 +1146,7 @@ struct HotkeyMonitorTests {
 
         monitor.handleFlagsChanged(keyCode: 55, flags: .command)
         #expect(armCount == 1)
-        try await Task.sleep(for: .milliseconds(100))
+        scheduler.advance(by: 0.10)
         #expect(prepareCount == 0)
         #expect(startCount == 0)
         monitor.handleFlagsChanged(keyCode: 55, flags: [])
@@ -1089,8 +1154,9 @@ struct HotkeyMonitorTests {
 
     @Test("quick armed tap cancels after double-tap window")
     @MainActor
-    func quickArmedTapCancelsAfterDoubleTapWindow() async throws {
-        let monitor = HotkeyMonitor(doubleTapWindow: 0.05)
+    func quickArmedTapCancelsAfterDoubleTapWindow() {
+        let scheduler = ManualHotkeyScheduler()
+        let monitor = scheduler.makeMonitor(doubleTapWindow: 0.05)
         monitor.configureTriggerThreshold(milliseconds: 75)
         var cancelCount = 0
         monitor.onArm = {}
@@ -1102,14 +1168,15 @@ struct HotkeyMonitorTests {
         monitor.handleFlagsChanged(keyCode: 55, flags: [])
         #expect(cancelCount == 0)
 
-        try await Task.sleep(for: .milliseconds(80))
+        scheduler.advance(by: 0.08)
         #expect(cancelCount == 1)
     }
 
     @Test("low trigger threshold starts quickly when double-tap is disabled")
     @MainActor
-    func lowTriggerThresholdStartsQuicklyWhenDoubleTapDisabled() async throws {
-        let monitor = HotkeyMonitor(doubleTapWindow: 0.35)
+    func lowTriggerThresholdStartsQuicklyWhenDoubleTapDisabled() {
+        let scheduler = ManualHotkeyScheduler()
+        let monitor = scheduler.makeMonitor(doubleTapWindow: 0.35)
         monitor.configureTriggerThreshold(milliseconds: 75)
         monitor.doubleTapEnabled = false
         var startCount = 0
@@ -1118,7 +1185,7 @@ struct HotkeyMonitorTests {
         }
 
         monitor.handleFlagsChanged(keyCode: 55, flags: .command)
-        try await Task.sleep(for: .milliseconds(100))
+        scheduler.advance(by: 0.10)
         monitor.handleFlagsChanged(keyCode: 55, flags: [])
 
         #expect(startCount == 1)
@@ -1166,8 +1233,9 @@ struct HotkeyMonitorTests {
 
     @Test("changing trigger threshold during pending double tap cancel preserves cleanup")
     @MainActor
-    func configureTriggerThresholdDuringPendingDoubleTapCancelPreservesCleanup() async throws {
-        let monitor = HotkeyMonitor(doubleTapWindow: 0.05)
+    func configureTriggerThresholdDuringPendingDoubleTapCancelPreservesCleanup() {
+        let scheduler = ManualHotkeyScheduler()
+        let monitor = scheduler.makeMonitor(doubleTapWindow: 0.05)
         monitor.configureTriggerThreshold(milliseconds: 75)
         var cancelCount = 0
         monitor.onArm = {}
@@ -1178,15 +1246,16 @@ struct HotkeyMonitorTests {
         monitor.handleFlagsChanged(keyCode: 55, flags: .command)
         monitor.handleFlagsChanged(keyCode: 55, flags: [])
         monitor.configureTriggerThreshold(milliseconds: 125)
-        try await Task.sleep(for: .milliseconds(80))
+        scheduler.advance(by: 0.08)
 
         #expect(cancelCount == 1)
     }
 
     @Test("combination shortcut requires hold threshold before toggling")
     @MainActor
-    func combinationShortcutRequiresHoldThresholdBeforeToggling() async throws {
-        let monitor = HotkeyMonitor(startDelay: 0.12)
+    func combinationShortcutRequiresHoldThresholdBeforeToggling() {
+        let scheduler = ManualHotkeyScheduler()
+        let monitor = scheduler.makeMonitor(startDelay: 0.05)
         monitor.configure(HotkeyConfig.combination(modifiers: [.command, .shift], keyCode: 15))
         var toggleStartCount = 0
         monitor.onToggleStart = {
@@ -1194,17 +1263,18 @@ struct HotkeyMonitorTests {
         }
 
         monitor.handleCombinationForTests(type: .keyDown, keyCode: 15, flags: [.command, .shift])
-        try await Task.sleep(for: .milliseconds(20))
+        scheduler.advance(by: 0.02)
         monitor.handleCombinationForTests(type: .keyUp, keyCode: 15, flags: [.command, .shift])
-        try await Task.sleep(for: .milliseconds(140))
+        scheduler.advance(by: 0.05)
 
         #expect(toggleStartCount == 0)
     }
 
     @Test("combination shortcut toggles after hold threshold")
     @MainActor
-    func combinationShortcutTogglesAfterHoldThreshold() async throws {
-        let monitor = HotkeyMonitor(startDelay: 0.06)
+    func combinationShortcutTogglesAfterHoldThreshold() {
+        let scheduler = ManualHotkeyScheduler()
+        let monitor = scheduler.makeMonitor(startDelay: 0.03)
         monitor.configure(HotkeyConfig.combination(modifiers: [.command, .shift], keyCode: 15))
         var toggleStartCount = 0
         monitor.onToggleStart = {
@@ -1212,15 +1282,16 @@ struct HotkeyMonitorTests {
         }
 
         monitor.handleCombinationForTests(type: .keyDown, keyCode: 15, flags: [.command, .shift])
-        try await Task.sleep(for: .milliseconds(90))
+        scheduler.advance(by: 0.05)
 
         #expect(toggleStartCount == 1)
     }
 
     @Test("combination toggle cancellation resets without firing stop")
     @MainActor
-    func combinationToggleCancellationResetsWithoutFiringStop() async throws {
-        let monitor = HotkeyMonitor(startDelay: 0.06)
+    func combinationToggleCancellationResetsWithoutFiringStop() {
+        let scheduler = ManualHotkeyScheduler()
+        let monitor = scheduler.makeMonitor(startDelay: 0.03)
         monitor.configure(HotkeyConfig.combination(modifiers: [.command, .shift], keyCode: 15))
         var toggleStartCount = 0
         var toggleStopCount = 0
@@ -1232,7 +1303,7 @@ struct HotkeyMonitorTests {
         }
 
         monitor.handleCombinationForTests(type: .keyDown, keyCode: 15, flags: [.command, .shift])
-        try await Task.sleep(for: .milliseconds(90))
+        scheduler.advance(by: 0.05)
         #expect(monitor.isToggleRecording)
 
         monitor.cancelToggleMode()
@@ -1244,8 +1315,9 @@ struct HotkeyMonitorTests {
 
     @Test("combination shortcut cancels when modifiers release before threshold")
     @MainActor
-    func combinationShortcutCancelsWhenModifiersReleaseBeforeThreshold() async throws {
-        let monitor = HotkeyMonitor(startDelay: 0.12)
+    func combinationShortcutCancelsWhenModifiersReleaseBeforeThreshold() {
+        let scheduler = ManualHotkeyScheduler()
+        let monitor = scheduler.makeMonitor(startDelay: 0.05)
         monitor.configure(HotkeyConfig.combination(modifiers: [.command, .shift], keyCode: 15))
         var toggleStartCount = 0
         monitor.onToggleStart = {
@@ -1253,9 +1325,9 @@ struct HotkeyMonitorTests {
         }
 
         monitor.handleCombinationForTests(type: .keyDown, keyCode: 15, flags: [.command, .shift])
-        try await Task.sleep(for: .milliseconds(20))
+        scheduler.advance(by: 0.02)
         monitor.handleCombinationForTests(type: .flagsChanged, keyCode: 56, flags: .command)
-        try await Task.sleep(for: .milliseconds(140))
+        scheduler.advance(by: 0.05)
 
         #expect(toggleStartCount == 0)
     }
@@ -1361,36 +1433,6 @@ struct MeetingTemplateResolutionTests {
                 customTemplates: []
             )?.id == builtIn.id
         )
-    }
-
-    @Test("auto resolution can target a custom template")
-    func autoResolutionCanTargetCustomTemplate() {
-        let customTemplates = [
-            CustomMeetingTemplate(
-                id: "tmpl_sales",
-                name: "Sales Follow-Up",
-                prompt: "## Summary",
-                icon: "dollarsign.circle"
-            )
-        ]
-
-        let resolved = MeetingTemplates.resolveSnapshot(
-            id: MeetingTemplates.autoID,
-            customTemplates: customTemplates,
-            autoTemplateTargetID: "tmpl_sales"
-        )
-
-        #expect(resolved.id == "tmpl_sales")
-        #expect(resolved.name == "Sales Follow-Up")
-    }
-
-    @Test("visible built-ins exclude hidden ids")
-    func visibleBuiltInsExcludeHiddenIDs() {
-        let hiddenID = MeetingTemplates.builtIns.first!.id
-        let visible = MeetingTemplates.visibleBuiltIns(hiddenIDs: [hiddenID])
-
-        #expect(!visible.contains(where: { $0.id == hiddenID }))
-        #expect(visible.count == MeetingTemplates.builtIns.count - 1)
     }
 }
 
