@@ -19,7 +19,17 @@ BETA_SUPPORT_DIR="$HOME/Library/Application Support/MuesliBeta"
 BETA_APP="/Applications/muesli-beta.app"
 LEGACY_BETA_APP="/Applications/MuesliBeta.app"
 ONBOARDING_PROGRESS_FILE="$BETA_SUPPORT_DIR/onboarding-progress.json"
-SUPABASE_CONFIG_FILE="$ROOT/config/Supabase.xcconfig"
+SUPABASE_CONFIG_FILE="${MUESLI_SUPABASE_CONFIG_FILE:-$ROOT/config/Supabase.xcconfig}"
+
+if ! muesli_has_supabase_sync_config "$SUPABASE_CONFIG_FILE" && [[ "$ROOT" == */.worktrees/* ]]; then
+  PRIMARY_WORKTREE_ROOT="${ROOT%%/.worktrees/*}"
+  PRIMARY_SUPABASE_CONFIG_FILE="$PRIMARY_WORKTREE_ROOT/config/Supabase.xcconfig"
+  if muesli_has_supabase_sync_config "$PRIMARY_SUPABASE_CONFIG_FILE"; then
+    SUPABASE_CONFIG_FILE="$PRIMARY_SUPABASE_CONFIG_FILE"
+    export MUESLI_SUPABASE_CONFIG_FILE="$SUPABASE_CONFIG_FILE"
+    echo "Using Supabase config from primary worktree: $SUPABASE_CONFIG_FILE"
+  fi
+fi
 
 RESET=0
 for arg in "$@"; do
@@ -76,6 +86,7 @@ MUESLI_DISPLAY_NAME="muesli-beta" \
 MUESLI_EXECUTABLE_NAME=muesli-beta \
 MUESLI_APP_BUNDLE_NAME=muesli-beta.app \
 MUESLI_SPARKLE_FEED_URL="" \
+MUESLI_SUPABASE_CONFIG_FILE="$SUPABASE_CONFIG_FILE" \
 "$ROOT/scripts/build_native_app.sh" debug
 
 if [[ -d "$LEGACY_BETA_APP" ]]; then

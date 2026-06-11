@@ -35,7 +35,7 @@ fi
 # Load Supabase sync config (gitignored). Lines like KEY=VALUE; `//` and `#`
 # comments are stripped. Missing file is fine — sync features will be inert
 # in the resulting bundle.
-SUPABASE_CONFIG_FILE="$ROOT/config/Supabase.xcconfig"
+SUPABASE_CONFIG_FILE="${MUESLI_SUPABASE_CONFIG_FILE:-$ROOT/config/Supabase.xcconfig}"
 SUPABASE_URL=""
 SUPABASE_ANON_KEY=""
 GOOGLE_OAUTH_CONFIG_FILE="${MUESLI_GOOGLE_OAUTH_CONFIG_FILE:-$ROOT/config/google-oauth.json}"

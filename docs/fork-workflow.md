@@ -167,6 +167,10 @@ Important:
 - local fork beta builds must not follow the author's Sparkle feeds
 - `./scripts/beta-test.sh` enforces this by setting `MUESLI_SPARKLE_FEED_URL=""`
 - this means local `muesli-beta.app` builds do not use `appcast.xml` or `appcast-preprod.xml`
+- when run from `.worktrees/beta-mergework`, `./scripts/beta-test.sh` reuses
+  `config/Supabase.xcconfig` from the primary worktree if the temporary
+  worktree does not have its own copy; this preserves sync during merge
+  validation without duplicating gitignored local secrets
 - `scripts/release-preprod.sh` remains upstream-oriented release infrastructure and is not the build path for this fork's day-to-day beta app
 
 Recommended validation habit:
