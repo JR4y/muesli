@@ -8,6 +8,9 @@ set -euo pipefail
 # - Stores data in ~/Library/Application Support/MuesliBeta/
 # - Disables Sparkle feed lookup so local beta builds do not follow upstream
 #   production or preprod appcasts
+# - Requires a stable codesign identity by default so macOS privacy
+#   permissions stay attached across beta reinstalls. Set MUESLI_SKIP_SIGN=1
+#   only when you intentionally want an unsigned local install.
 #
 # Usage:
 #   ./scripts/beta-test.sh         # Build and launch
@@ -20,6 +23,25 @@ BETA_APP="/Applications/muesli-beta.app"
 LEGACY_BETA_APP="/Applications/MuesliBeta.app"
 ONBOARDING_PROGRESS_FILE="$BETA_SUPPORT_DIR/onboarding-progress.json"
 SUPABASE_CONFIG_FILE="${MUESLI_SUPABASE_CONFIG_FILE:-$ROOT/config/Supabase.xcconfig}"
+DEFAULT_DEVELOPER_ID="Developer ID Application: Pranav Hari Guruvayurappan (58W55QJ567)"
+
+find_codesign_identity() {
+  local preferred_identity="${1:-}"
+  local identities
+  identities="$(security find-identity -v -p codesigning 2>/dev/null || true)"
+
+  if [[ -n "$preferred_identity" ]] && grep -Fq "$preferred_identity" <<<"$identities"; then
+    printf '%s\n' "$preferred_identity"
+    return 0
+  fi
+
+  if grep -Fq "$DEFAULT_DEVELOPER_ID" <<<"$identities"; then
+    printf '%s\n' "$DEFAULT_DEVELOPER_ID"
+    return 0
+  fi
+
+  sed -n 's/.*"\(Apple Development: .*\)".*/\1/p' <<<"$identities" | head -n 1
+}
 
 if ! muesli_has_supabase_sync_config "$SUPABASE_CONFIG_FILE" && [[ "$ROOT" == */.worktrees/* ]]; then
   PRIMARY_WORKTREE_ROOT="${ROOT%%/.worktrees/*}"
@@ -41,6 +63,25 @@ for arg in "$@"; do
       ;;
   esac
 done
+
+if [[ "${MUESLI_SKIP_SIGN:-0}" != "1" ]]; then
+  SIGN_IDENTITY="$(find_codesign_identity "${MUESLI_SIGN_IDENTITY:-}")"
+  if [[ -n "$SIGN_IDENTITY" ]]; then
+    export MUESLI_SIGN_IDENTITY="$SIGN_IDENTITY"
+    echo "Using codesign identity: $SIGN_IDENTITY"
+  else
+    echo "muesli-beta requires a valid codesign identity to preserve macOS privacy permissions." >&2
+    echo "No Developer ID or Apple Development identity is visible to security find-identity." >&2
+    echo "If you intentionally want to replace the app with an unsigned build, rerun with MUESLI_SKIP_SIGN=1." >&2
+    exit 1
+  fi
+fi
+
+if [[ "${MUESLI_REQUIRE_SUPABASE_CONFIG:-1}" == "1" ]] && ! muesli_has_supabase_sync_config "$SUPABASE_CONFIG_FILE"; then
+  echo "muesli-beta requires config/Supabase.xcconfig with MUESLI_SUPABASE_URL and MUESLI_SUPABASE_ANON_KEY." >&2
+  echo "Set MUESLI_REQUIRE_SUPABASE_CONFIG=0 if you intentionally want a beta build with sync disabled." >&2
+  exit 1
+fi
 
 pkill -f "muesli-beta.app" 2>/dev/null || true
 pkill -f "MuesliBeta.app" 2>/dev/null || true
@@ -64,21 +105,7 @@ print('  Onboarding reset (data preserved)')
 "
 fi
 
-if [[ "${MUESLI_SKIP_SIGN:-0}" != "1" ]]; then
-  SIGN_IDENTITY="${MUESLI_SIGN_IDENTITY:-Developer ID Application: Pranav Hari Guruvayurappan (58W55QJ567)}"
-  if ! security find-identity -v -p codesigning | grep -Fq "$SIGN_IDENTITY"; then
-    echo "No matching codesign identity for local beta build; continuing unsigned."
-    export MUESLI_SKIP_SIGN=1
-  fi
-fi
-
-if [[ "${MUESLI_REQUIRE_SUPABASE_CONFIG:-1}" == "1" ]] && ! muesli_has_supabase_sync_config "$SUPABASE_CONFIG_FILE"; then
-  echo "muesli-beta requires config/Supabase.xcconfig with MUESLI_SUPABASE_URL and MUESLI_SUPABASE_ANON_KEY." >&2
-  echo "Set MUESLI_REQUIRE_SUPABASE_CONFIG=0 if you intentionally want a beta build with sync disabled." >&2
-  exit 1
-fi
-
-echo "Building muesli-beta (debug, signed when identity is available)..."
+echo "Building muesli-beta (debug, signed unless explicitly skipped)..."
 MUESLI_APP_NAME=muesli-beta \
 MUESLI_BUNDLE_ID=com.jr4y.muesli.beta \
 MUESLI_SUPPORT_DIR_NAME=MuesliBeta \

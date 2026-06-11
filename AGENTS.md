@@ -43,9 +43,18 @@ For the fork's local beta app, use `scripts/beta-test.sh`, not `scripts/build_na
 - `scripts/beta-test.sh` installs the app as `/Applications/muesli-beta.app`
 - it uses bundle id `com.jr4y.muesli.beta`
 - it stores data under `~/Library/Application Support/MuesliBeta/`
-- if the local Developer ID signing identity is unavailable, it automatically falls back to an unsigned local install by setting `MUESLI_SKIP_SIGN=1`
+- it requires a valid Developer ID or Apple Development signing identity by default so macOS privacy permissions stay attached across reinstalls
+- use `MUESLI_SKIP_SIGN=1` only when you intentionally want an unsigned local install and accept that macOS may ask for permissions again
 
 Important: `scripts/build_native_app.sh` by itself is the generic installer and defaults to `/Applications/Muesli.app`. It should not be used directly when the goal is to install or refresh the local beta build.
+
+Signing is part of the beta install contract. `scripts/beta-test.sh` should stop
+before killing or replacing `/Applications/muesli-beta.app` if no valid signing
+identity is visible to `security find-identity -v -p codesigning`. Do not allow
+an automatic unsigned/ad-hoc beta install during normal validation; macOS ties
+privacy permissions to the signed app identity, and an ad-hoc replacement can
+make Microphone, Accessibility, Input Monitoring, and Screen Recording prompts
+come back. Use `MUESLI_SKIP_SIGN=1` only for an intentional unsigned install.
 
 Recommended beta invocation:
 

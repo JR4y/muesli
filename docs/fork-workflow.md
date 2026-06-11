@@ -171,6 +171,16 @@ Important:
   `config/Supabase.xcconfig` from the primary worktree if the temporary
   worktree does not have its own copy; this preserves sync during merge
   validation without duplicating gitignored local secrets
+- local beta installs must keep a stable codesign identity; macOS privacy
+  permissions for Microphone, Accessibility, Input Monitoring, and Screen
+  Recording are tied to the signed app identity, so replacing a signed beta
+  with an ad-hoc/unsigned beta can make macOS ask for those permissions again
+- `./scripts/beta-test.sh` must fail before killing or replacing the installed
+  beta if no Developer ID or Apple Development signing identity is visible
+  through `security find-identity -v -p codesigning`
+- use `MUESLI_SKIP_SIGN=1 ./scripts/beta-test.sh` only for an intentional
+  unsigned install, and only with the expectation that macOS permissions may
+  need to be granted again
 - `scripts/release-preprod.sh` remains upstream-oriented release infrastructure and is not the build path for this fork's day-to-day beta app
 
 Recommended validation habit:
@@ -183,6 +193,17 @@ git merge vendor
 ```
 
 Only after that test pass should `beta` be updated.
+
+If `./scripts/beta-test.sh` reports that no codesign identity is visible, stop
+there and fix Keychain/signing before reinstalling the beta. Useful checks:
+
+```bash
+security find-identity -v -p codesigning
+codesign -dv --verbose=4 /Applications/muesli-beta.app
+```
+
+The installed beta should not show `Signature=adhoc` or `TeamIdentifier=not set`
+unless an unsigned install was explicitly requested.
 
 ## Suggested feature flow
 
